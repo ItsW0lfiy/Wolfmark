@@ -123,6 +123,7 @@ try {
     New-Item -ItemType Directory -Force -Path `
         (Join-Path $packageRoot 'platforms'), `
         (Join-Path $packageRoot 'assets/branding'), `
+        (Join-Path $packageRoot 'assets/icons'), `
         (Join-Path $packageRoot 'licenses'), `
         $OutputDirectory | Out-Null
 
@@ -140,6 +141,8 @@ try {
     }
     Copy-Item -LiteralPath $platformPlugin -Destination (Join-Path $packageRoot 'platforms')
     Copy-Item -LiteralPath 'assets/branding/moonmark-symbol.png' -Destination (Join-Path $packageRoot 'assets/branding')
+    Copy-Item -LiteralPath 'assets/icons/moonmark-markdown.ico' -Destination (Join-Path $packageRoot 'assets/icons')
+    Copy-Item -LiteralPath 'assets/icons/moonmark-text.ico' -Destination (Join-Path $packageRoot 'assets/icons')
     Copy-Item -LiteralPath 'assets/deployment/qt.conf' -Destination (Join-Path $packageRoot 'qt.conf')
     Copy-Item -LiteralPath 'THIRD_PARTY_NOTICES.txt' -Destination $packageRoot
     Copy-Item -LiteralPath 'LICENSE' -Destination $packageRoot

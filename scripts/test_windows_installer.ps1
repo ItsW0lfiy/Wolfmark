@@ -147,6 +147,7 @@ try {
     foreach ($relative in @(
         'Moonmark.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
         'platforms/qwindows.dll', 'qt.conf', 'LICENSE', 'THIRD_PARTY_NOTICES.txt',
+        'assets/icons/moonmark-markdown.ico', 'assets/icons/moonmark-text.ico',
         'licenses/Qt-LGPL-3.0-only.txt', 'licenses/Qt-GPL-3.0-only.txt'
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $installRoot $relative) -PathType Leaf)) {
@@ -166,16 +167,28 @@ try {
     }
 
     Assert-RegistryValue 'HKCU:\Software\RegisteredApplications' 'Moonmark' 'Software\ItsW0lfiy\Moonmark\Capabilities'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.md' 'Moonmark.Document'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.markdown' 'Moonmark.Document'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.txt' 'Moonmark.Document'
+    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.md' 'Moonmark.MarkdownDocument'
+    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.markdown' 'Moonmark.MarkdownDocument'
+    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.txt' 'Moonmark.TextDocument'
     $expectedCommand = '"' + (Join-Path $installRoot 'Moonmark.exe') + '" "%1"'
-    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.Document\shell\open\command' '' $expectedCommand
-    foreach ($extension in '.md', '.markdown', '.txt') {
-        Assert-RegistryValue "HKCU:\Software\Classes\$extension\OpenWithProgids" 'Moonmark.Document' ''
+    $expectedMarkdownIcon = Join-Path $installRoot 'assets/icons/moonmark-markdown.ico'
+    $expectedTextIcon = Join-Path $installRoot 'assets/icons/moonmark-text.ico'
+    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.MarkdownDocument\shell\open\command' '' $expectedCommand
+    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.MarkdownDocument\DefaultIcon' '' $expectedMarkdownIcon
+    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.TextDocument\shell\open\command' '' $expectedCommand
+    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.TextDocument\DefaultIcon' '' $expectedTextIcon
+    if (Test-Path 'HKCU:\Software\Classes\Moonmark.Document') {
+        throw 'Upgrade left the obsolete shared Moonmark.Document ProgID.'
+    }
+    foreach ($extension in '.md', '.markdown') {
+        Assert-RegistryValue "HKCU:\Software\Classes\$extension\OpenWithProgids" 'Moonmark.MarkdownDocument' ''
         if ((Get-UserChoice $extension) -ne $choiceBefore[$extension]) {
             throw "Installer changed the protected Windows default for $extension."
         }
+    }
+    Assert-RegistryValue 'HKCU:\Software\Classes\.txt\OpenWithProgids' 'Moonmark.TextDocument' ''
+    if ((Get-UserChoice '.txt') -ne $choiceBefore['.txt']) {
+        throw 'Installer changed the protected Windows default for .txt.'
     }
 
     $launchArguments = '--smoke-startup-arguments ' + (($documents | ForEach-Object { '"' + $_ + '"' }) -join ' ')
@@ -207,7 +220,8 @@ try {
     }
     foreach ($path in @(
         'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities',
-        'HKCU:\Software\Classes\Moonmark.Document',
+        'HKCU:\Software\Classes\Moonmark.MarkdownDocument',
+        'HKCU:\Software\Classes\Moonmark.TextDocument',
         'HKCU:\Software\Classes\Applications\Moonmark.exe'
     )) {
         if (Test-Path $path) { throw "Uninstall left Moonmark shell registration: $path" }

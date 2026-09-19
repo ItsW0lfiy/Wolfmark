@@ -23,6 +23,11 @@ EXPECTED_SOURCE_SIZE = (1536, 1024)
 SYMBOL_REGION = (390, 360, 616, 576)
 FULL_LOGO_REGION = (365, 340, 1145, 600)
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
+DOCUMENT_ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
+DOCUMENT_ICONS = {
+    GENERATED / "file-preview_MD.png": GENERATED / "moonmark-markdown.ico",
+    GENERATED / "file-preview_TEXT.png": GENERATED / "moonmark-text.ico",
+}
 
 
 def to_achromatic(image: Image.Image) -> Image.Image:
@@ -104,6 +109,20 @@ def validate_outputs() -> None:
             f"Windows ICO sizes differ: expected {expected_ico_sizes}, got {ico.ico.sizes()}"
         )
 
+    expected_document_sizes = {(size, size) for size in DOCUMENT_ICON_SIZES}
+    for source_path, icon_path in DOCUMENT_ICONS.items():
+        source = Image.open(source_path).convert("RGBA")
+        if source.width < 256 or source.height < 256:
+            raise RuntimeError(f"Approved document icon source is too small: {source_path}")
+        if source.getchannel("A").getextrema()[0] == 255:
+            raise RuntimeError(f"Approved document icon source has no transparency: {source_path}")
+        icon = Image.open(icon_path)
+        if icon.ico.sizes() != expected_document_sizes:
+            raise RuntimeError(
+                f"Windows document ICO sizes differ: expected {expected_document_sizes}, "
+                f"got {icon.ico.sizes()}"
+            )
+
 
 def main() -> None:
     source = Image.open(SOURCE)
@@ -125,10 +144,17 @@ def main() -> None:
         format="ICO",
         sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
     )
+    for source_path, icon_path in DOCUMENT_ICONS.items():
+        Image.open(source_path).convert("RGBA").save(
+            icon_path,
+            format="ICO",
+            sizes=[(size, size) for size in DOCUMENT_ICON_SIZES],
+        )
     validate_outputs()
     print(f"Built {FULL_LOGO}")
     print(f"Built {SYMBOL}")
     print(f"Built {len(ICON_SIZES)} PNG sizes and Windows ICO in {GENERATED}")
+    print(f"Built {len(DOCUMENT_ICONS)} approved document ICO assets in {GENERATED}")
 
 
 if __name__ == "__main__":

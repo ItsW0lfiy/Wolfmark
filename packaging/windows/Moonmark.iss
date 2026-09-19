@@ -76,13 +76,17 @@ Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark"; Flags: uninsdeletekeyifempty; 
 Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "Moonmark"; Flags: uninsdeletekey; Tasks: fileassoc
 Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Native Markdown and text document viewer"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
-Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".md"; ValueData: "Moonmark.Document"; Tasks: fileassoc
-Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".markdown"; ValueData: "Moonmark.Document"; Tasks: fileassoc
-Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".txt"; ValueData: "Moonmark.Document"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".md"; ValueData: "Moonmark.MarkdownDocument"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".markdown"; ValueData: "Moonmark.MarkdownDocument"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations"; ValueType: string; ValueName: ".txt"; ValueData: "Moonmark.TextDocument"; Tasks: fileassoc
 
-Root: HKA; Subkey: "Software\Classes\Moonmark.Document"; ValueType: string; ValueData: "Moonmark document"; Flags: uninsdeletekey; Tasks: fileassoc
-Root: HKA; Subkey: "Software\Classes\Moonmark.Document\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
-Root: HKA; Subkey: "Software\Classes\Moonmark.Document\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.Document"; Flags: deletekey; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.MarkdownDocument"; ValueType: string; ValueData: "Moonmark Markdown Document"; Flags: uninsdeletekey; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.MarkdownDocument\DefaultIcon"; ValueType: string; ValueData: "{app}\assets\icons\moonmark-markdown.ico"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.MarkdownDocument\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.TextDocument"; ValueType: string; ValueData: "Moonmark Text Document"; Flags: uninsdeletekey; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.TextDocument\DefaultIcon"; ValueType: string; ValueData: "{app}\assets\icons\moonmark-text.ico"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\Moonmark.TextDocument\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: fileassoc
 
 Root: HKA; Subkey: "Software\Classes\Applications\Moonmark.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Moonmark"; Flags: uninsdeletekey; Tasks: fileassoc
 Root: HKA; Subkey: "Software\Classes\Applications\Moonmark.exe\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
@@ -91,9 +95,9 @@ Root: HKA; Subkey: "Software\Classes\Applications\Moonmark.exe\SupportedTypes"; 
 Root: HKA; Subkey: "Software\Classes\Applications\Moonmark.exe\SupportedTypes"; ValueType: string; ValueName: ".markdown"; ValueData: ""; Tasks: fileassoc
 Root: HKA; Subkey: "Software\Classes\Applications\Moonmark.exe\SupportedTypes"; ValueType: string; ValueName: ".txt"; ValueData: ""; Tasks: fileassoc
 
-Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.Document"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
-Root: HKA; Subkey: "Software\Classes\.markdown\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.Document"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
-Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.Document"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\.md\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.MarkdownDocument"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\.markdown\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.MarkdownDocument"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "Moonmark.TextDocument"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Moonmark"; Flags: nowait postinstall skipifsilent
