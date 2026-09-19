@@ -128,7 +128,7 @@ try {
         $OutputDirectory | Out-Null
 
     Copy-Item -LiteralPath 'out/cargo/release/moonmark.exe' -Destination (Join-Path $packageRoot 'Moonmark.exe')
-    foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') {
+    foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll') {
         $source = Join-Path $QtRoot "bin/$name"
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             throw "Required Qt runtime file is missing: $source"

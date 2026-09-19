@@ -1,6 +1,7 @@
 #include "moonmark_qt.h"
 #include "moon_style.h"
 #include "moonmark_settings.h"
+#include "moonmark_updates.h"
 #include "moon_title_bar.h"
 #include "document_zoom.h"
 #include "document_sidebar.h"
@@ -12,10 +13,13 @@
 #include <QAccessible>
 #include <QBoxLayout>
 #include <QClipboard>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QColor>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QEasingCurve>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -43,6 +47,7 @@
 #include <QPalette>
 #include <QPointer>
 #include <QPixmap>
+#include <QProcess>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
@@ -2283,8 +2288,13 @@ public:
         setMinimumSize(720, 480);
         resize(1280, 820);
         setAcceptDrops(true);
+        update_manager_ = new moonmark::qt::UpdateManager(api_, this);
         buildUi();
         updateStatus();
+        if (user_settings_.updates().check_on_startup &&
+            !qEnvironmentVariableIsSet("MOONMARK_DISABLE_UPDATE_CHECKS")) {
+            QTimer::singleShot(1200, this, [this] { checkForUpdates(false); });
+        }
     }
 
     ~MoonmarkWindow() override {
@@ -2407,6 +2417,32 @@ public:
                 std::fflush(stdout);
                 QDir(root).removeRecursively();
                 QCoreApplication::exit(ok ? 0 : 32);
+            });
+            return;
+        }
+        if (mode == QStringLiteral("updates")) {
+            update_manager_->check(true, true, [this](moonmark::qt::UpdateCheckResult first) {
+                const bool first_ok = first.status == moonmark::qt::UpdateCheckResult::Status::Available &&
+                    first.release.version == QStringLiteral("0.1.0-dev.8");
+                update_manager_->check(true, true,
+                    [this, first_ok](moonmark::qt::UpdateCheckResult cached) {
+                    const bool cache_ok = cached.status ==
+                        moonmark::qt::UpdateCheckResult::Status::Available &&
+                        cached.release.version == QStringLiteral("0.1.0-dev.8");
+                    update_manager_->check(true, true,
+                        [first_ok, cache_ok](moonmark::qt::UpdateCheckResult failure) {
+                        const bool failure_ok = failure.status ==
+                            moonmark::qt::UpdateCheckResult::Status::Error;
+                        const bool ok = first_ok && cache_ok && failure_ok;
+                        std::fprintf(stdout,
+                            "UPDATES selection=%s cache_304=%s http_failure=%s\n",
+                            first_ok ? "ok" : "failed", cache_ok ? "ok" : "failed",
+                            failure_ok ? "safe" : "failed");
+                        std::fprintf(stdout, "MOONMARK_SMOKE updates=%s\n", ok ? "ok" : "failed");
+                        std::fflush(stdout);
+                        QCoreApplication::exit(ok ? 0 : 33);
+                    });
+                });
             });
             return;
         }
@@ -3615,6 +3651,12 @@ private:
         menu->addSeparator();
         menu->addAction(QStringLiteral("Fullscreen\tF11"), this,
                         [this] { toggleFullscreen(); });
+        auto* settings_action = new QAction(QStringLiteral("Settings…"), this);
+        settings_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));
+        settings_action->setShortcutContext(Qt::WindowShortcut);
+        QObject::connect(settings_action, &QAction::triggered, this, [this] { showSettings(); });
+        addAction(settings_action);
+        menu->addAction(settings_action);
         menu->addAction(QStringLiteral("Diagnostics\tF12"), this, [this] {
             diagnostics_ = !diagnostics_;
             updateStatus();
@@ -3644,6 +3686,35 @@ private:
         captions->addWidget(close_);
         title_layout->addLayout(captions);
         root->addWidget(title_bar_);
+
+        update_banner_ = new QWidget;
+        update_banner_->setObjectName(QStringLiteral("updateBanner"));
+        auto* update_layout = new QHBoxLayout(update_banner_);
+        update_layout->setContentsMargins(14, 7, 14, 7);
+        update_layout->setSpacing(8);
+        update_label_ = new QLabel;
+        update_label_->setObjectName(QStringLiteral("updateLabel"));
+        update_layout->addWidget(update_label_, 1);
+        update_now_ = new MoonButton(QStringLiteral("Update now"));
+        update_now_->setAccessibleName(QStringLiteral("Download Moonmark update"));
+        QObject::connect(update_now_, &QPushButton::clicked, this, [this] { downloadUpdate(); });
+        update_layout->addWidget(update_now_);
+        auto* release_notes = new MoonButton(QStringLiteral("Release notes"));
+        release_notes->setAccessibleName(QStringLiteral("Open update release notes"));
+        QObject::connect(release_notes, &QPushButton::clicked, this, [this] {
+            if (!available_update_.has_value()) return;
+            const auto url = available_update_->html_url;
+            if (url.scheme() == QStringLiteral("https") &&
+                url.host().compare(QStringLiteral("github.com"), Qt::CaseInsensitive) == 0)
+                QDesktopServices::openUrl(url);
+        });
+        update_layout->addWidget(release_notes);
+        auto* later = new MoonButton(QStringLiteral("Later"));
+        later->setAccessibleName(QStringLiteral("Dismiss update notification"));
+        QObject::connect(later, &QPushButton::clicked, update_banner_, &QWidget::hide);
+        update_layout->addWidget(later);
+        update_banner_->hide();
+        root->addWidget(update_banner_);
 
         stack_ = new QStackedWidget;
         stack_->setObjectName(QStringLiteral("documentStack"));
@@ -3711,6 +3782,143 @@ private:
         if (!path.isEmpty()) {
             openDocument(path);
         }
+    }
+
+    void showSettings() {
+        QDialog dialog(this);
+        dialog.setWindowTitle(QStringLiteral("Moonmark Settings"));
+        dialog.setModal(true);
+        dialog.setMinimumWidth(460);
+        auto* layout = new QVBoxLayout(&dialog);
+        layout->setContentsMargins(22, 20, 22, 18);
+        layout->setSpacing(12);
+
+        auto* title = new QLabel(QStringLiteral("Updates"));
+        title->setObjectName(QStringLiteral("settingsTitle"));
+        layout->addWidget(title);
+        auto* explanation = new QLabel(QStringLiteral(
+            "Moonmark checks the public GitHub Releases feed. No account, token, or telemetry is used."));
+        explanation->setObjectName(QStringLiteral("settingsHint"));
+        explanation->setWordWrap(true);
+        layout->addWidget(explanation);
+
+        auto* startup = new QCheckBox(QStringLiteral("Check for updates automatically"));
+        startup->setChecked(user_settings_.updates().check_on_startup);
+        startup->setAccessibleName(QStringLiteral("Check for updates automatically"));
+        layout->addWidget(startup);
+        auto* prereleases = new QCheckBox(QStringLiteral("Include pre-release versions"));
+        prereleases->setChecked(user_settings_.updates().include_prereleases);
+        prereleases->setAccessibleName(QStringLiteral("Include pre-release versions"));
+        layout->addWidget(prereleases);
+
+        auto* version = new QLabel(QStringLiteral("Current version: %1")
+                                       .arg(QCoreApplication::applicationVersion()));
+        version->setObjectName(QStringLiteral("settingsHint"));
+        layout->addWidget(version);
+        auto* check_result = new QLabel;
+        check_result->setObjectName(QStringLiteral("settingsResult"));
+        check_result->setWordWrap(true);
+        check_result->hide();
+        layout->addWidget(check_result);
+        auto* check_now = new MoonButton(QStringLiteral("Check for updates now"));
+        check_now->setAccessibleName(QStringLiteral("Check for updates now"));
+        QObject::connect(check_now, &QPushButton::clicked, &dialog,
+                         [this, prereleases, check_result, check_now] {
+            check_result->setText(QStringLiteral("Checking GitHub Releases…"));
+            check_result->show();
+            check_now->setEnabled(false);
+            checkForUpdates(true, check_result, check_now, prereleases->isChecked());
+        });
+        auto* check_row = new QHBoxLayout;
+        check_row->addWidget(check_now);
+        check_row->addStretch();
+        layout->addLayout(check_row);
+        layout->addStretch();
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+        QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+        if (dialog.exec() != QDialog::Accepted) return;
+
+        user_settings_.setCheckOnStartup(startup->isChecked());
+        user_settings_.setIncludePrereleases(prereleases->isChecked());
+        QString error;
+        if (!user_settings_.save(&error))
+            QMessageBox::warning(this, QStringLiteral("Moonmark Settings"), error);
+    }
+
+    void checkForUpdates(bool manual, QPointer<QLabel> result_label = {},
+                         QPointer<QPushButton> trigger = {},
+                         std::optional<bool> include_prereleases = std::nullopt) {
+        const bool include = include_prereleases.value_or(
+            user_settings_.updates().include_prereleases);
+        update_manager_->check(include, manual,
+                               [this, manual, result_label, trigger](
+                                   moonmark::qt::UpdateCheckResult result) {
+            if (trigger != nullptr) trigger->setEnabled(true);
+            if (result.status == moonmark::qt::UpdateCheckResult::Status::Available) {
+                available_update_ = result.release;
+                update_label_->setText(QStringLiteral("Moonmark %1 is available")
+                                           .arg(result.release.version));
+                update_now_->setText(user_settings_.portable()
+                                         ? QStringLiteral("Download update")
+                                         : QStringLiteral("Update now"));
+                update_banner_->show();
+                if (result_label != nullptr) {
+                    result_label->setText(QStringLiteral("Moonmark %1 is available.")
+                                              .arg(result.release.version));
+                    result_label->show();
+                }
+                return;
+            }
+            if (result_label != nullptr) {
+                result_label->setText(
+                    result.status == moonmark::qt::UpdateCheckResult::Status::Current
+                        ? QStringLiteral("Moonmark is up to date.")
+                        : result.message);
+                result_label->show();
+            } else if (manual && result.status == moonmark::qt::UpdateCheckResult::Status::Error) {
+                QMessageBox::warning(this, QStringLiteral("Moonmark Update"), result.message);
+            }
+        });
+    }
+
+    void downloadUpdate() {
+        if (!available_update_.has_value()) return;
+        update_now_->setEnabled(false);
+        update_label_->setText(QStringLiteral("Downloading and verifying Moonmark %1…")
+                                   .arg(available_update_->version));
+        update_manager_->download(*available_update_, user_settings_.portable(),
+                                  [this](moonmark::qt::UpdateDownloadResult result) {
+            update_now_->setEnabled(true);
+            if (!result.valid) {
+                update_label_->setText(result.message);
+                QMessageBox::warning(this, QStringLiteral("Moonmark Update"), result.message);
+                return;
+            }
+            if (user_settings_.portable()) {
+                update_label_->setText(QStringLiteral("Verified portable update downloaded."));
+                QMessageBox::information(
+                    this, QStringLiteral("Portable update downloaded"),
+                    QStringLiteral("The verified ZIP was saved to:\n%1\n\nMoonmark will not overwrite its running portable folder.")
+                        .arg(QDir::toNativeSeparators(result.file_path)));
+                QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(result.file_path).absolutePath()));
+                return;
+            }
+            update_label_->setText(QStringLiteral("Verified installer downloaded."));
+            const auto choice = QMessageBox::question(
+                this, QStringLiteral("Install Moonmark update"),
+                QStringLiteral("The Moonmark installer was downloaded and verified.\n\nRun it now and close Moonmark?"));
+            if (choice == QMessageBox::Yes) {
+                if (QProcess::startDetached(result.file_path, {})) {
+                    QCoreApplication::quit();
+                } else {
+                    QMessageBox::warning(this, QStringLiteral("Moonmark Update"),
+                                         QStringLiteral("Windows could not start the verified installer."));
+                }
+            }
+        });
     }
 
     void reloadDocument() {
@@ -3867,6 +4075,7 @@ private:
 
     const MoonmarkApiTable* api_ = nullptr;
     moonmark::qt::UserSettings user_settings_;
+    moonmark::qt::UpdateManager* update_manager_ = nullptr;
     void* backend_ = nullptr;
     void* window_state_ = nullptr;
     moonmark::qt::DocumentSidebar* sidebar_ = nullptr;
@@ -3887,6 +4096,10 @@ private:
     QLabel* title_symbol_ = nullptr;
     ElidingLabel* title_label_ = nullptr;
     QLabel* diagnostics_bar_ = nullptr;
+    QWidget* update_banner_ = nullptr;
+    QLabel* update_label_ = nullptr;
+    MoonButton* update_now_ = nullptr;
+    std::optional<moonmark::qt::ReleaseInfo> available_update_;
     std::vector<std::unique_ptr<OpenDocumentSession>> documents_;
     OpenDocumentSession* active_ = nullptr;
     QString current_path_;
@@ -3934,16 +4147,21 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
                   QByteArray("--smoke-scroll-profile")) != argument_storage.cend();
     if (scroll_profile_smoke) qputenv("MOONMARK_SCROLL_TRACE", "1");
     bool settings_smoke = false;
+    bool updates_smoke = false;
     for (const auto& argument : argument_storage) {
         if (argument.startsWith("--smoke-")) {
             if (!motion_smoke && !scroll_profile_smoke)
                 qputenv("MOONMARK_REDUCED_MOTION", "1");
             qputenv("MOONMARK_SETTINGS_ROOT",
                     QDir::current().absoluteFilePath("out/tests/native-settings").toUtf8());
+            qputenv("MOONMARK_UPDATE_STATE_ROOT",
+                    QDir::current().absoluteFilePath("out/tests/native-updates").toUtf8());
+            qputenv("MOONMARK_DISABLE_UPDATE_CHECKS", "1");
             QSettings::setDefaultFormat(QSettings::IniFormat);
             QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                               QDir::current().absoluteFilePath("out/tests/native-settings"));
             settings_smoke = argument == QByteArray("--smoke-settings");
+            updates_smoke = argument == QByteArray("--smoke-updates");
             break;
         }
     }
@@ -3955,6 +4173,9 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
         legacy.setValue(QStringLiteral("lastOpenDirectory"),
                         QDir(root).filePath(QStringLiteral("legacy-documents")));
         legacy.sync();
+    }
+    if (updates_smoke) {
+        QDir(QDir::current().absoluteFilePath("out/tests/native-updates")).removeRecursively();
     }
     MoonmarkWindow window(api);
     window.show();
@@ -4009,6 +4230,8 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
             smoke_mode = QStringLiteral("startup-arguments");
         } else if (argument == QStringLiteral("--smoke-settings")) {
             smoke_mode = QStringLiteral("settings");
+        } else if (argument == QStringLiteral("--smoke-updates")) {
+            smoke_mode = QStringLiteral("updates");
         } else if (!argument.startsWith(QLatin1Char('-'))) {
             const QFileInfo file(QDir::current().absoluteFilePath(argument));
             if (isSupportedDocumentFile(file)) {
@@ -4036,6 +4259,7 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
         if (document_paths.isEmpty() && smoke_mode != QStringLiteral("snapshot") &&
             smoke_mode != QStringLiteral("icon") &&
             smoke_mode != QStringLiteral("settings") &&
+            smoke_mode != QStringLiteral("updates") &&
             smoke_mode != QStringLiteral("startup-arguments")) {
             return 3;
         }

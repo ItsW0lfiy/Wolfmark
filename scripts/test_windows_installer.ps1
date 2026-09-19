@@ -145,7 +145,7 @@ try {
     }
 
     foreach ($relative in @(
-        'Moonmark.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
+        'Moonmark.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll',
         'platforms/qwindows.dll', 'qt.conf', 'LICENSE', 'THIRD_PARTY_NOTICES.txt',
         'assets/icons/moonmark-markdown.ico', 'assets/icons/moonmark-text.ico',
         'licenses/Qt-LGPL-3.0-only.txt', 'licenses/Qt-GPL-3.0-only.txt'

@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::{io::Read, io::Write, net::TcpListener, thread};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -163,6 +164,80 @@ fn native_settings_migrate_and_recover_safely() {
     assert!(stdout.contains("round_trip=ok"), "{stdout}");
     assert!(stdout.contains("malformed=recovered"), "{stdout}");
     assert!(stdout.contains("atomic=ok"), "{stdout}");
+}
+
+#[test]
+fn native_update_transport_uses_etag_cache_and_fails_safely() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind update fixture server");
+    let endpoint = format!("http://{}/releases", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let release_json = serde_json::json!([{
+            "draft": false,
+            "prerelease": true,
+            "tag_name": "0.1.0-dev.8",
+            "name": "Moonmark dev.8 fixture",
+            "body": "Fixture release",
+            "html_url": "https://github.com/ItsW0lfiy/Moonmark/releases/tag/0.1.0-dev.8",
+            "assets": []
+        }])
+        .to_string();
+        for request_index in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept update fixture request");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let count = stream
+                    .read(&mut buffer)
+                    .expect("read update fixture request");
+                if count == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..count]);
+            }
+            let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
+            assert!(
+                request.contains("user-agent: moonmark/0.1.0-dev.7"),
+                "{request}"
+            );
+            if request_index == 0 {
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"moonmark-test\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    release_json.len(),
+                    release_json
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write update response");
+            } else {
+                assert!(
+                    request.contains("if-none-match: \"moonmark-test\""),
+                    "{request}"
+                );
+                stream.write_all(
+                    b"HTTP/1.1 304 Not Modified\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                ).expect("write update not-modified response");
+            }
+        }
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+        .arg("--smoke-updates")
+        .env("MOONMARK_UPDATE_TEST_ENDPOINT", endpoint)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("launch Moonmark update transport smoke test");
+    server.join().expect("join update fixture server");
+    assert!(
+        output.status.success(),
+        "Moonmark update smoke failed ({:?}): {}{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("updates=ok"), "{stdout}");
+    assert!(stdout.contains("cache_304=ok"), "{stdout}");
+    assert!(stdout.contains("http_failure=safe"), "{stdout}");
 }
 
 #[test]

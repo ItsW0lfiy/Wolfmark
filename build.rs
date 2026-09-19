@@ -22,6 +22,8 @@ fn main() {
         "native/qt/moonmark_qt.cpp",
         "native/qt/moonmark_settings.h",
         "native/qt/moonmark_settings.cpp",
+        "native/qt/moonmark_updates.h",
+        "native/qt/moonmark_updates.cpp",
         "native/qt/moon_style.h",
         "native/qt/moon_style.cpp",
         "native/qt/document_zoom.h",
@@ -77,6 +79,9 @@ fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
 
 fn qt_is_usable(path: &Path) -> bool {
     path.join("include/QtWidgets/QApplication").is_file()
+        && path
+            .join("include/QtNetwork/QNetworkAccessManager")
+            .is_file()
         && (path.join("lib/Qt6Widgets.lib").is_file()
             || path.join("lib/libQt6Widgets.so").is_file())
 }
@@ -92,6 +97,7 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         .std("c++20")
         .file(manifest.join("native/qt/moonmark_qt.cpp"))
         .file(manifest.join("native/qt/moonmark_settings.cpp"))
+        .file(manifest.join("native/qt/moonmark_updates.cpp"))
         .file(manifest.join("native/qt/moon_style.cpp"))
         .file(manifest.join("native/qt/document_zoom.cpp"))
         .file(manifest.join("native/qt/document_sidebar.cpp"))
@@ -111,6 +117,7 @@ fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {
         .include(qt.join("include/QtCore"))
         .include(qt.join("include/QtGui"))
         .include(qt.join("include/QtWidgets"))
+        .include(qt.join("include/QtNetwork"))
         .flag("/EHsc")
         .flag("/permissive-")
         .flag("/Zc:__cplusplus")
@@ -123,7 +130,7 @@ fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {
         "cargo:rustc-link-search=native={}",
         qt.join("lib").display()
     );
-    for library in ["Qt6Widgets", "Qt6Gui", "Qt6Core"] {
+    for library in ["Qt6Widgets", "Qt6Gui", "Qt6Network", "Qt6Core"] {
         println!("cargo:rustc-link-lib=dylib={library}");
     }
     for library in ["dwmapi", "uxtheme", "user32", "shell32"] {
@@ -136,6 +143,10 @@ fn compile_qt_bridge_linux(manifest: &Path) {
         .atleast_version("6")
         .probe("Qt6Widgets")
         .unwrap_or_else(|error| panic!("Qt 6 Widgets development package not found: {error}"));
+    let network = pkg_config::Config::new()
+        .atleast_version("6")
+        .probe("Qt6Network")
+        .unwrap_or_else(|error| panic!("Qt 6 Network development package not found: {error}"));
     let mut build = qt_bridge_build(manifest);
     build
         .pic(true)
@@ -143,6 +154,9 @@ fn compile_qt_bridge_linux(manifest: &Path) {
         .flag("-Wextra")
         .flag("-Wpedantic");
     for include in qt.include_paths {
+        build.include(include);
+    }
+    for include in network.include_paths {
         build.include(include);
     }
     for (name, value) in qt.defines {
@@ -163,7 +177,12 @@ fn profile_output_dir() -> PathBuf {
 fn stage_windows_runtime(qt: &Path) {
     let output = profile_output_dir();
     std::fs::create_dir_all(output.join("platforms")).expect("create Qt platform directory");
-    for name in ["Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll"] {
+    for name in [
+        "Qt6Core.dll",
+        "Qt6Gui.dll",
+        "Qt6Widgets.dll",
+        "Qt6Network.dll",
+    ] {
         copy_if_changed(&qt.join("bin").join(name), &output.join(name));
     }
     copy_if_changed(

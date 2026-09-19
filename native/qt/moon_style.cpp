@@ -67,6 +67,13 @@ void apply(QApplication& application) {
         QMenu::item { border-radius: 4px; padding: 6px 24px 6px 10px; }
         QMenu::item:selected { background: #303030; color: #f0f0f0; }
         QMenu::separator { height: 1px; background: #303030; margin: 5px 8px; }
+        #updateBanner { background: #171717; border-bottom: 1px solid #303030; }
+        #updateLabel { color: #d2d2d2; font-weight: 500; }
+        #settingsTitle { color: #eeeeee; font-size: 18px; font-weight: 600; }
+        #settingsHint { color: #929292; }
+        #settingsResult { color: #c8c8c8; padding: 6px 0; }
+        QDialog { background: #101010; }
+        QCheckBox { color: #d0d0d0; spacing: 8px; }
     )"));
 }
 
