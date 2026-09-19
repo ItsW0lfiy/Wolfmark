@@ -61,6 +61,9 @@ pub struct NativeApiTable {
     pub queue_image: unsafe extern "C" fn(*mut Backend, u32, u32) -> bool,
     pub poll_image: unsafe extern "C" fn(*const Backend) -> NativeImageResult,
     pub backend_counters: unsafe extern "C" fn(*const Backend) -> NativeCounters,
+    pub select_update: unsafe extern "C" fn(*const u8, usize, bool) -> NativeBuffer,
+    pub verify_update:
+        unsafe extern "C" fn(*const u8, usize, *const u8, usize, *const u8, usize) -> NativeBuffer,
     pub buffer_free: unsafe extern "C" fn(NativeBuffer),
     pub window_state_new: extern "C" fn() -> *mut WindowState,
     pub window_state_free: unsafe extern "C" fn(*mut WindowState),
@@ -70,13 +73,15 @@ pub struct NativeApiTable {
 }
 
 static NATIVE_API: NativeApiTable = NativeApiTable {
-    version: 2,
+    version: 3,
     backend_new: moonmark_backend_new,
     backend_free: moonmark_backend_free,
     open_document: moonmark_open_document,
     queue_image: moonmark_queue_image,
     poll_image: moonmark_poll_image,
     backend_counters: moonmark_backend_counters,
+    select_update: moonmark_select_update,
+    verify_update: moonmark_verify_update,
     buffer_free: moonmark_buffer_free,
     window_state_new: moonmark_window_state_new,
     window_state_free: moonmark_window_state_free,
@@ -103,7 +108,7 @@ impl NativeImageResult {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn moonmark_api_version() -> u32 {
-    2
+    3
 }
 
 #[unsafe(no_mangle)]
@@ -214,6 +219,71 @@ pub unsafe extern "C" fn moonmark_backend_counters(backend: *const Backend) -> N
 }
 
 /// # Safety
+/// `releases_json` must point to `releases_len` readable bytes for the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn moonmark_select_update(
+    releases_json: *const u8,
+    releases_len: usize,
+    include_prereleases: bool,
+) -> NativeBuffer {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let bytes = unsafe { required_bytes(releases_json, releases_len)? };
+        match crate::updates::select_release(bytes, env!("CARGO_PKG_VERSION"), include_prereleases)
+        {
+            Ok(Some(release)) => serde_json::to_vec(&serde_json::json!({
+                "status": "available",
+                "release": release,
+            })),
+            Ok(None) => serde_json::to_vec(&serde_json::json!({"status": "current"})),
+            Err(message) => serde_json::to_vec(&serde_json::json!({
+                "status": "error",
+                "message": message,
+            })),
+        }
+        .map_err(|_| "Could not encode Moonmark update data")
+    }));
+    match result {
+        Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
+        Ok(Err(message)) => update_error_buffer(message),
+        Err(_) => update_error_buffer("Moonmark failed while selecting an update"),
+    }
+}
+
+/// # Safety
+/// Each pointer must reference its corresponding readable byte length for the duration of the
+/// call. The file path and asset name must be UTF-8.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn moonmark_verify_update(
+    file_path: *const u8,
+    file_path_len: usize,
+    manifest: *const u8,
+    manifest_len: usize,
+    asset_name: *const u8,
+    asset_name_len: usize,
+) -> NativeBuffer {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let file_path = unsafe { required_utf8(file_path, file_path_len)? };
+        let manifest = unsafe { required_bytes(manifest, manifest_len)? };
+        let asset_name = unsafe { required_utf8(asset_name, asset_name_len)? };
+        let verification = crate::updates::verify_file_checksum(
+            std::path::Path::new(file_path),
+            manifest,
+            asset_name,
+        );
+        let value = match verification {
+            Ok(()) => serde_json::json!({"valid": true}),
+            Err(message) => serde_json::json!({"valid": false, "message": message}),
+        };
+        serde_json::to_vec(&value).map_err(|_| "Could not encode update verification result")
+    }));
+    match result {
+        Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
+        Ok(Err(message)) => update_verification_error_buffer(message),
+        Err(_) => update_verification_error_buffer("Moonmark failed while verifying the update"),
+    }
+}
+
+/// # Safety
 /// `buffer` must be empty or have been returned by a Moonmark native API function, and must not
 /// have previously been freed.
 #[unsafe(no_mangle)]
@@ -290,4 +360,30 @@ fn encode_window_mode(mode: WindowMode) -> u8 {
 fn error_document(message: &str) -> NativeBuffer {
     let document = crate::presentation::PresentationDocument::error(message.to_owned());
     NativeBuffer::from_vec(serde_json::to_vec(&document).unwrap_or_default())
+}
+
+unsafe fn required_bytes<'a>(data: *const u8, len: usize) -> Result<&'a [u8], &'static str> {
+    if data.is_null() {
+        return Err("Required update data is unavailable");
+    }
+    Ok(unsafe { std::slice::from_raw_parts(data, len) })
+}
+
+unsafe fn required_utf8<'a>(data: *const u8, len: usize) -> Result<&'a str, &'static str> {
+    let bytes = unsafe { required_bytes(data, len)? };
+    std::str::from_utf8(bytes).map_err(|_| "Required update text is not valid UTF-8")
+}
+
+fn update_error_buffer(message: &str) -> NativeBuffer {
+    NativeBuffer::from_vec(
+        serde_json::to_vec(&serde_json::json!({"status": "error", "message": message}))
+            .unwrap_or_default(),
+    )
+}
+
+fn update_verification_error_buffer(message: &str) -> NativeBuffer {
+    NativeBuffer::from_vec(
+        serde_json::to_vec(&serde_json::json!({"valid": false, "message": message}))
+            .unwrap_or_default(),
+    )
 }

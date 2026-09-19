@@ -32,6 +32,10 @@ struct MoonmarkApiTable {
     bool (*queue_image)(void*, std::uint32_t, std::uint32_t);
     MoonmarkImageResult (*poll_image)(const void*);
     MoonmarkCounters (*backend_counters)(const void*);
+    MoonmarkBuffer (*select_update)(const std::uint8_t*, std::size_t, bool);
+    MoonmarkBuffer (*verify_update)(const std::uint8_t*, std::size_t,
+                                    const std::uint8_t*, std::size_t,
+                                    const std::uint8_t*, std::size_t);
     void (*buffer_free)(MoonmarkBuffer);
     void* (*window_state_new)();
     void (*window_state_free)(void*);

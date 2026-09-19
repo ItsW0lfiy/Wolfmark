@@ -3905,7 +3905,7 @@ void applyMoonmarkStyle(QApplication& application) {
 } // namespace
 
 extern "C" int moonmark_qt_run(int argc, const char* const* argv, const MoonmarkApiTable* api) {
-    if (api == nullptr || api->version != 2) {
+    if (api == nullptr || api->version != 3) {
         return 2;
     }
     QCoreApplication::setOrganizationName(QStringLiteral("Moonmark"));
