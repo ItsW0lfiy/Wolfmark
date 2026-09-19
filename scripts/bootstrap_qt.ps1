@@ -3,9 +3,9 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$targetRoot = Join-Path $projectRoot 'target'
-$sdkRoot = Join-Path $targetRoot 'qt-sdk'
-$archiveRoot = Join-Path $targetRoot 'qt-sdk-archives'
+$outRoot = Join-Path $projectRoot 'out'
+$sdkRoot = Join-Path $outRoot 'toolchains/qt'
+$archiveRoot = Join-Path $outRoot 'cache/qt'
 $version = '6.11.2'
 $stamp = '6.11.2-0-202608131017'
 $archive = 'qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z'

@@ -88,7 +88,8 @@ impl Drop for GeneratedTestDirectory {
 fn shell_startup_arguments_open_supported_documents_once() {
     let generated = GeneratedTestDirectory::recreate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("target")
+            .join("out")
+            .join("tests")
             .join("moonmark-native-tests")
             .join("startup-arguments"),
     );
@@ -285,7 +286,8 @@ fn qt_frontend_smoke_matrix() {
     assert!(output.contains("pending=0"), "{output}");
 
     let watcher_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
+        .join("out")
+        .join("tests")
         .join("moonmark-native-tests");
     std::fs::create_dir_all(&watcher_root).expect("create native test directory");
     let watcher_fixture = watcher_root.join("watcher.md");
@@ -311,7 +313,8 @@ fn qt_frontend_smoke_matrix() {
 #[test]
 fn qt_background_text_watcher_updates_only_its_session() {
     let watcher_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("target")
+        .join("out")
+        .join("tests")
         .join("moonmark-native-tests");
     std::fs::create_dir_all(&watcher_root).expect("create native test directory");
     let active_fixture = watcher_root.join("active.md");

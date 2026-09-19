@@ -1,8 +1,10 @@
 /build/
 /build-*/
 /target/
+/.uv-cache/
 /.deps/
 /deploy/
+/out/
 /fixtures/generated/
 /.vs/
 /.vscode/

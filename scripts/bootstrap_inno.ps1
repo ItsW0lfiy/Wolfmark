@@ -6,10 +6,10 @@ $version = '7.1.0'
 $expectedHash = '0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F'
 $url = 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$toolsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'target/tools'))
-$downloadRoot = Join-Path $toolsRoot 'downloads'
+$toolsRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/inno'))
+$downloadRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/cache/inno'))
 $installer = Join-Path $downloadRoot "innosetup-$version-x64.exe"
-$toolRoot = Join-Path $toolsRoot "inno-setup-$version"
+$toolRoot = Join-Path $toolsRoot $version
 $compiler = Join-Path $toolRoot 'ISCC.exe'
 
 if (Test-Path -LiteralPath $compiler -PathType Leaf) {

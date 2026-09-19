@@ -52,7 +52,7 @@ fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    let project_local = manifest.join("target/qt-sdk");
+    let project_local = manifest.join("out/toolchains/qt");
     if qt_is_usable(&project_local) {
         return Ok(project_local);
     }

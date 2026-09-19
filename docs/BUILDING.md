@@ -14,7 +14,7 @@ No .NET SDK/runtime, C#, Avalonia, Node.js, browser engine, CMake, or qmake invo
 
 ## Windows setup
 
-Use an existing compatible Qt 6 SDK by setting `MOONMARK_QT_DIR` or `QTDIR`, or download the tested official Qt 6.11.2 MSVC2022 x64 archive into ignored project-local `target/qt-sdk`:
+Use an existing compatible Qt 6 SDK by setting `MOONMARK_QT_DIR` or `QTDIR`, or download the tested official Qt 6.11.2 MSVC2022 x64 archive into ignored project-local `out/toolchains/qt`:
 
 ```powershell
 pwsh -File scripts/bootstrap_qt.ps1
@@ -63,7 +63,7 @@ For a deterministic rendered client-area snapshot during UI review:
 cargo run -- fixtures\moonmark-visual-test.md --smoke-snapshot
 ```
 
-The ignored snapshot is written to `target/visual-dev6/moonmark-ui.png`. Run `pwsh -File tools/visual_snapshots.ps1` after a Debug build and fixture generation to capture inline code/wrapping/selection, image-gap regression, empty/prose/headings/tables/code/images/plain text/narrow/wide, sidebar, menu, and 80/100/125/150% zoom cases. Optional process variables `MOONMARK_SNAPSHOT_NAME`, `MOONMARK_SNAPSHOT_WIDTH`, `MOONMARK_SNAPSHOT_HEIGHT`, and `MOONMARK_SNAPSHOT_SCROLL` select the filename, client size, and vertical offset. `MOONMARK_SNAPSHOT_ZOOM` sets actual document zoom; `MOONMARK_SNAPSHOT_NO_SIDEBAR=1` collapses navigation. `MOONMARK_SNAPSHOT_MENU=1` captures the real menu, and `MOONMARK_SNAPSHOT_SELECTION=1` selects the native document before capture. Smoke sessions use reduced motion and put QSettings in project-local `target/native-settings`, not the user's application settings. They supplement rather than replace physical taskbar, Alt+Tab, DPI, touchpad, and multi-monitor checks.
+Ignored snapshots are written below `out/visual/dev7/`. Run `pwsh -File tools/visual_snapshots.ps1` after a Debug build and fixture generation to capture inline code/wrapping/selection, image-gap regression, empty/prose/headings/tables/code/images/plain text/narrow/wide, sidebar, menu, and 80/100/125/150% zoom cases. Optional process variables `MOONMARK_SNAPSHOT_NAME`, `MOONMARK_SNAPSHOT_WIDTH`, `MOONMARK_SNAPSHOT_HEIGHT`, and `MOONMARK_SNAPSHOT_SCROLL` select the filename, client size, and vertical offset. `MOONMARK_SNAPSHOT_ZOOM` sets actual document zoom; `MOONMARK_SNAPSHOT_NO_SIDEBAR=1` collapses navigation. `MOONMARK_SNAPSHOT_MENU=1` captures the real menu, and `MOONMARK_SNAPSHOT_SELECTION=1` selects the native document before capture. Smoke sessions use reduced motion and put QSettings in project-local `out/tests/native-settings`, not the user's application settings. They supplement rather than replace physical taskbar, Alt+Tab, DPI, touchpad, and multi-monitor checks.
 
 Focused dev.6 checks:
 

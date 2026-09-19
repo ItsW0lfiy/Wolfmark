@@ -6,7 +6,7 @@
 pwsh -File scripts/package_windows.ps1
 ```
 
-It reads the version from Cargo metadata, builds Release, stages an ignored `deploy/staging/<version>/Moonmark` folder, smoke-tests that app-local payload with Qt discovery variables cleared and `PATH` limited to Windows system directories, then writes the release artifacts to `deploy/release/<version>/`.
+It reads the version from Cargo metadata, builds Release, stages an ignored `out/package/staging/<version>/Moonmark` folder, smoke-tests that app-local payload with Qt discovery variables cleared and `PATH` limited to Windows system directories, then writes the release artifacts to `out/release/<version>/`.
 
 The current engine-independent artifacts are:
 
@@ -20,7 +20,7 @@ Inno Setup 7.1.0 is the approved dev.7 installer engine. Prepare the verified pr
 pwsh -File scripts/bootstrap_inno.ps1
 ```
 
-The bootstrap downloads the official signed Inno installer into ignored `target/tools`, verifies its pinned SHA-256 and Authenticode signer, and uses the vendor's portable extraction mode. It does not install Inno globally. Packaging discovers that compiler automatically; `-InnoCompiler` or `MOONMARK_INNO_ISCC` may select another compiler explicitly. Use `-SkipInstaller` only for a deliberate portable-only build.
+The bootstrap downloads the official signed Inno installer into ignored `out/cache/inno`, verifies its pinned SHA-256 and Authenticode signer, and extracts the compiler under `out/toolchains/inno`. It does not install Inno globally. Packaging discovers that compiler automatically; `-InnoCompiler` or `MOONMARK_INNO_ISCC` may select another compiler explicitly. Use `-SkipInstaller` only for a deliberate portable-only build.
 
 The portable folder contains:
 
@@ -47,7 +47,7 @@ Moonmark-Setup-win-x64.exe /SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 
 Use `/TASKS="fileassoc,desktopicon"` to select both optional tasks explicitly. The installer normally requests administrative elevation because its default target is Program Files. The unsigned development installer may trigger Windows reputation warnings.
 
-The contained lifecycle test uses Inno's command-line privilege override to install under project-local `target/installer-tests`, while exercising the same payload, AppId, shortcuts, and HKCU-equivalent shell registration:
+The contained lifecycle test uses Inno's command-line privilege override to install under project-local `out/tests/installer`, while exercising the same payload, AppId, shortcuts, and HKCU-equivalent shell registration:
 
 ```powershell
 pwsh -File scripts/test_windows_installer.ps1
@@ -57,4 +57,4 @@ It refuses to overwrite an existing current-user Moonmark installation or shortc
 
 A true single executable requires a separate static Qt build and a deliberate Qt licensing decision. It was not built. Under LGPLv3, static distribution adds relinking/application-object and installation-information obligations and may affect whether the application remains merely a work using the library. Dynamic Qt is the safer current packaging choice; legal review and Moonmark's own license decision remain required before public distribution.
 
-The dev.7 package measurement is 6,496,768 bytes for `Moonmark.exe`, 35,264,372 bytes (33.63 MiB) for the complete portable folder, about 14.90 MiB for the ZIP, and about 12.27 MiB for the Inno setup. Exact final sizes and SHA-256 values are written with each rebuild under `deploy/release/0.1.0-dev.7/`; do not copy stale hashes into documentation. The remaining folder bytes are Qt, the Windows platform plugin, app-local MSVC CRT, branding, and legal/support files. The packaged smoke passed with only normal Windows system paths visible. This is not yet a clean-VM or minimum-Windows-version certification.
+The dev.7 package measurement is 6,496,768 bytes for `Moonmark.exe`, 35,264,372 bytes (33.63 MiB) for the complete portable folder, about 14.90 MiB for the ZIP, and about 12.27 MiB for the Inno setup. Exact final sizes and SHA-256 values are written with each rebuild under `out/release/0.1.0-dev.7/`; do not copy stale hashes into documentation. The remaining folder bytes are Qt, the Windows platform plugin, app-local MSVC CRT, branding, and legal/support files. The packaged smoke passed with only normal Windows system paths visible. This is not yet a clean-VM or minimum-Windows-version certification.

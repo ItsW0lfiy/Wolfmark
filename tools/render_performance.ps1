@@ -1,4 +1,4 @@
-param([string]$Executable = 'target/release/moonmark.exe')
+param([string]$Executable = 'out/cargo/release/moonmark.exe')
 $ErrorActionPreference = 'Stop'
 foreach ($case in @(
     @('image-geometry', 'fixtures/image-layout-regression.md'),

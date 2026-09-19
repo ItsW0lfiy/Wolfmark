@@ -8,13 +8,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$deployRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'deploy'))
+$outRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out'))
 
-function Assert-UnderDeploy([string]$Path) {
+function Assert-UnderOut([string]$Path) {
     $fullPath = [IO.Path]::GetFullPath($Path)
-    $prefix = $deployRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $prefix = $outRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     if (-not $fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to modify a path outside Moonmark's deploy directory: $fullPath"
+        throw "Refusing to modify a path outside Moonmark's out directory: $fullPath"
     }
     return $fullPath
 }
@@ -43,7 +43,7 @@ function Find-InnoCompiler {
     $candidates = @()
     if ($InnoCompiler) { $candidates += $InnoCompiler }
     if ($env:MOONMARK_INNO_ISCC) { $candidates += $env:MOONMARK_INNO_ISCC }
-    $candidates += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'target/tools') `
+    $candidates += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'out/toolchains/inno') `
         -Filter ISCC.exe -File -Recurse -ErrorAction SilentlyContinue |
         Sort-Object FullName -Descending | Select-Object -ExpandProperty FullName
     $candidates += @(
@@ -98,18 +98,18 @@ Push-Location $projectRoot
 try {
     $version = Get-MoonmarkVersion
     $numericVersion = Get-NumericVersion $version
-    $packageRoot = [IO.Path]::GetFullPath((Join-Path $deployRoot "staging/$version/Moonmark"))
+    $packageRoot = [IO.Path]::GetFullPath((Join-Path $outRoot "package/staging/$version/Moonmark"))
     if (-not $QtRoot) {
         $QtRoot = if ($env:MOONMARK_QT_DIR) { $env:MOONMARK_QT_DIR } else {
-            Join-Path $projectRoot 'target/qt-sdk'
+            Join-Path $projectRoot 'out/toolchains/qt'
         }
     }
     $QtRoot = [IO.Path]::GetFullPath($QtRoot)
     if (-not $OutputDirectory) {
-        $OutputDirectory = Join-Path $deployRoot "release/$version"
+        $OutputDirectory = Join-Path $outRoot "release/$version"
     }
-    $OutputDirectory = Assert-UnderDeploy $OutputDirectory
-    $packageRoot = Assert-UnderDeploy $packageRoot
+    $OutputDirectory = Assert-UnderOut $OutputDirectory
+    $packageRoot = Assert-UnderOut $packageRoot
     $zipPath = Join-Path $OutputDirectory 'Moonmark-portable-win-x64.zip'
     $installerPath = Join-Path $OutputDirectory 'Moonmark-Setup-win-x64.exe'
     $checksumPath = Join-Path $OutputDirectory 'SHA256SUMS.txt'
@@ -126,7 +126,7 @@ try {
         (Join-Path $packageRoot 'licenses'), `
         $OutputDirectory | Out-Null
 
-    Copy-Item -LiteralPath 'target/release/moonmark.exe' -Destination (Join-Path $packageRoot 'Moonmark.exe')
+    Copy-Item -LiteralPath 'out/cargo/release/moonmark.exe' -Destination (Join-Path $packageRoot 'Moonmark.exe')
     foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') {
         $source = Join-Path $QtRoot "bin/$name"
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {

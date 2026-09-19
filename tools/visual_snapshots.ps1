@@ -1,4 +1,4 @@
-param([string]$Executable = 'target/debug/moonmark.exe')
+param([string]$Executable = 'out/cargo/debug/moonmark.exe')
 $ErrorActionPreference = 'Stop'
 $cases = @(
     @('inline-prose-table', 'fixtures/inline-code-quality.md', 1200, 900, 0),

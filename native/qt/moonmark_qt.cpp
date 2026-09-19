@@ -3103,9 +3103,9 @@ public:
                         if (!character.isLetterOrNumber() && character != QLatin1Char('-'))
                             character = QLatin1Char('_');
                     }
-                    QDir::current().mkpath(QStringLiteral("target/visual-dev6"));
+                    QDir::current().mkpath(QStringLiteral("out/visual/dev7"));
                     const auto output = QDir::current().absoluteFilePath(
-                        QStringLiteral("target/visual-dev6/%1.png").arg(name));
+                        QStringLiteral("out/visual/dev7/%1.png").arg(name));
                     const auto pixels = qEnvironmentVariable("MOONMARK_SNAPSHOT_MENU") == QStringLiteral("1")
                         ? findChild<QMenu*>(QStringLiteral("documentMenu"))->grab() : grab();
                     const bool saved = pixels.save(output, "PNG");
@@ -3892,7 +3892,7 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
                 qputenv("MOONMARK_REDUCED_MOTION", "1");
             QSettings::setDefaultFormat(QSettings::IniFormat);
             QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
-                              QDir::current().absoluteFilePath("target/native-settings"));
+                              QDir::current().absoluteFilePath("out/tests/native-settings"));
             break;
         }
     }

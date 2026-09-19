@@ -15,7 +15,7 @@ Inno Setup was explicitly approved for Moonmark dev.7 after the following compar
 
 Moonmark uses **Inno Setup** for its first Windows installer. It produces the expected offline setup EXE, installs the validated portable payload under Program Files, registers Moonmark without changing protected Windows defaults, supports optional Desktop/file-association tasks, and has normal uninstall/upgrade and unattended behavior suitable for later WinGet validation.
 
-The implementation is [Moonmark.iss](../packaging/windows/Moonmark.iss), invoked by `scripts/package_windows.ps1`. `scripts/bootstrap_inno.ps1` can download the official signed 7.1.0 compiler into ignored project-local `target/tools`; it checks the pinned SHA-256 and Authenticode signer before extracting the portable compiler. A compatible explicitly supplied compiler remains supported through `-InnoCompiler` or `MOONMARK_INNO_ISCC`.
+The implementation is [Moonmark.iss](../packaging/windows/Moonmark.iss), invoked by `scripts/package_windows.ps1`. `scripts/bootstrap_inno.ps1` can download the official signed 7.1.0 compiler into ignored project-local `out/cache/inno`; it checks the pinned SHA-256 and Authenticode signer before extracting the compiler under `out/toolchains/inno`. A compatible explicitly supplied compiler remains supported through `-InnoCompiler` or `MOONMARK_INNO_ISCC`.
 
 The decision does not authorize dev.8 update logic, code-signing claims, single-instance IPC, or an application-architecture change. Moonmark's setup executable remains unsigned for this development prerelease.
 

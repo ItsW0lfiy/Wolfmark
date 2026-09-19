@@ -6,11 +6,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'target/installer-tests'))
-$targetRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'target'))
-$targetPrefix = $targetRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-if (-not $testRoot.StartsWith($targetPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to use installer test path outside target: $testRoot"
+$testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/tests/installer'))
+$outRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out'))
+$outPrefix = $outRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $testRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to use installer test path outside out: $testRoot"
 }
 
 function Get-MoonmarkVersion {
@@ -24,7 +24,7 @@ function Get-MoonmarkVersion {
 
 function Find-InnoCompiler {
     $candidates = @($InnoCompiler, $env:MOONMARK_INNO_ISCC)
-    $candidates += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'target/tools') `
+    $candidates += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'out/toolchains/inno') `
         -Filter ISCC.exe -File -Recurse -ErrorAction SilentlyContinue |
         Sort-Object FullName -Descending | Select-Object -ExpandProperty FullName
     $selected = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
@@ -104,11 +104,11 @@ try {
 
     $version = Get-MoonmarkVersion
     if (-not $SetupPath) {
-        $SetupPath = Join-Path $projectRoot "deploy/release/$version/Moonmark-Setup-win-x64.exe"
+        $SetupPath = Join-Path $projectRoot "out/release/$version/Moonmark-Setup-win-x64.exe"
     }
     $SetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
     $compiler = Find-InnoCompiler
-    $sourceDir = [IO.Path]::GetFullPath((Join-Path $projectRoot "deploy/staging/$version/Moonmark"))
+    $sourceDir = [IO.Path]::GetFullPath((Join-Path $projectRoot "out/package/staging/$version/Moonmark"))
     $olderOutput = Join-Path $testRoot 'older'
     New-Item -ItemType Directory -Force -Path $olderOutput | Out-Null
     & $compiler '/Qp' '/DMyAppVersion=0.1.0-dev.7-preupgrade' '/DMyNumericVersion=0.1.0.6' `
