@@ -2441,6 +2441,19 @@ public:
             });
             return;
         }
+        if (mode == QStringLiteral("settings-ui")) {
+            QTimer::singleShot(0, this, [this] {
+                const auto path = QDir::current().absoluteFilePath(
+                    QStringLiteral("out/visual/dev7/settings.png"));
+                showSettings(path);
+                const bool ok = QFileInfo::exists(path);
+                std::fprintf(stdout, "MOONMARK_SMOKE settings_ui=%s path=%s\n",
+                             ok ? "ok" : "failed", path.toUtf8().constData());
+                std::fflush(stdout);
+                QCoreApplication::exit(ok ? 0 : 35);
+            });
+            return;
+        }
         if (mode == QStringLiteral("updates")) {
             update_manager_->check(true, true, [this](moonmark::qt::UpdateCheckResult first) {
                 const bool first_ok = first.status == moonmark::qt::UpdateCheckResult::Status::Available &&
@@ -3807,7 +3820,7 @@ private:
         }
     }
 
-    void showSettings() {
+    void showSettings(const QString& snapshot_path = {}) {
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("Moonmark Settings"));
         dialog.setModal(true);
@@ -3862,6 +3875,13 @@ private:
         QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         layout->addWidget(buttons);
+        if (!snapshot_path.isEmpty()) {
+            QDir().mkpath(QFileInfo(snapshot_path).absolutePath());
+            QTimer::singleShot(120, &dialog, [&dialog, snapshot_path] {
+                dialog.grab().save(snapshot_path);
+                dialog.reject();
+            });
+        }
         if (dialog.exec() != QDialog::Accepted) return;
 
         user_settings_.setCheckOnStartup(startup->isChecked());
@@ -4257,6 +4277,8 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
             smoke_mode = QStringLiteral("settings");
         } else if (argument == QStringLiteral("--smoke-portable-settings")) {
             smoke_mode = QStringLiteral("portable-settings");
+        } else if (argument == QStringLiteral("--smoke-settings-ui")) {
+            smoke_mode = QStringLiteral("settings-ui");
         } else if (argument == QStringLiteral("--smoke-updates")) {
             smoke_mode = QStringLiteral("updates");
         } else if (!argument.startsWith(QLatin1Char('-'))) {
@@ -4287,6 +4309,7 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
             smoke_mode != QStringLiteral("icon") &&
             smoke_mode != QStringLiteral("settings") &&
             smoke_mode != QStringLiteral("portable-settings") &&
+            smoke_mode != QStringLiteral("settings-ui") &&
             smoke_mode != QStringLiteral("updates") &&
             smoke_mode != QStringLiteral("startup-arguments")) {
             return 3;
