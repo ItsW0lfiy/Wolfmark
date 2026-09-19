@@ -149,6 +149,8 @@ struct Command {
     QString target;
     QString extra;
     qint64 number = 0;
+    int image_width = 0;
+    int image_height = 0;
     QJsonArray spans;
 };
 
@@ -216,6 +218,8 @@ Command parseCommand(const QJsonValue& value) {
                    object.value("target").toString(),
                    object.value("extra").toString(),
                    object.value("number").toInteger(),
+                   object.value("imageWidth").toInt(),
+                   object.value("imageHeight").toInt(),
                    object.value("spans").toArray()};
 }
 
@@ -247,6 +251,12 @@ QImage placeholderImage(const QString& message, int width = 900, int height = 72
     painter.setFont(QFont(QStringLiteral("Segoe UI"), 11));
     painter.drawText(image.rect().adjusted(22, 12, -22, -12), Qt::AlignVCenter | Qt::AlignLeft | Qt::TextWordWrap,
                      message);
+    return image;
+}
+
+QImage transparentImagePlaceholder() {
+    QImage image(1, 1, QImage::Format_RGBA8888);
+    image.fill(Qt::transparent);
     return image;
 }
 
@@ -1019,6 +1029,11 @@ public:
             std::fprintf(stdout, "IMAGE_GEOMETRY id=%u loaded=%d zoom=%d image_h=%.1f block_h=%.1f next_y=%.1f excess=%.1f line_height=%.1f type=%d\n",
                          occurrence.id, occurrence.loaded, zoom_percent_, image.height(), bounds.height(),
                          next.top(), excess, block.blockFormat().lineHeight(), block.blockFormat().lineHeightType());
+            if (occurrence.natural_width > 0 && occurrence.natural_height > 0) {
+                const auto expected = displayedImageSize(occurrence.natural_width,
+                                                         occurrence.natural_height);
+                ok &= image.width() == expected.width() && image.height() == expected.height();
+            }
             // Image-only lines must not gain paragraph-leading proportional to bitmap height.
             if (block.text() == QString(QChar::ObjectReplacementCharacter)) ok &= std::abs(excess) < 2;
         }
@@ -1852,17 +1867,24 @@ private:
         }
 
         const auto resource = QUrl(QStringLiteral("moonmark-image://%1").arg(id));
-        document()->addResource(QTextDocument::ImageResource, resource,
-                                placeholderImage(message, 900, 72, !allowed));
+        const bool geometry_known = allowed && command.image_width > 0 && command.image_height > 0;
+        document()->addResource(
+            QTextDocument::ImageResource, resource,
+            geometry_known ? transparentImagePlaceholder()
+                           : placeholderImage(message, 900, 72, !allowed));
         QTextImageFormat format;
         format.setName(resource.toString());
-        format.setWidth(std::min(900, availableImageWidth()));
-        format.setHeight(72);
+        const auto display_size = geometry_known
+            ? displayedImageSize(command.image_width, command.image_height)
+            : QSize(std::min(900, availableImageWidth()), 72);
+        format.setWidth(display_size.width());
+        format.setHeight(display_size.height());
         format.setToolTip(command.text);
         const int position = cursor.position();
         cursor.insertImage(format);
         image_occurrences_.push_back(
-            ImageOccurrence{id, position, false, false, !allowed, 900, 72});
+            ImageOccurrence{id, position, false, false, !allowed,
+                            command.image_width, command.image_height});
     }
 
     void buildRawHtml(QTextCursor& cursor, const Command& command, int depth) {
@@ -1879,6 +1901,17 @@ private:
 
     int availableImageWidth() const {
         return std::max(240, viewport()->width() - effectiveSideMargin() * 2 - 8);
+    }
+
+    QSize displayedImageSize(int natural_width, int natural_height) const {
+        if (natural_width <= 0 || natural_height <= 0) {
+            return {std::min(900, availableImageWidth()), 72};
+        }
+        const int width = std::max(
+            1, std::min(static_cast<int>(natural_width * zoom_percent_ / 100.0),
+                        availableImageWidth()));
+        const double scale = static_cast<double>(width) / natural_width;
+        return {width, std::max(1, static_cast<int>(natural_height * scale))};
     }
 
     int effectiveSideMargin() const {
@@ -1995,8 +2028,10 @@ private:
                 for (auto& occurrence : image_occurrences_) {
                     if (occurrence.id == result.id) {
                         occurrence.loaded = true;
-                        occurrence.natural_width = width;
-                        occurrence.natural_height = height;
+                        if (occurrence.natural_width <= 0 || occurrence.natural_height <= 0) {
+                            occurrence.natural_width = width;
+                            occurrence.natural_height = height;
+                        }
                     }
                 }
             }
@@ -2039,15 +2074,12 @@ private:
             cursor.setPosition(occurrence.position);
             cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
             auto format = cursor.charFormat().toImageFormat();
-            const int width = std::min(static_cast<int>(occurrence.natural_width * zoom_percent_ / 100.0),
-                                       availableImageWidth());
-            const double scale = occurrence.natural_width > 0
-                                     ? static_cast<double>(width) / occurrence.natural_width
-                                     : 1.0;
-            const auto height = std::max(1, static_cast<int>(occurrence.natural_height * scale));
-            if (format.width() == width && format.height() == height) continue;
-            format.setWidth(width);
-            format.setHeight(height);
+            const auto display_size = displayedImageSize(occurrence.natural_width,
+                                                         occurrence.natural_height);
+            if (format.width() == display_size.width() &&
+                format.height() == display_size.height()) continue;
+            format.setWidth(display_size.width());
+            format.setHeight(display_size.height());
             cursor.setCharFormat(format);
         }
     }
@@ -2055,7 +2087,8 @@ private:
     void resizeLoadedImages() {
         std::unordered_map<std::uint32_t, bool> changed;
         for (const auto& occurrence : image_occurrences_) {
-            if (occurrence.loaded && !changed.contains(occurrence.id)) {
+            if (occurrence.natural_width > 0 && occurrence.natural_height > 0 &&
+                !changed.contains(occurrence.id)) {
                 updateImageFormats(occurrence.id);
                 changed.emplace(occurrence.id, true);
             }
@@ -3245,14 +3278,15 @@ public:
         }
         if (mode == QStringLiteral("images") || mode == QStringLiteral("image-geometry")) {
             const bool geometry = mode == QStringLiteral("image-geometry");
-            if (geometry) document_->testImageGeometry();
+            const bool initial_geometry_ok = !geometry || document_->testImageGeometry();
             document_->queueAllImagesForSmoke();
             auto* deadline = new QTimer(this);
             deadline->setInterval(25);
             auto* elapsed = new QElapsedTimer;
             elapsed->start();
             QObject::connect(deadline, &QTimer::timeout, this,
-                             [this, deadline, elapsed, geometry, pass = 0, geometry_ok = true]() mutable {
+                             [this, deadline, elapsed, geometry, pass = 0,
+                              geometry_ok = initial_geometry_ok]() mutable {
                 const bool finished = document_->pendingImageDecodes() == 0;
                 const bool timed_out = elapsed->elapsed() > 20000;
                 if (!finished && !timed_out) {

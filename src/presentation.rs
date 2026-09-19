@@ -54,6 +54,8 @@ pub struct PresentationCommand {
     pub target: String,
     pub extra: String,
     pub number: i64,
+    pub image_width: u32,
+    pub image_height: u32,
     pub spans: Vec<CodeSpan>,
 }
 

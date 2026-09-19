@@ -2,7 +2,7 @@ mod cache;
 mod loader;
 pub mod paths;
 
-pub use loader::ImagePipeline;
+pub use loader::{ImageDimensions, ImagePipeline, probe_dimensions};
 pub use paths::{AssetResolution, AssetState, resolve_local_image};
 
 #[derive(Clone, Debug)]
@@ -10,6 +10,8 @@ pub struct ImageRequest {
     pub id: u32,
     pub path: String,
     pub max_width: u32,
+    pub intrinsic_width: u32,
+    pub intrinsic_height: u32,
 }
 
 #[derive(Clone, Debug)]

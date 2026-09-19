@@ -2,7 +2,9 @@ use std::path::Path;
 use std::time::Instant;
 use std::{collections::HashMap, mem};
 
-use crate::images::{AssetState, ImageRequest, resolve_local_image};
+use crate::images::{
+    AssetState, ImageDimensions, ImageRequest, probe_dimensions, resolve_local_image,
+};
 use crate::presentation::{
     PresentationCommand, PresentationDocument, PresentationMetrics, PresentationSettings, TocEntry,
 };
@@ -60,6 +62,7 @@ pub fn to_presentation(
         commands: Vec::new(),
         images: Vec::new(),
         image_assets: HashMap::new(),
+        image_dimensions: HashMap::new(),
         next_image: 1,
         toc: Vec::new(),
         heading_counts: HashMap::new(),
@@ -101,6 +104,7 @@ struct Converter<'a> {
     commands: Vec<PresentationCommand>,
     images: Vec<ImageRequest>,
     image_assets: HashMap<String, u32>,
+    image_dimensions: HashMap<String, Option<ImageDimensions>>,
     next_image: u32,
     toc: Vec<TocEntry>,
     heading_counts: HashMap<String, u32>,
@@ -304,6 +308,14 @@ impl Converter<'_> {
             .canonical_path
             .as_ref()
             .map_or_else(String::new, |path| path.to_string_lossy().into_owned());
+        let dimensions = if state == 0 {
+            *self
+                .image_dimensions
+                .entry(path.clone())
+                .or_insert_with(|| probe_dimensions(Path::new(&path)).ok())
+        } else {
+            None
+        };
         let id = if state == 0 {
             if let Some(id) = self.image_assets.get(&path) {
                 *id
@@ -314,6 +326,8 @@ impl Converter<'_> {
                     id,
                     path,
                     max_width: 1800,
+                    intrinsic_width: dimensions.map_or(0, |size| size.width),
+                    intrinsic_height: dimensions.map_or(0, |size| size.height),
                 });
                 id
             }
@@ -329,6 +343,12 @@ impl Converter<'_> {
             title,
             i64::from(id),
         );
+        if let Some(command) = self.commands.last_mut()
+            && let Some(dimensions) = dimensions
+        {
+            command.image_width = dimensions.width;
+            command.image_height = dimensions.height;
+        }
     }
 
     fn take_image_id(&mut self) -> u32 {
@@ -368,6 +388,8 @@ impl Converter<'_> {
             target: target.to_owned(),
             extra: extra.to_owned(),
             number,
+            image_width: 0,
+            image_height: 0,
             spans: Vec::new(),
         });
     }
@@ -447,6 +469,40 @@ mod tests {
         assert_eq!(ids.len(), 2);
         assert_eq!(ids[0], ids[1]);
         assert_eq!(requests.len(), 1);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reserves_intrinsic_image_geometry_before_decode() {
+        let root =
+            std::env::temp_dir().join(format!("moonmark-image-geometry-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("create test directory");
+        let document_path = root.join("document.md");
+        let image_path = root.join("image with spaces.png");
+        std::fs::write(&document_path, b"").expect("write document");
+        image::RgbaImage::new(1280, 720)
+            .save(&image_path)
+            .expect("write image fixture");
+
+        let model = parse("Text\n\n![image](image with spaces.png)\n\nText below");
+        let (presentation, requests) = to_presentation(
+            &model,
+            &document_path,
+            PresentationMetrics::default(),
+            &Settings::default(),
+        );
+        let image = presentation
+            .commands
+            .iter()
+            .find(|command| command.kind == kind::IMAGE)
+            .expect("image command");
+
+        assert_eq!((image.image_width, image.image_height), (1280, 720));
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            (requests[0].intrinsic_width, requests[0].intrinsic_height),
+            (1280, 720)
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

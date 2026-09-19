@@ -14,6 +14,10 @@
 
 This paragraph must follow the image with ordinary spacing, not image-sized leading.
 
+![Image path containing spaces](images/image with spaces.png)
+
+Text below a second local image must remain stable regardless of decode order.
+
 ![Missing placeholder](images/intentionally-missing.png)
 
 ## Heading after placeholder

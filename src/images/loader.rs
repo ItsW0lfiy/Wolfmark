@@ -11,6 +11,41 @@ use super::{ImageRequest, ImageResult};
 
 use super::cache::{CachedImage, ImageCache};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ImageDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn probe_dimensions(path: &Path) -> Result<ImageDimensions, String> {
+    let (width, height) = if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+    {
+        const MAX_SVG_BYTES: u64 = 32 * 1024 * 1024;
+        let metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+        if metadata.len() > MAX_SVG_BYTES {
+            return Err("SVG source exceeds the safety limit".into());
+        }
+        let data = std::fs::read(path).map_err(|error| error.to_string())?;
+        let tree = resvg::usvg::Tree::from_data(&data, &svg_options())
+            .map_err(|error| format!("Invalid SVG: {error}"))?;
+        let size = tree.size().to_int_size();
+        (size.width(), size.height())
+    } else {
+        let reader = image::ImageReader::open(path)
+            .and_then(image::ImageReader::with_guessed_format)
+            .map_err(|error| error.to_string())?;
+        reader
+            .into_dimensions()
+            .map_err(|error| error.to_string())?
+    };
+    if unsafe_dimensions(width, height) {
+        return Err("Image dimensions exceed the safety limit".into());
+    }
+    Ok(ImageDimensions { width, height })
+}
+
 pub struct ImagePipeline {
     pool: ThreadPool,
     sender: Sender<ImageResult>,
@@ -120,21 +155,10 @@ fn decode(request: &ImageRequest) -> ImageResult {
         return decode_svg(request);
     }
 
-    let reader = match image::ImageReader::open(&request.path)
-        .and_then(image::ImageReader::with_guessed_format)
+    if (request.intrinsic_width == 0 || request.intrinsic_height == 0)
+        && let Err(error) = probe_dimensions(Path::new(&request.path))
     {
-        Ok(reader) => reader,
-        Err(error) => return failure(request.id, error.to_string()),
-    };
-    let (source_width, source_height) = match reader.into_dimensions() {
-        Ok(dimensions) => dimensions,
-        Err(error) => return failure(request.id, error.to_string()),
-    };
-    if unsafe_dimensions(source_width, source_height) {
-        return failure(
-            request.id,
-            "Image dimensions exceed the safety limit".into(),
-        );
+        return failure(request.id, error);
     }
     let reader = match image::ImageReader::open(&request.path)
         .and_then(image::ImageReader::with_guessed_format)
@@ -266,6 +290,26 @@ fn failure(id: u32, error: String) -> ImageResult {
 mod tests {
     use super::*;
 
+    #[test]
+    fn probes_raster_dimensions_without_decoding_pixels() {
+        let directory =
+            std::env::temp_dir().join(format!("moonmark-image-dimensions-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("create dimensions test directory");
+        let path = directory.join("image with spaces.png");
+        image::RgbaImage::new(640, 360)
+            .save(&path)
+            .expect("write dimensions fixture");
+
+        assert_eq!(
+            probe_dimensions(&path),
+            Ok(ImageDimensions {
+                width: 640,
+                height: 360
+            })
+        );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
     fn temporary_svg(name: &str, source: &str) -> std::path::PathBuf {
         let directory =
             std::env::temp_dir().join(format!("moonmark-svg-test-{}-{}", std::process::id(), name));
@@ -285,6 +329,8 @@ mod tests {
             id: 7,
             path: path.to_string_lossy().into_owned(),
             max_width: 120,
+            intrinsic_width: 320,
+            intrinsic_height: 160,
         });
         assert!(result.error.is_empty(), "{}", result.error);
         assert_eq!((result.width, result.height), (120, 60));
@@ -302,6 +348,8 @@ mod tests {
             id: 9,
             path: path.to_string_lossy().into_owned(),
             max_width: 120,
+            intrinsic_width: 50_000,
+            intrinsic_height: 50_000,
         });
         assert!(result.error.contains("dimensions exceed"));
         let _ = std::fs::remove_dir_all(path.parent().expect("SVG parent"));
