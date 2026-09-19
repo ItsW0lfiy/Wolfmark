@@ -18,6 +18,7 @@ SOURCE = BRANDING / "moonmark-logo-source.png"
 FULL_LOGO = BRANDING / "moonmark-logo.png"
 SYMBOL = BRANDING / "moonmark-symbol.png"
 GENERATED = ROOT / "assets" / "icons"
+DEPLOYMENT = ROOT / "assets" / "deployment"
 
 EXPECTED_SOURCE_SIZE = (1536, 1024)
 SYMBOL_REGION = (390, 360, 616, 576)
@@ -28,6 +29,8 @@ DOCUMENT_ICONS = {
     GENERATED / "file-preview_MD.png": GENERATED / "moonmark-markdown.ico",
     GENERATED / "file-preview_TEXT.png": GENERATED / "moonmark-text.ico",
 }
+INSTALLER_WIZARD = DEPLOYMENT / "moonmark-installer-wizard.png"
+INSTALLER_SMALL = DEPLOYMENT / "moonmark-installer-small.png"
 
 
 def to_achromatic(image: Image.Image) -> Image.Image:
@@ -123,6 +126,36 @@ def validate_outputs() -> None:
                 f"got {icon.ico.sizes()}"
             )
 
+    for path, expected_size in (
+        (INSTALLER_WIZARD, (656, 1256)),
+        (INSTALLER_SMALL, (220, 232)),
+    ):
+        image = Image.open(path).convert("RGBA")
+        if image.size != expected_size:
+            raise RuntimeError(f"Unexpected installer image size for {path}: {image.size}")
+        red, green, blue, _ = image.split()
+        if ImageChops.difference(red, green).getbbox() or ImageChops.difference(
+            green, blue
+        ).getbbox():
+            raise RuntimeError(f"Installer branding must remain achromatic: {path}")
+
+
+def build_installer_images(symbol: Image.Image) -> None:
+    DEPLOYMENT.mkdir(parents=True, exist_ok=True)
+
+    wizard = Image.new("RGBA", (656, 1256), (6, 6, 6, 255))
+    wizard_symbol = symbol.resize((480, 480), Image.Resampling.LANCZOS)
+    wizard.alpha_composite(wizard_symbol, ((wizard.width - wizard_symbol.width) // 2, 208))
+    draw = ImageDraw.Draw(wizard)
+    draw.line((76, 760, wizard.width - 76, 760), fill=(48, 48, 48, 255), width=2)
+    draw.line((76, 776, 268, 776), fill=(118, 118, 118, 255), width=2)
+    wizard.save(INSTALLER_WIZARD, optimize=True)
+
+    small = Image.new("RGBA", (220, 232), (8, 8, 8, 255))
+    small_symbol = symbol.resize((184, 184), Image.Resampling.LANCZOS)
+    small.alpha_composite(small_symbol, ((small.width - small_symbol.width) // 2, 24))
+    small.save(INSTALLER_SMALL, optimize=True)
+
 
 def main() -> None:
     source = Image.open(SOURCE)
@@ -135,6 +168,7 @@ def main() -> None:
     to_achromatic(source.crop(FULL_LOGO_REGION)).save(FULL_LOGO, optimize=True)
     symbol = to_achromatic(extract_symbol(source))
     symbol.save(SYMBOL, optimize=True)
+    build_installer_images(symbol)
     for size in ICON_SIZES:
         icon = symbol.resize((size, size), Image.Resampling.LANCZOS)
         icon.save(GENERATED / f"moonmark-{size}x{size}.png", optimize=True)
@@ -155,6 +189,7 @@ def main() -> None:
     print(f"Built {SYMBOL}")
     print(f"Built {len(ICON_SIZES)} PNG sizes and Windows ICO in {GENERATED}")
     print(f"Built {len(DOCUMENT_ICONS)} approved document ICO assets in {GENERATED}")
+    print(f"Built Moonmark installer artwork in {DEPLOYMENT}")
 
 
 if __name__ == "__main__":

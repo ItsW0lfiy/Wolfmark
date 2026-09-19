@@ -176,9 +176,6 @@ try {
         $env:MOONMARK_QT_DIR = $savedMoonmarkQtDir
     }
 
-    if (Test-Path -LiteralPath $zipPath) { Remove-Item -Force -LiteralPath $zipPath }
-    Compress-Archive -Path $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
-
     $artifacts = @()
     if (-not $SkipInstaller) {
         $compiler = Find-InnoCompiler
@@ -193,6 +190,17 @@ try {
             throw 'Moonmark installer compilation failed.'
         }
         $artifacts += $installerPath
+    }
+
+    $portableMarker = Join-Path $packageRoot 'portable.flag'
+    try {
+        Set-Content -LiteralPath $portableMarker -Value '' -Encoding utf8NoBOM
+        if (Test-Path -LiteralPath $zipPath) { Remove-Item -Force -LiteralPath $zipPath }
+        Compress-Archive -Path $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
+    } finally {
+        if (Test-Path -LiteralPath $portableMarker -PathType Leaf) {
+            Remove-Item -Force -LiteralPath $portableMarker
+        }
     }
     $artifacts += $zipPath
     $checksumLines = foreach ($artifact in $artifacts) {
