@@ -4,6 +4,8 @@
 
 Moonmark is a Windows-first, viewer-first Markdown application. It is one native process built with Rust, C++20, Qt 6 Widgets, and QTextDocument. Linux is the secondary desktop target; Android remains later work. Moonmark contains no browser engine, web frontend, local server, CLR, JVM, or Node.js runtime.
 
+Moonmark is free and open source. All first-party features are available without payment: there is no paid tier, subscription, feature paywall, or paid unlock. Optional donations may support development, but donating never changes the functionality available in Moonmark.
+
 Current development milestone: `0.1.0-dev.7` — First Windows Release & Shell Integration.
 
 ## Quick start

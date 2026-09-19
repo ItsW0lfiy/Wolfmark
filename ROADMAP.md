@@ -14,6 +14,14 @@ Moonmark remains based around ordinary files. Features may understand folders, r
 
 Official features designed and maintained as part of Moonmark belong in **core Moonmark**. The project should not move desirable first-party functionality into mods merely to keep the core artificially small. Mods exist for functionality outside the curated Moonmark product vision.
 
+## Free-software and funding principle
+
+Moonmark is free and open source. Every official first-party feature must remain available without payment. Moonmark will not introduce Plus, Pro, Premium, or other paid editions; subscriptions required for functionality; feature paywalls; paid unlocks; artificial limits removed by payment; or trials that require payment to keep using Moonmark.
+
+Moonmark may offer an optional **Donate** or **Support Moonmark** action. Donations are voluntary and may support development, but they must never unlock features, increase limits, remove restrictions, change update access, create another edition, or otherwise alter the application's functionality. A user who never donates receives the complete first-party Moonmark application. No payment-provider dependency or donation UI is selected by this principle.
+
+Build and distribution dependencies remain subject to their own current terms. In particular, Moonmark must re-evaluate WiX Toolset's licensing and Open Source Maintenance Fee terms if WiX's terms or Moonmark's funding/revenue model materially changes. This is an engineering policy, not a guarantee that third-party terms will remain unchanged.
+
 ---
 
 ## Completed foundation — `0.1.0-dev.6`
