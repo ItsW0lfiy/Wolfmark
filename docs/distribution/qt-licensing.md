@@ -1,6 +1,6 @@
 # Qt licensing notes
 
-Moonmark currently builds against Qt 6.11.2 and uses only Qt Core, Gui, and Widgets plus the `qwindows` platform plugin. Those essential modules are available under Qt's commercial license or the open-source LGPLv3/GPLv3 options; none of Moonmark's used modules appears in Qt's GPL-only module list.
+Moonmark currently builds against Qt 6.11.2 and uses only Qt Core, Gui, Widgets, and Network plus the `qwindows` platform plugin. Those essential modules are available under Qt's commercial license or the open-source LGPLv3/GPLv3 options; none of Moonmark's used modules appears in Qt's GPL-only module list.
 
 The measured portable layout dynamically links Qt under the intended open-source evaluation path. Dynamic linking can allow Moonmark's own source to use separate terms when all LGPLv3 conditions are satisfied, including prominent notice, license copies, user replacement/relinking rights, installation information where applicable, and provision of the complete corresponding Qt source (including modifications) or a compliant written offer under the distributor's control.
 

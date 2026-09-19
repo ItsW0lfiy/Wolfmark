@@ -25,7 +25,7 @@ The bootstrap downloads the official signed Inno installer into ignored `out/cac
 The portable folder contains:
 
 - `Moonmark.exe`
-- dynamically linked Qt6Core, Qt6Gui, and Qt6Widgets
+- dynamically linked Qt6Core, Qt6Gui, Qt6Widgets, and Qt6Network
 - the Windows QPA plugin at `platforms/qwindows.dll`
 - app-local MSVC runtime DLLs when the Visual Studio redistributable directory is available
 - approved symbol artwork (the application, shell, and EXE icon are embedded and do not depend on this file)
@@ -36,7 +36,9 @@ This ZIP is the current practical portable architecture. It needs no .NET, JVM, 
 
 The Qt SDK, Rust toolchain, Cargo, MSVC compiler, Windows SDK, `vswhere.exe`, and Inno compiler are build-time requirements only. `vswhere` locates installed C++ toolchains and the newest app-local x64 VC runtime instead of relying on a hardcoded Visual Studio edition path. Missing Qt, platform-plugin, CRT, or installer compiler files fail packaging instead of silently producing a client-dependent artifact. Normal users receive the executable, exact Qt DLLs/plugins, app-local CRT, assets, notices, and license texts. The portable edition runs directly from its extracted directory; the installer deploys the same staged payload rather than bootstrap a development SDK or language runtime.
 
-The setup defaults to `{autopf}\Moonmark` (normally 64-bit Program Files), creates an Installed Apps/uninstall entry and Start Menu shortcut, offers an optional Desktop shortcut, and offers Moonmark's Open With registration for `.md`, `.markdown`, and `.txt`. It does not write the protected Windows `UserChoice` default. A stable AppId keeps upgrades in one Installed Apps entry. Uninstall removes Moonmark-owned files, shortcuts, and registration but not user documents or future user settings.
+The setup defaults to `{autopf}\Moonmark` (normally 64-bit Program Files), creates an Installed Apps/uninstall entry and Start Menu shortcut, offers an optional Desktop shortcut, and offers Moonmark's Open With registration for `.md`, `.markdown`, and `.txt`. It does not write the protected Windows `UserChoice` default. Markdown and text handlers use their own Moonmark document icons. A stable AppId keeps upgrades in one Installed Apps entry. Uninstall removes Moonmark-owned files, shortcuts, and registration but not user documents or settings.
+
+The installed build stores typed settings under the platform application-config location. The portable ZIP contains `portable.flag`; that marker selects `data/settings.json` beside the executable without changing the application binary. See [update delivery and settings](updates.md) for the schema and network/update contract.
 
 For unattended deployment and later WinGet validation:
 

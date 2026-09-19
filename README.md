@@ -58,6 +58,6 @@ pwsh -File scripts/bootstrap_inno.ps1
 pwsh -File scripts/package_windows.ps1
 ```
 
-See [architecture](docs/ARCHITECTURE.md), [renderer](docs/NATIVE_RENDERER.md), [images](docs/IMAGE_PIPELINE.md), [window behavior](docs/WINDOW_FRAME.md), [building](docs/BUILDING.md), [packaging](docs/PACKAGING.md), [dev.6 validation](docs/DEV6_VALIDATION.md), and [Qt licensing](docs/QT_LICENSING.md).
+See the [documentation index](docs/README.md), [architecture](docs/architecture/overview.md), [renderer](docs/architecture/renderer.md), [images](docs/architecture/images.md), [window behavior](docs/architecture/windowing.md), [building](docs/development/building.md), [packaging](docs/distribution/packaging.md), [updates](docs/distribution/updates.md), and [Qt licensing](docs/distribution/qt-licensing.md).
 
-Moonmark source is licensed under [GPL-3.0-only](LICENSE). Official branding is covered separately by [BRANDING.md](BRANDING.md). Review the [dependency license audit](docs/DEPENDENCY_LICENSE_AUDIT.md), [third-party notices](THIRD_PARTY_NOTICES.txt), and [roadmap](ROADMAP.md) before distribution work.
+Moonmark source is licensed under [GPL-3.0-only](LICENSE). Official branding is covered separately by [BRANDING.md](BRANDING.md). Review the [dependency license audit](docs/licenses/dependency-audit.md), [third-party notices](THIRD_PARTY_NOTICES.txt), and [roadmap](ROADMAP.md) before distribution work.

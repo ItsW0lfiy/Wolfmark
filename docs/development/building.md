@@ -6,7 +6,7 @@ Tested on Windows x64 with:
 
 - Rust 1.94+ MSVC toolchain
 - a C++20-capable MSVC compiler
-- Qt 6.11.2 Core, Gui, and Widgets development files
+- Qt 6.11.2 Core, Gui, Widgets, and Network development files
 - Windows SDK resource compiler for the executable icon
 - PowerShell 7 for the optional bootstrap/package scripts
 
@@ -45,7 +45,7 @@ pwsh -File scripts/bootstrap_inno.ps1
 pwsh -File scripts/package_windows.ps1
 ```
 
-See [PACKAGING.md](PACKAGING.md) for prerequisites, staging, app-local runtime policy, artifact paths, installer lifecycle validation, unattended switches, and checksums.
+See [Windows packaging](../distribution/packaging.md) for prerequisites, staging, app-local runtime policy, artifact paths, installer lifecycle validation, unattended switches, and checksums.
 
 ## Fixtures and benchmarks
 
@@ -80,4 +80,4 @@ After a Release build, `pwsh -File tools/render_performance.ps1` runs native geo
 
 ## Linux
 
-The C++ adapter is mostly cross-platform and the Win32 sections are guarded. On Linux, `build.rs` discovers Qt6Widgets and its transitive Qt modules through `pkg-config`; install a compatible Qt 6 Widgets development package and `pkg-config`. This path is architecturally wired but has not been compiled on a physical Linux host. A Linux milestone must validate compilation/linking, package the platform plugin and system dependencies, and verify AT-SPI/accessibility behavior.
+The C++ adapter is mostly cross-platform and the Win32 sections are guarded. On Linux, `build.rs` discovers Qt6Widgets and Qt6Network with their transitive Qt modules through `pkg-config`; install compatible Qt 6 Widgets/Network development packages and `pkg-config`. This path is architecturally wired but has not been compiled on a physical Linux host. A Linux milestone must validate compilation/linking, package the platform plugin and system dependencies, and verify AT-SPI/accessibility behavior.

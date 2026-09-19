@@ -29,4 +29,4 @@ Neutral Fusion palette roles and centralized styling cover selection, links, foc
 
 Qt retains whole-document selection, clipboard, text layout and accessibility. The outline uses a native tree with accessible labels and keyboard activation. Automated text-interface checks do not replace screen-reader/UI Automation or physical mixed-DPI testing.
 
-See [dev.6 validation](DEV6_VALIDATION.md) for actual screenshot review, measurements, and limitations.
+See [dev.6 validation](../history/validation/dev6.md) for actual screenshot review, measurements, and limitations.

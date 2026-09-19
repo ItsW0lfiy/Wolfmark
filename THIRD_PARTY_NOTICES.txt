@@ -1,4 +1,4 @@
-Moonmark uses Qt 6.11.2 Core, Gui, and Widgets dynamically.
+Moonmark uses Qt 6.11.2 Core, Gui, Widgets, and Network dynamically.
 
 Qt is Copyright (C) The Qt Company Ltd. and other contributors. These Qt components are available under commercial terms or the GNU Lesser General Public License version 3 / GNU General Public License version 3. Copies of those license texts are included in this package.
 

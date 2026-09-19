@@ -21,6 +21,7 @@ ordinary Markdown file
 - Syntect/two-face syntax classification and Moonmark token palette
 - local image canonicalization and remote-image policy
 - bounded image decode scheduling, deduplication, generation cancellation, and LRU cache
+- release metadata selection, SemVer comparison, and SHA-256 artifact verification
 - diagnostics, benchmarks, fixtures, and framework-neutral window-state semantics
 
 ## C++/Qt ownership
@@ -32,6 +33,7 @@ ordinary Markdown file
 - selection, clipboard, link activation, zoom/reflow, scrollbars, and middle-button autoscroll
 - presentation-time image placement and UI-thread conversion of Rust RGBA results to QImage
 - Windows frameless-window hit testing and system integration
+- typed settings persistence and asynchronous Qt Network release transport
 
 ## Interoperability
 

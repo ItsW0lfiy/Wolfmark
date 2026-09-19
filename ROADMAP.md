@@ -59,25 +59,22 @@ Planned work includes:
 - keep installed and portable builds on the same application architecture
 - produce deterministic artifact names and SHA-256 checksums
 - prepare conservative prerelease notes without publishing remotely
+- add typed installed/portable settings and a bounded GitHub release-check/download handoff
+- verify exact release assets with the published SHA-256 manifest before offering installation or portable replacement
 - audit the Rust/core boundary for later Android document-provider work without selecting a mobile UI
 
-## `0.1.0-dev.8` — GitHub Releases updater
+## `0.1.0-dev.8` — Updater hardening and release-channel validation
 
-Add restrained application update support.
+Harden the initial dev.7 update-delivery path against real published releases and expand it only where release experience justifies the work.
 
 Planned behavior:
 
-- asynchronous update checks
-- avoid blocking normal startup
-- check at most once near startup unless manually requested
-- remain silent when the installed version is current
-- show a restrained opt-in prompt when an update exists
-- download the complete installer rather than patching arbitrary binaries in place
-- verify SHA-256 before installation
-- keep stable, preview, and development channels explicit
-- treat portable updates separately from installed builds
-- support manual update checking from the UI
-- keep update behavior disableable in settings
+- validate conditional release checks and cached metadata against the first published prerelease
+- keep checks asynchronous, bounded, quiet when current, and disableable
+- validate installed setup handoff and portable ZIP handoff end to end
+- harden interrupted download, corrupt checksum, missing asset, and offline recovery behavior
+- keep stable, preview, and development channels explicit as the release model grows
+- preserve explicit user consent before download and installation
 - consider Authenticode signing later if practical and explicitly configured
 
 ## Around `0.1.0-dev.9` — WinGet
