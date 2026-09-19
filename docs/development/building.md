@@ -1,5 +1,33 @@
 # Building
 
+## Quick start
+
+After installing Rust/MSVC, PowerShell 7, and the Visual Studio C++ x64 workload with a Windows SDK:
+
+```powershell
+cargo setup
+cargo app
+```
+
+Create the Windows setup executable, portable ZIP, and checksums with:
+
+```powershell
+cargo package-app
+```
+
+Cargo aliases provide the normal Moonmark workflow:
+
+| Command | Purpose |
+| --- | --- |
+| `cargo app` | Build Moonmark in Release mode and launch it. Arguments may follow `--`, as with `cargo app -- README.md`. |
+| `cargo build-app` | Build the Release application without launching. |
+| `cargo setup` | Verify MSVC and prepare the project-local Qt and Inno Setup tools only when missing. |
+| `cargo package-app` | Build the final installer, portable ZIP, and `SHA256SUMS.txt`. |
+| `cargo clean-app` | Remove normal generated output under `out/`. |
+| `cargo deep-clean` | Also remove project-local downloaded/bootstrap toolchains and caches. |
+
+Cargo's built-in `cargo package` command remains unchanged; Moonmark uses `cargo package-app` because Cargo aliases cannot override built-in commands.
+
 ## Toolchain
 
 Tested on Windows x64 with:
@@ -11,16 +39,6 @@ Tested on Windows x64 with:
 - PowerShell 7 for the optional bootstrap/package scripts
 
 No .NET SDK/runtime, C#, Avalonia, Node.js, browser engine, CMake, or qmake invocation is part of the normal build. The discovered Qt SDK's qmake executable is queried only as an optional SDK-location fallback.
-
-## Windows setup
-
-Use an existing compatible Qt 6 SDK by setting `MOONMARK_QT_DIR` or `QTDIR`, or download the tested official Qt 6.11.2 MSVC2022 x64 archive into ignored project-local `out/toolchains/qt`:
-
-```powershell
-pwsh -File scripts/bootstrap_qt.ps1
-```
-
-The script verifies the archive against Qt's published SHA-1 file. It does not install Qt globally.
 
 ## Cargo workflow
 
@@ -38,12 +56,19 @@ cargo build --release
 
 Moonmark development milestones use prerelease versions such as `0.1.0-dev.4` through `0.1.0-dev.7`. During milestone work, each coherent source, UI, test, or documentation change receives its own descriptive commit before unrelated work begins. Commits are not squashed merely to shorten history, and pushing still requires separate explicit user approval.
 
-The Windows x64 release bundle is assembled with the approved Inno Setup compiler. If no compatible compiler is already available, prepare the verified project-local Inno 7.1.0 tool first:
+## Advanced / internal tooling
+
+The Cargo aliases delegate to small PowerShell scripts; normal development does not require invoking them directly. They remain available for diagnosing or customizing an individual stage:
 
 ```powershell
+pwsh -File scripts/bootstrap_qt.ps1
 pwsh -File scripts/bootstrap_inno.ps1
 pwsh -File scripts/package_windows.ps1
+pwsh -File scripts/clean.ps1
+pwsh -File scripts/clean.ps1 -Deep
 ```
+
+The Qt bootstrap downloads the tested Qt 6.11.2 MSVC2022 x64 archive to ignored project-local storage and verifies Qt's published SHA-1. The Inno bootstrap verifies its pinned SHA-256 and Authenticode signer. Neither tool is installed globally.
 
 See [Windows packaging](../distribution/packaging.md) for prerequisites, staging, app-local runtime policy, artifact paths, installer lifecycle validation, unattended switches, and checksums.
 

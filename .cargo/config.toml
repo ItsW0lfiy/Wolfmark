@@ -1,2 +1,10 @@
 [build]
 target-dir = "out/cargo"
+
+[alias]
+app = "run --release"
+build-app = "build --release"
+setup = ["run", "--quiet", "--manifest-path", "scripts/cargo_alias/Cargo.toml", "--target-dir", "out/cargo-alias", "--", "setup"]
+package-app = ["run", "--quiet", "--manifest-path", "scripts/cargo_alias/Cargo.toml", "--target-dir", "out/cargo-alias", "--", "package"]
+clean-app = ["run", "--quiet", "--manifest-path", "scripts/cargo_alias/Cargo.toml", "--target-dir", "out/cargo-alias", "--", "clean"]
+deep-clean = ["run", "--quiet", "--manifest-path", "scripts/cargo_alias/Cargo.toml", "--target-dir", "out/cargo-alias", "--", "deep-clean"]

@@ -13,7 +13,16 @@ $package = 'qt.qt6.6112.win64_msvc2022_64'
 $baseUrl = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/$package"
 $archivePath = Join-Path $archiveRoot "$stamp$archive"
 
-if (Test-Path (Join-Path $sdkRoot 'lib/Qt6Widgets.lib')) {
+function Test-QtSdk {
+    foreach ($library in 'Qt6Core.lib', 'Qt6Gui.lib', 'Qt6Widgets.lib', 'Qt6Network.lib') {
+        if (-not (Test-Path -LiteralPath (Join-Path $sdkRoot "lib/$library") -PathType Leaf)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+if (Test-QtSdk) {
     Write-Host "Qt $version is already available at $sdkRoot"
     exit 0
 }
@@ -31,7 +40,7 @@ if ($actual -ne $expected) { throw "Qt SDK checksum mismatch: expected $expected
 
 & tar.exe -xf $archivePath -C $sdkRoot
 if ($LASTEXITCODE -ne 0) { throw 'Qt SDK extraction failed.' }
-if (-not (Test-Path (Join-Path $sdkRoot 'lib/Qt6Widgets.lib'))) {
-    throw 'The extracted Qt SDK does not contain Qt6Widgets.lib.'
+if (-not (Test-QtSdk)) {
+    throw 'The extracted Qt SDK does not contain the required Core, Gui, Widgets, and Network libraries.'
 }
 Write-Host "Qt $version installed project-locally at $sdkRoot"

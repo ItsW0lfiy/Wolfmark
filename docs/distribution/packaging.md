@@ -1,12 +1,12 @@
 # Windows packaging
 
-`scripts/package_windows.ps1` is the release-grade Windows packaging entry point:
+Cargo is the normal Windows packaging entry point:
 
 ```powershell
-pwsh -File scripts/package_windows.ps1
+cargo package-app
 ```
 
-It reads the version from Cargo metadata, builds Release, stages an ignored `out/package/staging/<version>/Moonmark` folder, smoke-tests that app-local payload with Qt discovery variables cleared and `PATH` limited to Windows system directories, then writes the release artifacts to `out/release/<version>/`.
+The alias delegates to `scripts/package_windows.ps1`. That internal script reads the version from Cargo metadata, builds Release, stages an ignored `out/package/staging/<version>/Moonmark` folder, smoke-tests that app-local payload with Qt discovery variables cleared and `PATH` limited to Windows system directories, then writes the release artifacts to `out/release/<version>/`.
 
 The current engine-independent artifacts are:
 

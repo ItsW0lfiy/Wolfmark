@@ -6,6 +6,23 @@ Moonmark is a Windows-first, viewer-first Markdown application. It is one native
 
 Current development milestone: `0.1.0-dev.7` — First Windows Release & Shell Integration.
 
+## Quick start
+
+Install Rust with the MSVC target, PowerShell 7, and Visual Studio Build Tools with the C++ x64 workload and Windows SDK. Then, from the repository root:
+
+```powershell
+cargo setup
+cargo app
+```
+
+Build the installer, portable ZIP, and checksums with:
+
+```powershell
+cargo package-app
+```
+
+`cargo build-app` builds the Release application without launching it. `cargo clean-app` removes normal generated output; `cargo deep-clean` also removes project-local downloaded SDK/compiler caches. Standard commands such as `cargo check`, `cargo test`, `cargo run`, `cargo build --release`, and `cargo clippy` continue to work normally.
+
 ## Architecture
 
 ```text
@@ -29,18 +46,6 @@ Mouse-wheel notches feed one continuous elapsed-time trajectory that accelerates
 
 ## Build and run
 
-On Windows, install Rust 1.94+ with the MSVC target and a C++20 MSVC toolchain. Then either set `MOONMARK_QT_DIR`/`QTDIR` to a Qt 6 Widgets SDK or bootstrap the tested project-local Qt 6.11.2 SDK:
-
-```powershell
-pwsh -File scripts/bootstrap_qt.ps1
-cargo run
-cargo run -- fixtures\moonmark-visual-test.md
-cargo run -- fixtures\moonmark-visual-test.md fixtures\text\literal.txt
-cargo check
-cargo test
-cargo build --release
-```
-
 Cargo compiles the C++ adapter and stages the required dynamic Qt libraries. It does not invoke CMake, `dotnet`, NuGet, Node.js, or a browser toolchain.
 
 Generate repeatable stress inputs and run the headless Rust benchmark with:
@@ -49,13 +54,6 @@ Generate repeatable stress inputs and run the headless Rust benchmark with:
 cargo run --bin generate_stress_fixture
 cargo run --bin generate_text_fixture
 cargo run --release --bin renderer_benchmark -- fixtures\generated\image-stress.md
-```
-
-Assemble the measured Windows setup executable, portable ZIP, and checksums with:
-
-```powershell
-pwsh -File scripts/bootstrap_inno.ps1
-pwsh -File scripts/package_windows.ps1
 ```
 
 See the [documentation index](docs/README.md), [architecture](docs/architecture/overview.md), [renderer](docs/architecture/renderer.md), [images](docs/architecture/images.md), [window behavior](docs/architecture/windowing.md), [building](docs/development/building.md), [packaging](docs/distribution/packaging.md), [updates](docs/distribution/updates.md), and [Qt licensing](docs/distribution/qt-licensing.md).
