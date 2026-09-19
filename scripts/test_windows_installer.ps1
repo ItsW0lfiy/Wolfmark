@@ -7,10 +7,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/tests/installer'))
+$logRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/logs/installer-lifecycle'))
 $outRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out'))
 $outPrefix = $outRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-if (-not $testRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to use installer test path outside out: $testRoot"
+if (-not $testRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+    -not $logRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to use installer test paths outside out: $testRoot, $logRoot"
 }
 
 function Get-MoonmarkVersion {
@@ -64,9 +66,9 @@ function Wait-Until([scriptblock]$Condition) {
 }
 
 function Get-MoonmarkUninstallEntries {
-    $root = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-    if (-not (Test-Path $root)) { return @() }
-    return @(Get-ChildItem $root | Get-ItemProperty | Where-Object DisplayName -eq 'Moonmark')
+    $path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{42E4C993-27F8-45C4-BF30-7360F9349DCA}_is1'
+    if (-not (Test-Path $path)) { return @() }
+    return @(Get-ItemProperty $path)
 }
 
 function Get-UserChoice([string]$Extension) {
@@ -100,7 +102,11 @@ try {
     if (Test-Path -LiteralPath $testRoot) {
         Remove-Item -Recurse -Force -LiteralPath $testRoot
     }
+    if (Test-Path -LiteralPath $logRoot) {
+        Remove-Item -Recurse -Force -LiteralPath $logRoot
+    }
     New-Item -ItemType Directory -Force -Path $documentsRoot | Out-Null
+    New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
 
     $version = Get-MoonmarkVersion
     if (-not $SetupPath) {
@@ -131,14 +137,15 @@ try {
         $choiceBefore[$extension] = Get-UserChoice $extension
     }
 
-    Invoke-Installer $olderSetup $installRoot (Join-Path $testRoot 'install-older.log')
+    Invoke-Installer $olderSetup $installRoot (Join-Path $logRoot 'install-older.log')
     $entries = Get-MoonmarkUninstallEntries
     if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne '0.1.0-dev.7-preupgrade') {
-        throw 'Older installer did not create exactly one expected Installed Apps entry.'
+        $found = @($entries | ForEach-Object { "$($_.PSChildName):$($_.DisplayVersion)" }) -join ', '
+        throw "Older installer did not create exactly one expected Installed Apps entry. Found $($entries.Count): $found"
     }
 
-    Invoke-Installer $SetupPath $installRoot (Join-Path $testRoot 'upgrade.log')
-    Invoke-Installer $SetupPath $installRoot (Join-Path $testRoot 'reinstall.log')
+    Invoke-Installer $SetupPath $installRoot (Join-Path $logRoot 'upgrade.log')
+    Invoke-Installer $SetupPath $installRoot (Join-Path $logRoot 'reinstall.log')
     $entries = Get-MoonmarkUninstallEntries
     if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne $version) {
         throw 'Upgrade/reinstall did not preserve one current Installed Apps entry.'
@@ -199,7 +206,7 @@ try {
         throw "Installed Moonmark shell-argument smoke failed with exit code $($launch.ExitCode)."
     }
 
-    Invoke-Uninstaller $uninstaller (Join-Path $testRoot 'uninstall.log')
+    Invoke-Uninstaller $uninstaller (Join-Path $logRoot 'uninstall.log')
     $uninstallComplete = Wait-Until {
         -not (Test-Path -LiteralPath $installRoot) -and
         -not (Test-Path -LiteralPath $startMenuShortcut) -and
@@ -235,7 +242,7 @@ try {
     Write-Host 'INSTALLER_TEST clean=ok upgrade=ok reinstall=ok installed_launch=ok shell_registry=ok shortcuts=ok uninstall=ok user_documents=preserved'
 } finally {
     if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
-        try { Invoke-Uninstaller $uninstaller (Join-Path $testRoot 'cleanup-uninstall.log') } catch { Write-Warning $_ }
+        try { Invoke-Uninstaller $uninstaller (Join-Path $logRoot 'cleanup-uninstall.log') } catch { Write-Warning $_ }
     }
     if (Test-Path -LiteralPath $testRoot) {
         Remove-Item -Recurse -Force -LiteralPath $testRoot
