@@ -1,5 +1,6 @@
 #include "moonmark_qt.h"
 #include "moon_style.h"
+#include "moonmark_settings.h"
 #include "moon_title_bar.h"
 #include "document_zoom.h"
 #include "document_sidebar.h"
@@ -2269,7 +2270,9 @@ struct OpenDocumentSession {
 
 class MoonmarkWindow final : public QWidget {
 public:
-    explicit MoonmarkWindow(const MoonmarkApiTable* api) : api_(api) {
+    explicit MoonmarkWindow(const MoonmarkApiTable* api)
+        : api_(api), user_settings_(moonmark::qt::UserSettings::load(
+              QStringLiteral(MOONMARK_PRODUCT_VERSION).contains(QLatin1Char('-')))) {
         window_state_ = api_->window_state_new();
         setObjectName(QStringLiteral("moonmarkWindow"));
         setWindowTitle(QStringLiteral("Moonmark"));
@@ -2343,8 +2346,9 @@ public:
         stack_->addWidget(session->view);
         documents_.push_back(std::move(session));
         activateDocument(static_cast<int>(documents_.size()) - 1);
-        QSettings settings;
-        settings.setValue(QStringLiteral("lastOpenDirectory"), file.absolutePath());
+        user_settings_.setLastOpenDirectory(file.absolutePath());
+        QString settings_error;
+        if (!user_settings_.save(&settings_error)) qWarning("%s", qUtf8Printable(settings_error));
         return root.value("error").toString().isEmpty();
     }
 
@@ -2360,6 +2364,49 @@ public:
                              documents_.size(), joined.constData());
                 std::fflush(stdout);
                 QCoreApplication::exit(0);
+            });
+            return;
+        }
+        if (mode == QStringLiteral("settings")) {
+            QTimer::singleShot(0, this, [this] {
+                const auto root = qEnvironmentVariable("MOONMARK_SETTINGS_ROOT");
+                const auto migrated_directory = QDir(root).filePath(QStringLiteral("legacy-documents"));
+                QSettings legacy;
+                const bool migrated = user_settings_.lastOpenDirectory() == migrated_directory &&
+                    !legacy.contains(QStringLiteral("lastOpenDirectory"));
+
+                user_settings_.setCheckOnStartup(false);
+                user_settings_.setIncludePrereleases(true);
+                user_settings_.setLastOpenDirectory(QDir(root).filePath(QStringLiteral("new-documents")));
+                QString save_error;
+                const bool saved = user_settings_.save(&save_error);
+                const auto reloaded = moonmark::qt::UserSettings::load(false);
+                const bool round_trip = saved && !reloaded.updates().check_on_startup &&
+                    reloaded.updates().include_prereleases &&
+                    reloaded.lastOpenDirectory() == user_settings_.lastOpenDirectory();
+
+                QFile malformed(user_settings_.filePath());
+                const bool malformed_written = malformed.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+                    malformed.write("{not valid json") > 0;
+                malformed.close();
+                const auto recovered = moonmark::qt::UserSettings::load(false);
+                const auto backups = QDir(root).entryList(
+                    {QStringLiteral("settings.invalid-*.json")}, QDir::Files);
+                const bool malformed_safe = malformed_written &&
+                    !recovered.recoveryWarning().isEmpty() && backups.size() == 1;
+
+                const bool path_ok = QFileInfo(user_settings_.filePath()).absolutePath() ==
+                    QFileInfo(root).absoluteFilePath();
+                const bool ok = migrated && round_trip && malformed_safe && path_ok;
+                std::fprintf(stdout,
+                    "SETTINGS migration=%s round_trip=%s malformed=%s atomic=%s path=%s\n",
+                    migrated ? "ok" : "failed", round_trip ? "ok" : "failed",
+                    malformed_safe ? "recovered" : "failed", saved ? "ok" : "failed",
+                    path_ok ? "ok" : "failed");
+                std::fprintf(stdout, "MOONMARK_SMOKE settings=%s\n", ok ? "ok" : "failed");
+                std::fflush(stdout);
+                QDir(root).removeRecursively();
+                QCoreApplication::exit(ok ? 0 : 32);
             });
             return;
         }
@@ -3654,8 +3701,7 @@ private:
 
 
     void chooseDocument() {
-        QSettings settings;
-        auto initial = settings.value(QStringLiteral("lastOpenDirectory")).toString();
+        auto initial = user_settings_.lastOpenDirectory();
         if (initial.isEmpty() || !QFileInfo(initial).isDir()) {
             initial = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
         }
@@ -3820,6 +3866,7 @@ private:
     }
 
     const MoonmarkApiTable* api_ = nullptr;
+    moonmark::qt::UserSettings user_settings_;
     void* backend_ = nullptr;
     void* window_state_ = nullptr;
     moonmark::qt::DocumentSidebar* sidebar_ = nullptr;
@@ -3886,15 +3933,28 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
         std::find(argument_storage.cbegin(), argument_storage.cend(),
                   QByteArray("--smoke-scroll-profile")) != argument_storage.cend();
     if (scroll_profile_smoke) qputenv("MOONMARK_SCROLL_TRACE", "1");
+    bool settings_smoke = false;
     for (const auto& argument : argument_storage) {
         if (argument.startsWith("--smoke-")) {
             if (!motion_smoke && !scroll_profile_smoke)
                 qputenv("MOONMARK_REDUCED_MOTION", "1");
+            qputenv("MOONMARK_SETTINGS_ROOT",
+                    QDir::current().absoluteFilePath("out/tests/native-settings").toUtf8());
             QSettings::setDefaultFormat(QSettings::IniFormat);
             QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                               QDir::current().absoluteFilePath("out/tests/native-settings"));
+            settings_smoke = argument == QByteArray("--smoke-settings");
             break;
         }
+    }
+    if (settings_smoke) {
+        const auto root = qEnvironmentVariable("MOONMARK_SETTINGS_ROOT");
+        QDir(root).removeRecursively();
+        QDir().mkpath(root);
+        QSettings legacy;
+        legacy.setValue(QStringLiteral("lastOpenDirectory"),
+                        QDir(root).filePath(QStringLiteral("legacy-documents")));
+        legacy.sync();
     }
     MoonmarkWindow window(api);
     window.show();
@@ -3947,6 +4007,8 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
             smoke_mode = QStringLiteral("multidoc-watcher");
         } else if (argument == QStringLiteral("--smoke-startup-arguments")) {
             smoke_mode = QStringLiteral("startup-arguments");
+        } else if (argument == QStringLiteral("--smoke-settings")) {
+            smoke_mode = QStringLiteral("settings");
         } else if (!argument.startsWith(QLatin1Char('-'))) {
             const QFileInfo file(QDir::current().absoluteFilePath(argument));
             if (isSupportedDocumentFile(file)) {
@@ -3973,6 +4035,7 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
     if (!smoke_mode.isEmpty()) {
         if (document_paths.isEmpty() && smoke_mode != QStringLiteral("snapshot") &&
             smoke_mode != QStringLiteral("icon") &&
+            smoke_mode != QStringLiteral("settings") &&
             smoke_mode != QStringLiteral("startup-arguments")) {
             return 3;
         }

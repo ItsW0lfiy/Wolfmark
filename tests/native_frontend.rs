@@ -144,6 +144,28 @@ fn shell_startup_arguments_open_supported_documents_once() {
 }
 
 #[test]
+fn native_settings_migrate_and_recover_safely() {
+    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+        .arg("--smoke-settings")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("launch Moonmark settings smoke test");
+    assert!(
+        output.status.success(),
+        "Moonmark settings smoke failed ({:?}): {}{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("settings=ok"), "{stdout}");
+    assert!(stdout.contains("migration=ok"), "{stdout}");
+    assert!(stdout.contains("round_trip=ok"), "{stdout}");
+    assert!(stdout.contains("malformed=recovered"), "{stdout}");
+    assert!(stdout.contains("atomic=ok"), "{stdout}");
+}
+
+#[test]
 fn outline_navigation_survives_image_reflow_with_one_click() {
     for fixture_name in [
         "outline-reflow-single.md",

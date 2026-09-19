@@ -20,6 +20,8 @@ fn main() {
         "native/qt/moonmark_api.h",
         "native/qt/moonmark_qt.h",
         "native/qt/moonmark_qt.cpp",
+        "native/qt/moonmark_settings.h",
+        "native/qt/moonmark_settings.cpp",
         "native/qt/moon_style.h",
         "native/qt/moon_style.cpp",
         "native/qt/document_zoom.h",
@@ -89,6 +91,7 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         .cpp(true)
         .std("c++20")
         .file(manifest.join("native/qt/moonmark_qt.cpp"))
+        .file(manifest.join("native/qt/moonmark_settings.cpp"))
         .file(manifest.join("native/qt/moon_style.cpp"))
         .file(manifest.join("native/qt/document_zoom.cpp"))
         .file(manifest.join("native/qt/document_sidebar.cpp"))
