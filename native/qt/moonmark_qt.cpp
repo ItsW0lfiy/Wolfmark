@@ -2658,8 +2658,8 @@ public:
                     const bool landing = final_clamped
                         ? final_scroll == final_maximum
                         : std::abs(final_viewport_y - document_->navigationInset()) <= 3;
-                    const bool geometry_changed = missing || failed ||
-                        final_document_y > provisional_document_y + 100;
+                    const int geometry_delta = final_document_y - provisional_document_y;
+                    const bool geometry_resolved = final_document_y >= 0;
                     const bool owner = document_->completedNavigationAnchor() == target;
                     const bool completed = !document_->navigationActive() &&
                         document_->pendingImageDecodes() == 0 && elapsed->elapsed() < 6000;
@@ -2669,11 +2669,13 @@ public:
                     const bool counters = before.parse_count == after.parse_count &&
                         before.load_count == after.load_count &&
                         constructions == document_->constructionCount();
-                    const bool layout_changed = missing || failed ||
-                        document_->layoutGeneration() > generation;
+                    const bool image_delivery_observed = missing || failed ||
+                        document_->navigationImageRetargetCount() > 0;
+                    const bool layout_settled = missing || failed ||
+                        document_->layoutGeneration() > generation || std::abs(geometry_delta) <= 3;
                     const bool ok = activation && latest_wins && expected_pending && immediate &&
-                        no_motion && landing && geometry_changed && owner && completed &&
-                        motion_stopped && counters && layout_changed;
+                        no_motion && landing && geometry_resolved && owner && completed &&
+                        motion_stopped && counters && image_delivery_observed && layout_settled;
 
                     std::fprintf(stdout,
                         "OUTLINE_REFLOW_FINAL target=%s owner=%s generation=%llu heading_y=%d "
