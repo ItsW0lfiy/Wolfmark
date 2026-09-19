@@ -2420,6 +2420,27 @@ public:
             });
             return;
         }
+        if (mode == QStringLiteral("portable-settings")) {
+            QTimer::singleShot(0, this, [this] {
+                const auto expected = QDir(QCoreApplication::applicationDirPath())
+                    .filePath(QStringLiteral("data/settings.json"));
+                user_settings_.setCheckOnStartup(false);
+                QString save_error;
+                const bool saved = user_settings_.save(&save_error);
+                const bool ok = user_settings_.portable() &&
+                    QFileInfo(user_settings_.filePath()).absoluteFilePath() ==
+                        QFileInfo(expected).absoluteFilePath() &&
+                    saved && QFileInfo::exists(expected);
+                std::fprintf(stdout, "MOONMARK_SMOKE portable_settings=%s path=%s\n",
+                             ok ? "ok" : "failed",
+                             user_settings_.filePath().toUtf8().constData());
+                std::fflush(stdout);
+                QFile::remove(expected);
+                QDir().rmdir(QFileInfo(expected).absolutePath());
+                QCoreApplication::exit(ok ? 0 : 34);
+            });
+            return;
+        }
         if (mode == QStringLiteral("updates")) {
             update_manager_->check(true, true, [this](moonmark::qt::UpdateCheckResult first) {
                 const bool first_ok = first.status == moonmark::qt::UpdateCheckResult::Status::Available &&
@@ -4152,8 +4173,10 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
         if (argument.startsWith("--smoke-")) {
             if (!motion_smoke && !scroll_profile_smoke)
                 qputenv("MOONMARK_REDUCED_MOTION", "1");
-            qputenv("MOONMARK_SETTINGS_ROOT",
-                    QDir::current().absoluteFilePath("out/tests/native-settings").toUtf8());
+            if (argument != QByteArray("--smoke-portable-settings")) {
+                qputenv("MOONMARK_SETTINGS_ROOT",
+                        QDir::current().absoluteFilePath("out/tests/native-settings").toUtf8());
+            }
             qputenv("MOONMARK_UPDATE_STATE_ROOT",
                     QDir::current().absoluteFilePath("out/tests/native-updates").toUtf8());
             qputenv("MOONMARK_DISABLE_UPDATE_CHECKS", "1");
@@ -4230,6 +4253,8 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
             smoke_mode = QStringLiteral("startup-arguments");
         } else if (argument == QStringLiteral("--smoke-settings")) {
             smoke_mode = QStringLiteral("settings");
+        } else if (argument == QStringLiteral("--smoke-portable-settings")) {
+            smoke_mode = QStringLiteral("portable-settings");
         } else if (argument == QStringLiteral("--smoke-updates")) {
             smoke_mode = QStringLiteral("updates");
         } else if (!argument.startsWith(QLatin1Char('-'))) {
@@ -4259,6 +4284,7 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
         if (document_paths.isEmpty() && smoke_mode != QStringLiteral("snapshot") &&
             smoke_mode != QStringLiteral("icon") &&
             smoke_mode != QStringLiteral("settings") &&
+            smoke_mode != QStringLiteral("portable-settings") &&
             smoke_mode != QStringLiteral("updates") &&
             smoke_mode != QStringLiteral("startup-arguments")) {
             return 3;
