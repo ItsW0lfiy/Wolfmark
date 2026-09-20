@@ -4,6 +4,8 @@ Wolfmark dev.7 has one typed settings owner in the native application shell. Sch
 
 Update checks use the public GitHub Releases API at `https://api.github.com/repos/ItsW0lfiy/Moonmark/releases?per_page=30`. No GitHub account, token, telemetry, local server, updater service, or browser runtime is involved. Startup checks run asynchronously after the window is usable, can be disabled, remain quiet on failure/current status, and are suppressed for six hours after a successful cached check. Manual checks bypass that interval. Wolfmark stores only the release response, ETag, and last-success timestamp in the platform cache location.
 
+The repository currently retains its historical `/Moonmark` GitHub path. That URL is an external repository identifier, not active product branding; the application, setup, artifacts, and release contract use Wolfmark. If the repository itself is renamed later, update the API and metadata URLs as one coordinated remote-contract change.
+
 Rust owns release interpretation and checksum verification. Drafts and malformed versions are ignored; prereleases follow the setting; SemVer decides whether a newer version exists. A usable release must provide the exact platform assets:
 
 - `Wolfmark-Setup-win-x64.exe`

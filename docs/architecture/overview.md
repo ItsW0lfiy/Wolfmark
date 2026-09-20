@@ -49,7 +49,7 @@ The desktop window owns an ordered set of open-document sessions. Each session h
 
 Markdown sessions follow the normal Comrak semantic path. `.txt` sessions are explicitly tagged `plainText` by the Rust presentation contract and carry exact source text; they do not create a Comrak AST, Markdown commands, TOC entries, links, or image requests.
 
-`native/qt/wolf_style.*` owns the New Moon palette, dimensions, and Qt interaction-state styling. `native/qt/wolf_title_bar.*` owns native-painted caption controls plus title-bar move, double-click, and system-menu behavior. Markdown construction remains in the presentation adapter and does not depend on either component.
+`native/qt/wolf_style.*` owns the locked Wolfmark charcoal/graphite, silver, and restrained-crimson palette, dimensions, and Qt interaction-state styling. `native/qt/wolf_title_bar.*` owns native-painted caption controls plus title-bar move, double-click, and system-menu behavior. Markdown construction remains in the presentation adapter and does not depend on either component.
 
 Windows is primary. Shared Rust logic and most Qt Widgets code are portable; Win32 message handling is confined to the Qt adapter's guarded Windows sections. The Linux build path uses `pkg-config` for Qt6Widgets discovery, but compilation and behavior still require physical validation.
 

@@ -39,7 +39,7 @@ The current development baseline includes:
 - file watching and retained per-document state
 - GPL-3.0-only project licensing and release documentation
 - a broad, document-first desktop layout
-- Wolfmark's restrained lunar/graphite visual identity
+- Wolfmark's locked charcoal/graphite, silver, and restrained-crimson visual identity
 
 This milestone is still an early foundation. The long-term roadmap is intentionally much larger than the current implementation.
 

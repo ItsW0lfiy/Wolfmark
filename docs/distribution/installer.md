@@ -2,6 +2,8 @@
 
 Wolfmark dev.7 uses **WiX Toolset 7.0.0** to produce a genuine per-machine x64 MSI and a WiX Burn setup bundle. WiX was explicitly approved for this milestone. The setup user interface is a small native C++20/Qt Widgets bootstrapper application; it contains no C#, CLR, browser engine, or managed client runtime.
 
+The Burn UI follows the locked Wolfmark identity: an approved paw brand rail, charcoal/graphite surfaces, silver typography, restrained crimson primary/focus/progress states, and the same compact one-screen operational flow for install, update, maintenance, repair, uninstall, completion, and failure. The reference mockup informs the visual language, not a fictional wizard or feature set.
+
 The generated artifacts are:
 
 - `Wolfmark-Setup-win-x64.exe` — the normal user-facing Burn bundle;
