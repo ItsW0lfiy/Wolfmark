@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <BaseIntermediateOutputPath>../../../out/cache/wix/bootstrapper-dependencies/obj/</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.BootstrapperApplicationApi" Version="7.0.0" PrivateAssets="all" />
+    <PackageReference Include="WixToolset.DUtil" Version="7.0.0" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

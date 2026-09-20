@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net8.0": {
+      "WixToolset.BootstrapperApplicationApi": {
+        "type": "Direct",
+        "requested": "[7.0.0, )",
+        "resolved": "7.0.0",
+        "contentHash": "bePzBR5G3NkDgeh2KZU9rSUpg7swN5FNZrSB1FgXNPCNmQ6w9yNVqwYC/V3OpMXDqyL7X45glelMH/jIKQqtvQ=="
+      },
+      "WixToolset.DUtil": {
+        "type": "Direct",
+        "requested": "[7.0.0, )",
+        "resolved": "7.0.0",
+        "contentHash": "BnGK4zfch4hdWzXLW1NCi0E9lsP0e5pIMFvsvqeoh8evRE03O15GuAk1vXV9ET2l7LZ6pohgkzxo4q3XagQMAw=="
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{94F3571E-AA25-45B2-8D75-147826422679}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>MoonmarkSetup</RootNamespace>
+    <ProjectName>MoonmarkSetup</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <UseOfMfc>false</UseOfMfc>
+    <UseOfAtl>false</UseOfAtl>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(MoonmarkOutputDir)\</OutDir>
+    <IntDir>$(MoonmarkIntermediateDir)\</IntDir>
+    <TargetName>MoonmarkSetup</TargetName>
+    <RestoreProjectStyle>None</RestoreProjectStyle>
+    <WixBaApiRoot Condition="'$(WixBaApiRoot)'==''">$(RestorePackagesPath)\wixtoolset.bootstrapperapplicationapi\7.0.0</WixBaApiRoot>
+    <WixDUtilRoot Condition="'$(WixDUtilRoot)'==''">$(RestorePackagesPath)\wixtoolset.dutil\7.0.0</WixDUtilRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClCompile Include="src\burn_controller.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\setup_window.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\burn_controller.h" />
+    <ClInclude Include="src\installer_model.h" />
+    <ClInclude Include="src\setup_window.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="moonmark_setup.rc" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(QtRoot)\include;$(QtRoot)\include\QtCore;$(QtRoot)\include\QtGui;$(QtRoot)\include\QtWidgets;$(WixBaApiRoot)\build\native\include;$(WixDUtilRoot)\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;QT_NO_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(QtRoot)\lib;$(WixBaApiRoot)\build\native\v14\x64;$(WixDUtilRoot)\build\native\v14\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balutil.lib;dutil.lib;Qt6Widgets.lib;Qt6Gui.lib;Qt6Core.lib;msi.lib;version.lib;user32.lib;advapi32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+    </Link>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(MoonmarkGeneratedDir);$(ProjectRoot)\assets\icons;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <Target Name="CheckWixLicenseAcceptance" BeforeTargets="ClCompile">
+    <Error Text="WiX 7 use requires explicit OSMF EULA acceptance. Pass /p:AcceptEula=wix7." Condition="$([System.String]::Copy('$(AcceptEula)').Contains('wix7')) != 'True'" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
