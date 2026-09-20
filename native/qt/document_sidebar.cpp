@@ -4,12 +4,15 @@
 
 #include <QApplication>
 #include <QBoxLayout>
+#include <QColor>
 #include <QHeaderView>
+#include <QIcon>
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QPixmap>
 #include <QScrollBar>
 #include <QTreeWidget>
 #include <QWheelEvent>
@@ -105,7 +108,10 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     layout->setSpacing(8);
     auto* identity = new QHBoxLayout;
     auto* symbol = new QLabel;
-    symbol->setPixmap(QApplication::windowIcon().pixmap(24, 24));
+    symbol->setObjectName(QStringLiteral("brandSymbol"));
+    symbol->setFixedSize(34, 34);
+    symbol->setAlignment(Qt::AlignCenter);
+    symbol->setPixmap(QApplication::windowIcon().pixmap(28, 28));
     auto* name = new QLabel(QStringLiteral("Wolfmark"));
     name->setObjectName(QStringLiteral("sidebarIdentity"));
     identity->addWidget(symbol);
@@ -193,7 +199,12 @@ void DocumentSidebar::setDocuments(const QStringList& filenames, int active_inde
         item->setToolTip(0, filenames.at(index));
         item->setToolTip(1, QStringLiteral("Close document"));
         item->setData(0, Qt::UserRole, index);
-        if (index == active_index) documents_->setCurrentItem(item);
+        if (index == active_index) {
+            QPixmap marker(3, 20);
+            marker.fill(QColor(style::colour::crimson));
+            item->setIcon(0, QIcon(marker));
+            documents_->setCurrentItem(item);
+        }
     }
     const int rows = std::clamp(static_cast<int>(filenames.size()), 1, 4);
     documents_->setFixedHeight(rows * 34 + 4);

@@ -65,11 +65,11 @@ fn maximize_and_fullscreen_are_independent_states() {
 }
 
 #[test]
-fn default_palette_is_entirely_achromatic() {
+fn default_palette_has_no_blue_bias() {
     assert!(
         ALL_DEFAULT_COLOURS
             .iter()
-            .all(|colour| colour.is_achromatic())
+            .all(|colour| !colour.has_blue_bias())
     );
 }
 

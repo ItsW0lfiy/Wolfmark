@@ -94,6 +94,16 @@ void constrainMaximizedBounds(HWND handle, LPARAM parameter) {
     bounds->ptMaxSize.x = monitor_info.rcWork.right - monitor_info.rcWork.left;
     bounds->ptMaxSize.y = monitor_info.rcWork.bottom - monitor_info.rcWork.top;
 }
+
+void updateCornerPreference(HWND handle, bool fullscreen) {
+    // DWMWA_WINDOW_CORNER_PREFERENCE is available on Windows 11. Older Windows
+    // versions safely ignore this attribute and keep their native frame behavior.
+    constexpr auto corner_attribute = static_cast<DWMWINDOWATTRIBUTE>(33);
+    constexpr DWORD do_not_round = 1;
+    constexpr DWORD round = 2;
+    const DWORD preference = fullscreen || IsZoomed(handle) ? do_not_round : round;
+    DwmSetWindowAttribute(handle, corner_attribute, &preference, sizeof(preference));
+}
 #endif
 
 } // namespace
@@ -105,6 +115,7 @@ void installNativeFrame(QWidget* window) {
     auto style = GetWindowLongPtrW(handle, GWL_STYLE);
     style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
     SetWindowLongPtrW(handle, GWL_STYLE, style);
+    updateCornerPreference(handle, false);
     SetWindowPos(handle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE |
                      SWP_NOOWNERZORDER | SWP_NOZORDER);
@@ -124,6 +135,13 @@ NativeFrameStatus nativeFrameStatus(QWidget* window) {
     status.minimize_box = (style & WS_MINIMIZEBOX) != 0;
     status.maximize_box = (style & WS_MAXIMIZEBOX) != 0;
     status.popup = (style & WS_POPUP) != 0;
+    constexpr auto corner_attribute = static_cast<DWMWINDOWATTRIBUTE>(33);
+    DWORD corner_preference = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(reinterpret_cast<HWND>(window->winId()),
+                                         corner_attribute, &corner_preference,
+                                         sizeof(corner_preference)))) {
+        status.corner_preference = static_cast<int>(corner_preference);
+    }
 #else
     Q_UNUSED(window);
 #endif
@@ -183,6 +201,9 @@ bool handleNativeFrameEvent(QWidget* window, QWidget* title_bar,
             *result = 0;
             return true;
         }
+        return false;
+    case WM_SIZE:
+        updateCornerPreference(handle, fullscreen);
         return false;
     case WM_NCHITTEST: {
         POINT point{GET_X_LPARAM(native->lParam), GET_Y_LPARAM(native->lParam)};
