@@ -1,15 +1,15 @@
-Moonmark uses Qt 6.11.2 Core, Gui, Widgets, and Network dynamically.
+Wolfmark uses Qt 6.11.2 Core, Gui, Widgets, and Network dynamically.
 
 Qt is Copyright (C) The Qt Company Ltd. and other contributors. These Qt components are available under commercial terms or the GNU Lesser General Public License version 3 / GNU General Public License version 3. Copies of those license texts are included in this package.
 
-Moonmark is Copyright (C) 2026 ItsW0lfiy and is distributed under the GNU General Public License version 3 only. See LICENSE.
+Wolfmark is Copyright (C) 2026 ItsW0lfiy and is distributed under the GNU General Public License version 3 only. See LICENSE.
 
 This development package is not approved for public distribution. Before release, the distributor must complete a release-specific Qt/third-party license audit and provide the complete corresponding Qt source (including any modifications) or a compliant written offer controlled by the distributor, along with all other required notices and installation information.
 
 Qt licensing information: https://www.qt.io/licensing/
 Qt 6.11.2 source: https://download.qt.io/official_releases/qt/6.11/6.11.2/single/
 
-Moonmark's Windows installer is produced with WiX Toolset 7.0.0 and includes WiX Burn/bootstrapper support code. WiX Toolset source is Copyright (c) .NET Foundation and contributors and is available under the Microsoft Reciprocal License. WiX 7 use is additionally governed by the Open Source Maintenance Fee EULA; see the current terms before redistribution.
+Wolfmark's Windows installer is produced with WiX Toolset 7.0.0 and includes WiX Burn/bootstrapper support code. WiX Toolset source is Copyright (c) .NET Foundation and contributors and is available under the Microsoft Reciprocal License. WiX 7 use is additionally governed by the Open Source Maintenance Fee EULA; see the current terms before redistribution.
 
 WiX source and license: https://github.com/wixtoolset/wix
 WiX 7 OSMF terms: https://docs.firegiant.com/wix/osmf/

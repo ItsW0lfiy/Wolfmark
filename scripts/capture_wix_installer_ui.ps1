@@ -10,12 +10,12 @@ $runtime = Join-Path $outRoot 'package/wix/bootstrapper-smoke'
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $outRoot 'visual/wix-setup' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not $OutputDirectory.StartsWith($outRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Screenshot output must stay under Moonmark's out directory: $OutputDirectory"
+    throw "Screenshot output must stay under Wolfmark's out directory: $OutputDirectory"
 }
 
 Push-Location $projectRoot
 try {
-    $bootstrapper = Join-Path $outRoot 'package/wix/bootstrapper-build/bin/MoonmarkSetup.exe'
+    $bootstrapper = Join-Path $outRoot 'package/wix/bootstrapper-build/bin/WolfmarkSetup.exe'
     $payload = Join-Path $outRoot 'package/wix/bootstrapper-payload'
     if (-not (Test-Path -LiteralPath $bootstrapper -PathType Leaf) -or -not (Test-Path -LiteralPath $payload -PathType Container)) {
         throw 'The native bootstrapper has not been built. Run cargo package-app first.'
@@ -26,13 +26,13 @@ try {
     New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
 
     foreach ($state in 'install', 'upgrade', 'maintenance', 'repair', 'uninstall', 'progress', 'complete', 'error') {
-        $env:MOONMARK_SETUP_SMOKE_STATE = $state
-        $env:MOONMARK_SETUP_SCREENSHOT = Join-Path $OutputDirectory "$state.png"
-        $process = Start-Process -FilePath (Join-Path $runtime 'MoonmarkSetup.exe') -Wait -PassThru
+        $env:WOLFMARK_SETUP_SMOKE_STATE = $state
+        $env:WOLFMARK_SETUP_SCREENSHOT = Join-Path $OutputDirectory "$state.png"
+        $process = Start-Process -FilePath (Join-Path $runtime 'WolfmarkSetup.exe') -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw "Installer UI smoke '$state' failed with exit code $($process.ExitCode)." }
     }
-    Write-Host "Moonmark installer UI screenshots: $OutputDirectory"
+    Write-Host "Wolfmark installer UI screenshots: $OutputDirectory"
 } finally {
-    Remove-Item Env:MOONMARK_SETUP_SMOKE_STATE, Env:MOONMARK_SETUP_SCREENSHOT -ErrorAction SilentlyContinue
+    Remove-Item Env:WOLFMARK_SETUP_SMOKE_STATE, Env:WOLFMARK_SETUP_SCREENSHOT -ErrorAction SilentlyContinue
     Pop-Location
 }

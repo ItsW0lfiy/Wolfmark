@@ -90,9 +90,9 @@ try {
         throw "WiX bootstrap completed, but wix.exe is missing at $wix."
     }
 
-    Write-Host 'Moonmark development tooling is ready.'
+    Write-Host 'Wolfmark development tooling is ready.'
 } catch {
-    Write-Error "Moonmark setup failed: $($_.Exception.Message)"
+    Write-Error "Wolfmark setup failed: $($_.Exception.Message)"
     exit 1
 } finally {
     Pop-Location

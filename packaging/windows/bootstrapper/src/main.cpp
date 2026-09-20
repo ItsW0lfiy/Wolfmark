@@ -49,13 +49,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         argumentPointers.push_back(argument.data());
     }
     QApplication application(wideArgumentCount, argumentPointers.data());
-    QApplication::setApplicationName(QStringLiteral("Moonmark Setup"));
-    QApplication::setOrganizationName(QStringLiteral("Moonmark"));
+    QApplication::setApplicationName(QStringLiteral("Wolfmark Setup"));
+    QApplication::setOrganizationName(QStringLiteral("Wolfmark"));
 
     const QStringList arguments = application.arguments();
     QString smokeState = argumentValue(arguments, QStringLiteral("--ui-smoke="));
     if (smokeState.isEmpty()) {
-        smokeState = qEnvironmentVariable("MOONMARK_SETUP_SMOKE_STATE");
+        smokeState = qEnvironmentVariable("WOLFMARK_SETUP_SMOKE_STATE");
     }
     if (!smokeState.isEmpty()) {
         SetupWindow window(nullptr);
@@ -63,7 +63,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         window.show();
         QString screenshot = argumentValue(arguments, QStringLiteral("--ui-screenshot="));
         if (screenshot.isEmpty()) {
-            screenshot = qEnvironmentVariable("MOONMARK_SETUP_SCREENSHOT");
+            screenshot = qEnvironmentVariable("WOLFMARK_SETUP_SCREENSHOT");
         }
         QTimer::singleShot(300, &window, [&application, &window, screenshot] {
             if (!screenshot.isEmpty()) {

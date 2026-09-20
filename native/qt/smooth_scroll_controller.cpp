@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 namespace {
 constexpr double response_rate = 17.0;
 // End before integer scrollbar quantization turns the final sub-pixel tail into
@@ -179,4 +179,4 @@ void SmoothScrollController::finish() {
     if (finished) finished();
 }
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

@@ -64,7 +64,7 @@ impl Backend {
                 canonical
                     .file_name()
                     .and_then(|name| name.to_str())
-                    .unwrap_or("Moonmark")
+                    .unwrap_or("Wolfmark")
                     .to_owned(),
                 source,
                 PresentationMetrics {
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn text_documents_bypass_markdown_and_preserve_source() {
         let directory =
-            std::env::temp_dir().join(format!("moonmark-plain-text-{}", std::process::id()));
+            std::env::temp_dir().join(format!("wolfmark-plain-text-{}", std::process::id()));
         std::fs::create_dir_all(&directory).expect("create fixture directory");
         let path = directory.join("literal.txt");
         let source = "# Not a heading\n\t* not a list *\nUnicode: 月\ntrailing  \n";

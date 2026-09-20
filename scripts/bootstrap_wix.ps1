@@ -13,7 +13,7 @@ $dotnetHome = Join-Path $outRoot 'cache/dotnet-home'
 $appData = Join-Path $dotnetHome 'AppData/Roaming'
 $localAppData = Join-Path $dotnetHome 'AppData/Local'
 $nugetConfig = Join-Path $cacheRoot 'NuGet.Config'
-$dependencyProject = Join-Path $projectRoot 'packaging/windows/bootstrapper/MoonmarkBootstrapperDependencies.csproj'
+$dependencyProject = Join-Path $projectRoot 'packaging/windows/bootstrapper/WolfmarkBootstrapperDependencies.csproj'
 
 function Assert-WixVersion {
     if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) { return $false }

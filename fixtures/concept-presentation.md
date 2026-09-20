@@ -14,7 +14,7 @@ A visual breakdown of the early chapters and their associated assets.
 
 *Small steps. A longer view.*
 
-— Moonmark
+— Wolfmark
 
 ## Reading notes
 
@@ -36,7 +36,7 @@ Ordinary Markdown remains an ordinary file. **Clear structure**, *quiet emphasis
 
 ```rust
 fn main() {
-    let message = "Moonmark";
+    let message = "Wolfmark";
 
     if !message.is_empty() {
         println!("{message}");

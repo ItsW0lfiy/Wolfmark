@@ -61,9 +61,9 @@ impl ImagePipeline {
         Self {
             pool: rayon::ThreadPoolBuilder::new()
                 .num_threads(workers.clamp(1, 8))
-                .thread_name(|index| format!("moonmark-image-{index}"))
+                .thread_name(|index| format!("wolfmark-image-{index}"))
                 .build()
-                .expect("bounded Moonmark image pool"),
+                .expect("bounded Wolfmark image pool"),
             sender,
             receiver,
             cache: Arc::new(Mutex::new(ImageCache::new(budget))),
@@ -85,7 +85,7 @@ impl ImagePipeline {
         let cache = Arc::clone(&self.cache);
         let generation = Arc::clone(&self.generation);
         let request_generation = generation.load(Ordering::Acquire);
-        let profile = std::env::var_os("MOONMARK_PROFILE").is_some();
+        let profile = std::env::var_os("WOLFMARK_PROFILE").is_some();
         let queued_at = std::time::Instant::now();
         self.pool.spawn(move || {
             if generation.load(Ordering::Acquire) != request_generation {
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn probes_raster_dimensions_without_decoding_pixels() {
         let directory =
-            std::env::temp_dir().join(format!("moonmark-image-dimensions-{}", std::process::id()));
+            std::env::temp_dir().join(format!("wolfmark-image-dimensions-{}", std::process::id()));
         std::fs::create_dir_all(&directory).expect("create dimensions test directory");
         let path = directory.join("image with spaces.png");
         image::RgbaImage::new(640, 360)
@@ -312,7 +312,7 @@ mod tests {
 
     fn temporary_svg(name: &str, source: &str) -> std::path::PathBuf {
         let directory =
-            std::env::temp_dir().join(format!("moonmark-svg-test-{}-{}", std::process::id(), name));
+            std::env::temp_dir().join(format!("wolfmark-svg-test-{}-{}", std::process::id(), name));
         std::fs::create_dir_all(&directory).expect("create SVG test directory");
         let path = directory.join("fixture.svg");
         std::fs::write(&path, source).expect("write SVG fixture");

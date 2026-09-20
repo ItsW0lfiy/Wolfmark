@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn resolves_spaces_unicode_encoding_and_windows_separators() {
-        let root = std::env::temp_dir().join(format!("moonmark-paths-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wolfmark-paths-{}", std::process::id()));
         let images = root.join("images");
         fs::create_dir_all(&images).unwrap();
         fs::write(images.join("moon ü.png"), b"x").unwrap();
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn allows_explicit_parent_absolute_and_file_uri_paths() {
-        let base = std::env::temp_dir().join(format!("moonmark-policy-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("wolfmark-policy-{}", std::process::id()));
         let root = base.join("document");
         let shared = base.join("shared");
         fs::create_dir_all(&root).unwrap();

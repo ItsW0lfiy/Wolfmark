@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 struct UpdatePreferences {
     bool check_on_startup = true;
@@ -38,4 +38,4 @@ private:
     QString recovery_warning_;
 };
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

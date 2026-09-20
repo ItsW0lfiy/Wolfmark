@@ -1,8 +1,8 @@
-#include "moonmark_qt.h"
-#include "moon_style.h"
-#include "moonmark_settings.h"
-#include "moonmark_updates.h"
-#include "moon_title_bar.h"
+#include "wolfmark_qt.h"
+#include "wolf_style.h"
+#include "wolfmark_settings.h"
+#include "wolfmark_updates.h"
+#include "wolf_title_bar.h"
 #include "document_zoom.h"
 #include "document_sidebar.h"
 #include "smooth_scroll_controller.h"
@@ -98,7 +98,7 @@
 
 namespace {
 
-namespace colour = moonmark::style::colour;
+namespace colour = wolfmark::style::colour;
 constexpr int quote_depth_property = QTextFormat::UserProperty + 1;
 constexpr int inline_code_property = QTextFormat::UserProperty + 2;
 constexpr int code_frame_property = QTextFormat::UserProperty + 3;
@@ -170,7 +170,7 @@ struct ImageOccurrence {
     int natural_height = 0;
 };
 
-QString fromBuffer(const MoonmarkBuffer& buffer) {
+QString fromBuffer(const WolfmarkBuffer& buffer) {
     if (buffer.data == nullptr || buffer.len == 0) {
         return {};
     }
@@ -178,7 +178,7 @@ QString fromBuffer(const MoonmarkBuffer& buffer) {
                              static_cast<qsizetype>(buffer.len));
 }
 
-QJsonObject jsonFromBuffer(const MoonmarkBuffer& buffer) {
+QJsonObject jsonFromBuffer(const WolfmarkBuffer& buffer) {
     if (buffer.data == nullptr || buffer.len == 0) {
         return {};
     }
@@ -212,7 +212,7 @@ QIcon applicationIcon() {
         return icon;
     }
 #endif
-    return QIcon(applicationAssetPath(QStringLiteral("assets/icons/moonmark.ico")));
+    return QIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark.ico")));
 }
 
 Command parseCommand(const QJsonValue& value) {
@@ -278,7 +278,7 @@ class MoonButton final : public QPushButton {
 public:
     explicit MoonButton(const QString& text, QWidget* parent = nullptr) : QPushButton(text, parent) {
         setCursor(Qt::PointingHandCursor);
-        setMinimumHeight(moonmark::style::metric::control_height);
+        setMinimumHeight(wolfmark::style::metric::control_height);
         setFocusPolicy(Qt::StrongFocus);
     }
 };
@@ -311,7 +311,7 @@ private:
 
 class ScrollFrameTrace final {
 public:
-    ScrollFrameTrace() : enabled_(qEnvironmentVariableIsSet("MOONMARK_SCROLL_TRACE")) {
+    ScrollFrameTrace() : enabled_(qEnvironmentVariableIsSet("WOLFMARK_SCROLL_TRACE")) {
         clock_.start();
     }
 
@@ -453,7 +453,7 @@ public:
         int viewport_offset = 0;
     };
 
-    explicit DocumentView(const MoonmarkApiTable* api, void* backend, QWidget* parent = nullptr)
+    explicit DocumentView(const WolfmarkApiTable* api, void* backend, QWidget* parent = nullptr)
         : QTextEdit(parent), api_(api), backend_(backend), scroll_controller_(verticalScrollBar()) {
         setReadOnly(true);
         setAcceptRichText(false);
@@ -464,7 +464,7 @@ public:
         setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         setFocusPolicy(Qt::StrongFocus);
-        setAccessibleName(QStringLiteral("Moonmark Markdown document"));
+        setAccessibleName(QStringLiteral("Wolfmark Markdown document"));
         viewport()->setMouseTracking(true);
         document()->setDefaultStyleSheet({});
         document()->setDocumentMargin(0.0);
@@ -532,13 +532,13 @@ public:
         completed_navigation_clamped_ = false;
         navigation_settle_.stop();
         ++navigation_epoch_;
-        title_ = root.value("title").toString(QStringLiteral("Moonmark"));
+        title_ = root.value("title").toString(QStringLiteral("Wolfmark"));
         settings_ = root.value("settings").toObject();
         metrics_ = root.value("metrics").toObject();
         plain_text_ = root.value("sourceType").toString() == QStringLiteral("plainText");
         setLineWrapMode(plain_text_ ? QTextEdit::NoWrap : QTextEdit::WidgetWidth);
-        setAccessibleName(plain_text_ ? QStringLiteral("Moonmark plain text document")
-                                      : QStringLiteral("Moonmark Markdown document"));
+        setAccessibleName(plain_text_ ? QStringLiteral("Wolfmark plain text document")
+                                      : QStringLiteral("Wolfmark Markdown document"));
 
         auto* next = new QTextDocument(this);
         next->setDocumentMargin(0.0);
@@ -692,7 +692,7 @@ public:
         for (auto block = document()->begin(); block.isValid(); block = block.next()) {
             for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
                 const auto part = fragment.fragment();
-                if (part.charFormat().anchorHref() != QStringLiteral("moonmark-copy:0")) continue;
+                if (part.charFormat().anchorHref() != QStringLiteral("wolfmark-copy:0")) continue;
                 QTextCursor cursor(document());
                 cursor.setPosition(part.position() + 1);
                 setTextCursor(cursor);
@@ -742,7 +742,7 @@ public:
         const bool document_scrolled = verticalScrollBar()->maximum() == 0 ||
             verticalScrollBar()->value() != previous_scroll;
         const bool pinned_during_scroll = autoscrollIndicatorRect() == anchored_geometry;
-        const auto snapshot_path = qEnvironmentVariable("MOONMARK_AUTOSCROLL_SNAPSHOT");
+        const auto snapshot_path = qEnvironmentVariable("WOLFMARK_AUTOSCROLL_SNAPSHOT");
         if (!snapshot_path.isEmpty()) viewport()->grab().save(snapshot_path);
 
         QMouseEvent movement(QEvent::MouseMove, anchor + QPoint(0, 80),
@@ -867,7 +867,7 @@ public:
         setUpdatesEnabled(true);
         scheduleNavigationRetarget();
         if (zoomChanged) zoomChanged(zoom_percent_);
-        if (qEnvironmentVariableIsSet("MOONMARK_PROFILE"))
+        if (qEnvironmentVariableIsSet("WOLFMARK_PROFILE"))
             std::fprintf(stdout, "ZOOM_PHASE formats_us=%lld image_geometry_us=%lld anchor_layout_us=%lld\n",
                          static_cast<long long>(formats_us), static_cast<long long>(images_us - formats_us),
                          static_cast<long long>(profile.nsecsElapsed() / 1000 - images_us));
@@ -1013,7 +1013,7 @@ public:
         const auto after = api_->backend_counters(backend_);
         ok &= before.parse_count == after.parse_count && before.load_count == after.load_count &&
               before.image_request_count == after.image_request_count && constructions == constructionCount();
-        std::fprintf(stdout, "MOONMARK_SMOKE zoom=%s parse_delta=%llu load_delta=%llu construction_delta=%llu image_request_delta=%llu\n",
+        std::fprintf(stdout, "WOLFMARK_SMOKE zoom=%s parse_delta=%llu load_delta=%llu construction_delta=%llu image_request_delta=%llu\n",
                      ok ? "ok" : "failed", after.parse_count - before.parse_count,
                      after.load_count - before.load_count, constructionCount() - constructions,
                      after.image_request_count - before.image_request_count);
@@ -1234,8 +1234,8 @@ protected:
         // gesture/anchor, not by the resulting native selection.
         const auto anchor = anchorAt(event->position().toPoint());
         if (anchor.isEmpty() || anchor != anchorAt(press_point_)) return;
-        if (anchor.startsWith(QStringLiteral("moonmark-copy:"))) {
-            const auto index = anchor.sliced(QStringLiteral("moonmark-copy:").size()).toInt();
+        if (anchor.startsWith(QStringLiteral("wolfmark-copy:"))) {
+            const auto index = anchor.sliced(QStringLiteral("wolfmark-copy:").size()).toInt();
             if (index >= 0 && index < static_cast<int>(code_sources_.size())) {
                 last_copy_text_ = code_sources_[static_cast<std::size_t>(index)];
                 QGuiApplication::clipboard()->setText(last_copy_text_);
@@ -1327,7 +1327,7 @@ private:
     }
 
     [[nodiscard]] bool reducedMotion() const {
-        return qEnvironmentVariable("MOONMARK_REDUCED_MOTION") == QStringLiteral("1");
+        return qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1");
     }
 
     [[nodiscard]] std::optional<int> anchorDestination(const QString& anchor) {
@@ -1663,7 +1663,7 @@ private:
         inside.insertText(QStringLiteral("   ·   "), language);
         auto copy = language;
         copy.setAnchor(true);
-        copy.setAnchorHref(QStringLiteral("moonmark-copy:%1").arg(code_index));
+        copy.setAnchorHref(QStringLiteral("wolfmark-copy:%1").arg(code_index));
         copy.setForeground(QColor(colour::silver));
         copy.setFontUnderline(false);
         inside.insertText(QStringLiteral("Copy"), copy);
@@ -1865,14 +1865,14 @@ private:
         } else if (command.flags == 2) {
             message = QStringLiteral("Image reference blocked · %1").arg(command.target);
         } else if (command.flags == 3) {
-            message = QStringLiteral("Remote image blocked by Moonmark's privacy policy");
+            message = QStringLiteral("Remote image blocked by Wolfmark's privacy policy");
         } else if (command.flags == 4) {
             message = QStringLiteral("Unsupported image format · %1").arg(command.target);
         } else {
             message = QStringLiteral("Image could not be displayed");
         }
 
-        const auto resource = QUrl(QStringLiteral("moonmark-image://%1").arg(id));
+        const auto resource = QUrl(QStringLiteral("wolfmark-image://%1").arg(id));
         const bool geometry_known = allowed && command.image_width > 0 && command.image_height > 0;
         document()->addResource(
             QTextDocument::ImageResource, resource,
@@ -2013,7 +2013,7 @@ private:
             if (result.error.data != nullptr) {
                 api_->buffer_free(result.error);
             }
-            const auto resource = QUrl(QStringLiteral("moonmark-image://%1").arg(result.id));
+            const auto resource = QUrl(QStringLiteral("wolfmark-image://%1").arg(result.id));
             if (!error.isEmpty() || result.pixels.data == nullptr || result.width == 0 ||
                 result.height == 0) {
                 document()->addResource(QTextDocument::ImageResource, resource,
@@ -2057,7 +2057,7 @@ private:
             scheduleNavigationRetarget();
             viewport()->update();
             scroll_trace_.recordImageDelivery(profile.nsecsElapsed() / 1000);
-            if (qEnvironmentVariableIsSet("MOONMARK_PROFILE"))
+            if (qEnvironmentVariableIsSet("WOLFMARK_PROFILE"))
                 std::fprintf(stdout, "IMAGE_DELIVERY results=%d copy_us=%lld geometry_us=%lld total_us=%lld\n",
                              count, static_cast<long long>(copy_us), static_cast<long long>(geometry_us),
                              static_cast<long long>(profile.nsecsElapsed() / 1000));
@@ -2210,9 +2210,9 @@ private:
                                  bar->minimum(), bar->maximum()));
     }
 
-    const MoonmarkApiTable* api_ = nullptr;
+    const WolfmarkApiTable* api_ = nullptr;
     void* backend_ = nullptr;
-    moonmark::qt::SmoothScrollController scroll_controller_;
+    wolfmark::qt::SmoothScrollController scroll_controller_;
     ScrollFrameTrace scroll_trace_;
     std::vector<Command> commands_;
     std::vector<ImageOccurrence> image_occurrences_;
@@ -2225,7 +2225,7 @@ private:
     bool code_frame_bounds_rebuild_pending_ = false;
     QJsonObject settings_;
     QJsonObject metrics_;
-    QString title_ = QStringLiteral("Moonmark");
+    QString title_ = QStringLiteral("Wolfmark");
     QHash<QString, int> anchor_positions_;
     QString navigation_anchor_;
     QString completed_navigation_anchor_;
@@ -2259,7 +2259,7 @@ private:
     bool selection_drag_ = false;
     int zoom_percent_ = 100;
     bool plain_text_ = false;
-    moonmark::qt::DocumentZoom zoom_layout_;
+    wolfmark::qt::DocumentZoom zoom_layout_;
     quint64 construction_us_ = 0;
     quint64 document_construction_count_ = 0;
 };
@@ -2273,14 +2273,14 @@ struct OpenDocumentSession {
     QTimer* reload_delay = nullptr;
 };
 
-class MoonmarkWindow final : public QWidget {
+class WolfmarkWindow final : public QWidget {
 public:
-    explicit MoonmarkWindow(const MoonmarkApiTable* api)
-        : api_(api), user_settings_(moonmark::qt::UserSettings::load(
-              QStringLiteral(MOONMARK_PRODUCT_VERSION).contains(QLatin1Char('-')))) {
+    explicit WolfmarkWindow(const WolfmarkApiTable* api)
+        : api_(api), user_settings_(wolfmark::qt::UserSettings::load(
+              QStringLiteral(WOLFMARK_PRODUCT_VERSION).contains(QLatin1Char('-')))) {
         window_state_ = api_->window_state_new();
-        setObjectName(QStringLiteral("moonmarkWindow"));
-        setWindowTitle(QStringLiteral("Moonmark"));
+        setObjectName(QStringLiteral("wolfmarkWindow"));
+        setWindowTitle(QStringLiteral("Wolfmark"));
         setWindowIcon(applicationIcon());
         setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowSystemMenuHint |
                        Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -2288,16 +2288,16 @@ public:
         setMinimumSize(720, 480);
         resize(1280, 820);
         setAcceptDrops(true);
-        update_manager_ = new moonmark::qt::UpdateManager(api_, this);
+        update_manager_ = new wolfmark::qt::UpdateManager(api_, this);
         buildUi();
         updateStatus();
         if (user_settings_.updates().check_on_startup &&
-            !qEnvironmentVariableIsSet("MOONMARK_DISABLE_UPDATE_CHECKS")) {
+            !qEnvironmentVariableIsSet("WOLFMARK_DISABLE_UPDATE_CHECKS")) {
             QTimer::singleShot(1200, this, [this] { checkForUpdates(false); });
         }
     }
 
-    ~MoonmarkWindow() override {
+    ~WolfmarkWindow() override {
         for (auto& session : documents_) {
             delete session->view;
             delete session->watcher;
@@ -2370,7 +2370,7 @@ public:
                 for (const auto& session : documents_)
                     names.push_back(QFileInfo(session->canonical_path).fileName());
                 const auto joined = names.join(QLatin1Char('|')).toUtf8();
-                std::fprintf(stdout, "MOONMARK_SMOKE startup_arguments=ok documents=%zu names=%s\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE startup_arguments=ok documents=%zu names=%s\n",
                              documents_.size(), joined.constData());
                 std::fflush(stdout);
                 QCoreApplication::exit(0);
@@ -2379,7 +2379,7 @@ public:
         }
         if (mode == QStringLiteral("settings")) {
             QTimer::singleShot(0, this, [this] {
-                const auto root = qEnvironmentVariable("MOONMARK_SETTINGS_ROOT");
+                const auto root = qEnvironmentVariable("WOLFMARK_SETTINGS_ROOT");
                 const auto migrated_directory = QDir(root).filePath(QStringLiteral("legacy-documents"));
                 QSettings legacy;
                 const bool migrated = user_settings_.lastOpenDirectory() == migrated_directory &&
@@ -2390,7 +2390,7 @@ public:
                 user_settings_.setLastOpenDirectory(QDir(root).filePath(QStringLiteral("new-documents")));
                 QString save_error;
                 const bool saved = user_settings_.save(&save_error);
-                const auto reloaded = moonmark::qt::UserSettings::load(false);
+                const auto reloaded = wolfmark::qt::UserSettings::load(false);
                 const bool round_trip = saved && !reloaded.updates().check_on_startup &&
                     reloaded.updates().include_prereleases &&
                     reloaded.lastOpenDirectory() == user_settings_.lastOpenDirectory();
@@ -2399,7 +2399,7 @@ public:
                 const bool malformed_written = malformed.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
                     malformed.write("{not valid json") > 0;
                 malformed.close();
-                const auto recovered = moonmark::qt::UserSettings::load(false);
+                const auto recovered = wolfmark::qt::UserSettings::load(false);
                 const auto backups = QDir(root).entryList(
                     {QStringLiteral("settings.invalid-*.json")}, QDir::Files);
                 const bool malformed_safe = malformed_written &&
@@ -2413,7 +2413,7 @@ public:
                     migrated ? "ok" : "failed", round_trip ? "ok" : "failed",
                     malformed_safe ? "recovered" : "failed", saved ? "ok" : "failed",
                     path_ok ? "ok" : "failed");
-                std::fprintf(stdout, "MOONMARK_SMOKE settings=%s\n", ok ? "ok" : "failed");
+                std::fprintf(stdout, "WOLFMARK_SMOKE settings=%s\n", ok ? "ok" : "failed");
                 std::fflush(stdout);
                 QDir(root).removeRecursively();
                 QCoreApplication::exit(ok ? 0 : 32);
@@ -2431,7 +2431,7 @@ public:
                     QFileInfo(user_settings_.filePath()).absoluteFilePath() ==
                         QFileInfo(expected).absoluteFilePath() &&
                     saved && QFileInfo::exists(expected);
-                std::fprintf(stdout, "MOONMARK_SMOKE portable_settings=%s path=%s\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE portable_settings=%s path=%s\n",
                              ok ? "ok" : "failed",
                              user_settings_.filePath().toUtf8().constData());
                 std::fflush(stdout);
@@ -2447,7 +2447,7 @@ public:
                     QStringLiteral("out/visual/dev7/settings.png"));
                 showSettings(path);
                 const bool ok = QFileInfo::exists(path);
-                std::fprintf(stdout, "MOONMARK_SMOKE settings_ui=%s path=%s\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE settings_ui=%s path=%s\n",
                              ok ? "ok" : "failed", path.toUtf8().constData());
                 std::fflush(stdout);
                 QCoreApplication::exit(ok ? 0 : 35);
@@ -2455,24 +2455,24 @@ public:
             return;
         }
         if (mode == QStringLiteral("updates")) {
-            update_manager_->check(true, true, [this](moonmark::qt::UpdateCheckResult first) {
-                const bool first_ok = first.status == moonmark::qt::UpdateCheckResult::Status::Available &&
+            update_manager_->check(true, true, [this](wolfmark::qt::UpdateCheckResult first) {
+                const bool first_ok = first.status == wolfmark::qt::UpdateCheckResult::Status::Available &&
                     first.release.version == QStringLiteral("0.1.0-dev.8");
                 update_manager_->check(true, true,
-                    [this, first_ok](moonmark::qt::UpdateCheckResult cached) {
+                    [this, first_ok](wolfmark::qt::UpdateCheckResult cached) {
                     const bool cache_ok = cached.status ==
-                        moonmark::qt::UpdateCheckResult::Status::Available &&
+                        wolfmark::qt::UpdateCheckResult::Status::Available &&
                         cached.release.version == QStringLiteral("0.1.0-dev.8");
                     update_manager_->check(true, true,
-                        [first_ok, cache_ok](moonmark::qt::UpdateCheckResult failure) {
+                        [first_ok, cache_ok](wolfmark::qt::UpdateCheckResult failure) {
                         const bool failure_ok = failure.status ==
-                            moonmark::qt::UpdateCheckResult::Status::Error;
+                            wolfmark::qt::UpdateCheckResult::Status::Error;
                         const bool ok = first_ok && cache_ok && failure_ok;
                         std::fprintf(stdout,
                             "UPDATES selection=%s cache_304=%s http_failure=%s\n",
                             first_ok ? "ok" : "failed", cache_ok ? "ok" : "failed",
                             failure_ok ? "safe" : "failed");
-                        std::fprintf(stdout, "MOONMARK_SMOKE updates=%s\n", ok ? "ok" : "failed");
+                        std::fprintf(stdout, "WOLFMARK_SMOKE updates=%s\n", ok ? "ok" : "failed");
                         std::fflush(stdout);
                         QCoreApplication::exit(ok ? 0 : 33);
                     });
@@ -2494,7 +2494,7 @@ public:
                 std::fprintf(stdout,
                     "AUTOSCROLL_ANCHOR lifecycle=%s cursor=neutral counters=%s\n",
                     lifecycle ? "ok" : "failed", counters ? "stable" : "changed");
-                std::fprintf(stdout, "MOONMARK_SMOKE autoscroll_anchor=%s\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE autoscroll_anchor=%s\n",
                              ok ? "ok" : "failed");
                 std::fflush(stdout);
                 QCoreApplication::exit(ok ? 0 : 20);
@@ -2503,10 +2503,10 @@ public:
         }
         if (mode == QStringLiteral("native-window")) {
             QTimer::singleShot(250, this, [this] {
-                using moonmark::qt::windows::HitRole;
-                const auto status = moonmark::qt::windows::nativeFrameStatus(this);
+                using wolfmark::qt::windows::HitRole;
+                const auto status = wolfmark::qt::windows::nativeFrameStatus(this);
                 const auto role_at = [this](QWidget* widget) {
-                    return moonmark::qt::windows::hitTest(
+                    return wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         widget->mapTo(this, widget->rect().center()), false);
                 };
@@ -2518,25 +2518,25 @@ public:
                 const bool captions = minimize_client && maximize_hit && close_client;
                 const bool title = role_at(title_label_) == HitRole::Caption;
                 const bool edges =
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_, QPoint(1, 1), false) ==
                         HitRole::TopLeft &&
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         QPoint(width() / 2, 1), false) == HitRole::Top &&
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         QPoint(1, height() / 2), false) == HitRole::Left &&
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         QPoint(width() - 2, height() / 2), false) == HitRole::Right &&
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         QPoint(1, height() - 2), false) == HitRole::BottomLeft &&
-                    moonmark::qt::windows::hitTest(
+                    wolfmark::qt::windows::hitTest(
                         this, title_bar_, minimize_, maximize_, close_,
                         QPoint(width() - 2, height() - 2), false) == HitRole::BottomRight;
-                const bool fullscreen_client = moonmark::qt::windows::hitTest(
+                const bool fullscreen_client = wolfmark::qt::windows::hitTest(
                     this, title_bar_, minimize_, maximize_, close_,
                     title_label_->mapTo(this, title_label_->rect().center()), true) ==
                     HitRole::Client;
@@ -2585,7 +2585,7 @@ public:
                             fullscreen_client ? "client" : "failed",
                             maximized && restored ? "ok" : "failed",
                             counters ? "stable" : "changed");
-                        std::fprintf(stdout, "MOONMARK_SMOKE native_window=%s\n",
+                        std::fprintf(stdout, "WOLFMARK_SMOKE native_window=%s\n",
                                      ok ? "ok" : "failed");
                         std::fflush(stdout);
                         QCoreApplication::exit(ok ? 0 : 19);
@@ -2704,7 +2704,7 @@ public:
                         document_->viewportAnchorPosition(),
                         motion_stopped ? "stopped" : "running");
                     std::fprintf(stdout,
-                        "MOONMARK_SMOKE outline_reflow=%s one_click=%s latest_wins=%s "
+                        "WOLFMARK_SMOKE outline_reflow=%s one_click=%s latest_wins=%s "
                         "counters=%s scenario=%s\n",
                         ok ? "ok" : "failed", owner && landing ? "ok" : "failed",
                         latest_wins ? "ok" : "failed", counters ? "stable" : "changed",
@@ -2743,13 +2743,13 @@ public:
                     QTimer::singleShot(1200, this, [this] {
                         const auto summary = document_->scrollProfileSummary().toUtf8();
                         std::fprintf(stdout, "%s\n", summary.constData());
-                        std::fprintf(stdout, "MOONMARK_SMOKE scroll_profile=ok\n");
-                        const auto output_path = qEnvironmentVariable("MOONMARK_SCROLL_PROFILE_OUTPUT");
+                        std::fprintf(stdout, "WOLFMARK_SMOKE scroll_profile=ok\n");
+                        const auto output_path = qEnvironmentVariable("WOLFMARK_SCROLL_PROFILE_OUTPUT");
                         if (!output_path.isEmpty()) {
                             QFile output(output_path);
                             if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
                                 output.write(summary);
-                                output.write("\nMOONMARK_SMOKE scroll_profile=ok\n");
+                                output.write("\nWOLFMARK_SMOKE scroll_profile=ok\n");
                             }
                         }
                         std::fflush(stdout);
@@ -2763,7 +2763,7 @@ public:
         if (mode == QStringLiteral("multidoc-watcher")) {
             QTimer::singleShot(250, this, [this] {
                 if (documents_.size() < 2) {
-                    std::fprintf(stdout, "MOONMARK_SMOKE multidoc_watcher=failed reason=document_count\n");
+                    std::fprintf(stdout, "WOLFMARK_SMOKE multidoc_watcher=failed reason=document_count\n");
                     std::fflush(stdout);
                     QCoreApplication::exit(17);
                     return;
@@ -2776,7 +2776,7 @@ public:
                 const auto active_path = active->canonical_path;
                 QFile file(background->canonical_path);
                 const bool appended = file.open(QIODevice::Append | QIODevice::Text) &&
-                                      file.write("\nMoonmark background watcher update.\n") > 0;
+                                      file.write("\nWolfmark background watcher update.\n") > 0;
                 file.close();
                 QTimer::singleShot(700, this,
                     [this, active, background, active_before, background_before, active_path, appended] {
@@ -2791,11 +2791,11 @@ public:
                         const bool background_parse_stable = background->view->isPlainText() &&
                             background_after.parse_count == background_before.parse_count;
                         const bool content_updated = background->view->plainText().contains(
-                            QStringLiteral("Moonmark background watcher update."));
+                            QStringLiteral("Wolfmark background watcher update."));
                         const bool result = appended && active_stable && background_loaded &&
                             background_parse_stable && content_updated;
                         std::fprintf(stdout,
-                            "MOONMARK_SMOKE multidoc_watcher=%s active=%s background_load_delta=%lld background_parse_delta=%lld content=%s\n",
+                            "WOLFMARK_SMOKE multidoc_watcher=%s active=%s background_load_delta=%lld background_parse_delta=%lld content=%s\n",
                             result ? "ok" : "failed", active_stable ? "stable" : "changed",
                             static_cast<long long>(background_after.load_count - background_before.load_count),
                             static_cast<long long>(background_after.parse_count - background_before.parse_count),
@@ -2877,7 +2877,7 @@ public:
                                      home_end_direct ? "direct" : "failed",
                                      home_end_direct ? "direct" : "failed");
                         std::fprintf(stdout,
-                                     "MOONMARK_SMOKE motion=%s counters=%s partial_wheel=%s cancelled=%s\n",
+                                     "WOLFMARK_SMOKE motion=%s counters=%s partial_wheel=%s cancelled=%s\n",
                                      ok ? "ok" : "failed", counters ? "stable" : "changed",
                                      partial_wheel ? "ok" : "failed", cancelled ? "ok" : "failed");
                         std::fflush(stdout);
@@ -3020,9 +3020,9 @@ public:
                             width_largest_jump = std::max(width_largest_jump, std::abs(delta));
                         }
                         const bool width_retarget = width_decreased && width_increased &&
-                            width_largest_jump < moonmark::style::metric::sidebar_width / 3 &&
+                            width_largest_jump < wolfmark::style::metric::sidebar_width / 3 &&
                             sidebar_->isVisible() &&
-                            sidebar_->width() == moonmark::style::metric::sidebar_width;
+                            sidebar_->width() == wolfmark::style::metric::sidebar_width;
                         const auto after = api_->backend_counters(backend_);
                         const bool counters = before.parse_count == after.parse_count &&
                             before.load_count == after.load_count &&
@@ -3050,7 +3050,7 @@ public:
                             static_cast<int>(sidebar_width_samples_.size()), width_largest_jump,
                             width_retarget ? "ok" : "failed", sidebar_->width());
                         std::fprintf(stdout,
-                            "MOONMARK_SMOKE motion=%s counters=%s image_request_delta=%llu\n",
+                            "WOLFMARK_SMOKE motion=%s counters=%s image_request_delta=%llu\n",
                             final_ok ? "ok" : "failed", counters ? "stable" : "changed",
                             after.image_request_count - before.image_request_count);
                         std::fflush(stdout);
@@ -3066,7 +3066,7 @@ public:
             QTimer::singleShot(350, this, [this] {
                 bool ok = documents_.size() >= 2;
                 bool plain_present = false;
-                std::vector<MoonmarkCounters> counters;
+                std::vector<WolfmarkCounters> counters;
                 std::vector<quint64> constructions;
                 for (const auto& session : documents_) {
                     counters.push_back(api_->backend_counters(session->backend));
@@ -3110,7 +3110,7 @@ public:
                 while (!documents_.empty()) closeDocument(0);
                 ok &= active_ == nullptr && stack_->currentIndex() == 0;
                 std::fprintf(stdout,
-                             "MOONMARK_SMOKE multidoc=%s duplicate=%s state=%s counters=%s plain_text=%s switch_average_us=%lld final=%s\n",
+                             "WOLFMARK_SMOKE multidoc=%s duplicate=%s state=%s counters=%s plain_text=%s switch_average_us=%lld final=%s\n",
                              ok ? "ok" : "failed",
                              duplicate_ok ? "deduplicated" : "failed",
                              state_retained ? "retained" : "failed",
@@ -3133,7 +3133,7 @@ public:
                                 document_->plainText() == expected &&
                                 document_->discoveredImages() == 0 && counters.parse_count == 0;
                 std::fprintf(stdout,
-                             "MOONMARK_SMOKE plaintext=%s chars=%lld construction_us=%llu parse_count=%llu images=%d\n",
+                             "WOLFMARK_SMOKE plaintext=%s chars=%lld construction_us=%llu parse_count=%llu images=%d\n",
                              ok ? "ok" : "failed", static_cast<long long>(expected.size()),
                              static_cast<unsigned long long>(document_->constructionMicros()),
                              static_cast<unsigned long long>(counters.parse_count),
@@ -3168,7 +3168,7 @@ public:
                 const auto after = api_->backend_counters(backend_);
                 ok &= before.parse_count == after.parse_count && before.load_count == after.load_count &&
                       before.image_request_count == after.image_request_count && constructions == document_->constructionCount();
-                std::fprintf(stdout, "MOONMARK_SMOKE navigation=%s outline_keyboard=%s transition_counters=%s\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE navigation=%s outline_keyboard=%s transition_counters=%s\n",
                              ok ? "ok" : "failed", item ? "present" : "missing",
                              constructions == document_->constructionCount() ? "stable" : "changed");
                 std::fflush(stdout);
@@ -3189,7 +3189,7 @@ public:
                 const auto icon = QGuiApplication::windowIcon();
                 const auto sizes = icon.availableSizes();
                 const bool ok = !icon.isNull() && !sizes.isEmpty();
-                std::fprintf(stdout, "MOONMARK_SMOKE icon=%s sizes=%lld\n",
+                std::fprintf(stdout, "WOLFMARK_SMOKE icon=%s sizes=%lld\n",
                              ok ? "ok" : "failed", static_cast<long long>(sizes.size()));
                 std::fflush(stdout);
                 QCoreApplication::exit(ok ? 0 : 11);
@@ -3197,27 +3197,27 @@ public:
             return;
         }
         if (mode == QStringLiteral("snapshot")) {
-            const auto width = qEnvironmentVariableIntValue("MOONMARK_SNAPSHOT_WIDTH");
-            const auto height = qEnvironmentVariableIntValue("MOONMARK_SNAPSHOT_HEIGHT");
+            const auto width = qEnvironmentVariableIntValue("WOLFMARK_SNAPSHOT_WIDTH");
+            const auto height = qEnvironmentVariableIntValue("WOLFMARK_SNAPSHOT_HEIGHT");
             if (width > 0 && height > 0) resize(width, height);
             QTimer::singleShot(500, this, [this] {
-                const auto zoom = qEnvironmentVariableIntValue("MOONMARK_SNAPSHOT_ZOOM");
+                const auto zoom = qEnvironmentVariableIntValue("WOLFMARK_SNAPSHOT_ZOOM");
                 if (zoom > 0 && document_) changeZoom(zoom - document_->zoomPercent());
-                if (qEnvironmentVariable("MOONMARK_SNAPSHOT_NO_SIDEBAR") == QStringLiteral("1")) {
+                if (qEnvironmentVariable("WOLFMARK_SNAPSHOT_NO_SIDEBAR") == QStringLiteral("1")) {
                     sidebar_requested_ = false;
                     updateSidebarVisibility();
                 }
-                const auto scroll = qEnvironmentVariableIntValue("MOONMARK_SNAPSHOT_SCROLL");
+                const auto scroll = qEnvironmentVariableIntValue("WOLFMARK_SNAPSHOT_SCROLL");
                 if (scroll > 0 && document_) document_->verticalScrollBar()->setValue(scroll);
-                if (document_ && qEnvironmentVariable("MOONMARK_SNAPSHOT_SELECTION") == QStringLiteral("1"))
+                if (document_ && qEnvironmentVariable("WOLFMARK_SNAPSHOT_SELECTION") == QStringLiteral("1"))
                     document_->selectAll();
-                if (qEnvironmentVariable("MOONMARK_SNAPSHOT_MENU") == QStringLiteral("1")) {
+                if (qEnvironmentVariable("WOLFMARK_SNAPSHOT_MENU") == QStringLiteral("1")) {
                     auto* menu = findChild<QMenu*>(QStringLiteral("documentMenu"));
                     menu->popup(mapToGlobal(QPoint(this->width() - 300, 40)));
                     menu->setActiveAction(menu->actions().first());
                 }
                 QTimer::singleShot(300, this, [this] {
-                    auto name = qEnvironmentVariable("MOONMARK_SNAPSHOT_NAME", "moonmark-ui");
+                    auto name = qEnvironmentVariable("WOLFMARK_SNAPSHOT_NAME", "wolfmark-ui");
                     for (auto& character : name) {
                         if (!character.isLetterOrNumber() && character != QLatin1Char('-'))
                             character = QLatin1Char('_');
@@ -3225,10 +3225,10 @@ public:
                     QDir::current().mkpath(QStringLiteral("out/visual/dev7"));
                     const auto output = QDir::current().absoluteFilePath(
                         QStringLiteral("out/visual/dev7/%1.png").arg(name));
-                    const auto pixels = qEnvironmentVariable("MOONMARK_SNAPSHOT_MENU") == QStringLiteral("1")
+                    const auto pixels = qEnvironmentVariable("WOLFMARK_SNAPSHOT_MENU") == QStringLiteral("1")
                         ? findChild<QMenu*>(QStringLiteral("documentMenu"))->grab() : grab();
                     const bool saved = pixels.save(output, "PNG");
-                    std::fprintf(stdout, "MOONMARK_SMOKE snapshot=%s path=%s\n",
+                    std::fprintf(stdout, "WOLFMARK_SMOKE snapshot=%s path=%s\n",
                                  saved ? "ok" : "failed", output.toUtf8().constData());
                     std::fflush(stdout);
                     QCoreApplication::exit(saved ? 0 : 10);
@@ -3239,7 +3239,7 @@ public:
         if (mode == QStringLiteral("style")) {
             QTimer::singleShot(180, this, [this] {
                 const bool ok = document_->testDocumentStyle() && document_->testSelectionCopy();
-                std::fprintf(stdout, "MOONMARK_SMOKE document_style=%s\n", ok ? "ok" : "failed");
+                std::fprintf(stdout, "WOLFMARK_SMOKE document_style=%s\n", ok ? "ok" : "failed");
                 std::fflush(stdout);
                 QCoreApplication::exit(ok ? 0 : 11);
             });
@@ -3254,7 +3254,7 @@ public:
                                 counters.parse_count == 1 && counters.load_count == 1 &&
                                 document_->constructionCount() == 1 && selection_copy_ok && code_copy_ok;
                 std::fprintf(stdout,
-                             "MOONMARK_SMOKE render=%s chars=%lld construction_us=%llu parse=%llu load=%llu selection_copy=%s code_copy=%s\n",
+                             "WOLFMARK_SMOKE render=%s chars=%lld construction_us=%llu parse=%llu load=%llu selection_copy=%s code_copy=%s\n",
                              ok ? "ok" : "failed",
                              static_cast<long long>(document_->plainText().size()),
                              static_cast<unsigned long long>(document_->constructionMicros()),
@@ -3286,7 +3286,7 @@ public:
                                             constructions == document_->constructionCount() &&
                                             isMaximized();
                             std::fprintf(stdout,
-                                         "MOONMARK_SMOKE layout=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld restored=%s\n",
+                                         "WOLFMARK_SMOKE layout=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld restored=%s\n",
                                          ok ? "ok" : "failed",
                                          static_cast<long long>(after.parse_count - before.parse_count),
                                          static_cast<long long>(after.load_count - before.load_count),
@@ -3322,7 +3322,7 @@ public:
                                         before.image_request_count == after.image_request_count &&
                                         constructions == document_->constructionCount();
                         std::fprintf(stdout,
-                                     "MOONMARK_SMOKE maximize=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld geometry=%s\n",
+                                     "WOLFMARK_SMOKE maximize=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld geometry=%s\n",
                                      ok ? "ok" : "failed",
                                      static_cast<long long>(after.parse_count - before.parse_count),
                                      static_cast<long long>(after.load_count - before.load_count),
@@ -3356,7 +3356,7 @@ public:
                                         constructions == document_->constructionCount() &&
                                         !isMaximized() && geometry_restored;
                         std::fprintf(stdout,
-                                     "MOONMARK_SMOKE layout_normal=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld restored=%s geometry=%s\n",
+                                     "WOLFMARK_SMOKE layout_normal=%s parse_delta=%lld load_delta=%lld construction_delta=%lld image_request_delta=%lld restored=%s geometry=%s\n",
                                      ok ? "ok" : "failed",
                                      static_cast<long long>(after.parse_count - before.parse_count),
                                      static_cast<long long>(after.load_count - before.load_count),
@@ -3378,14 +3378,14 @@ public:
             QTimer::singleShot(100, this, [this, before] {
                 QFile file(current_path_);
                 const bool appended = file.open(QIODevice::Append | QIODevice::Text) &&
-                                      file.write("\nMoonmark watcher smoke update.\n") > 0;
+                                      file.write("\nWolfmark watcher smoke update.\n") > 0;
                 file.close();
                 QTimer::singleShot(700, this, [this, before, appended] {
                     const auto after = api_->backend_counters(backend_);
                     const bool ok = appended && after.load_count > before.load_count &&
                                     after.parse_count > before.parse_count;
                     std::fprintf(stdout,
-                                 "MOONMARK_SMOKE watcher=%s load_delta=%lld parse_delta=%lld\n",
+                                 "WOLFMARK_SMOKE watcher=%s load_delta=%lld parse_delta=%lld\n",
                                  ok ? "ok" : "failed",
                                  static_cast<long long>(after.load_count - before.load_count),
                                  static_cast<long long>(after.parse_count - before.parse_count));
@@ -3432,7 +3432,7 @@ public:
                                 document_->loadedImages() > 0 && document_->testZoom();
                 const auto counters = api_->backend_counters(backend_);
                 std::fprintf(stdout,
-                             "MOONMARK_SMOKE images=%s discovered=%d loaded=%d failed=%d pending=%d requests=%llu cache_bytes=%llu completion_ms=%lld elapsed_ms=%lld\n",
+                             "WOLFMARK_SMOKE images=%s discovered=%d loaded=%d failed=%d pending=%d requests=%llu cache_bytes=%llu completion_ms=%lld elapsed_ms=%lld\n",
                              ok ? "ok" : "failed", document_->discoveredImages(),
                              document_->loadedImages(), document_->failedImageDecodes(),
                              document_->pendingImageDecodes(),
@@ -3523,7 +3523,7 @@ protected:
 #ifdef _WIN32
     bool nativeEvent(const QByteArray& event_type, void* message, qintptr* result) override {
         Q_UNUSED(event_type);
-        if (moonmark::qt::windows::handleNativeFrameEvent(
+        if (wolfmark::qt::windows::handleNativeFrameEvent(
                 this, title_bar_, minimize_, maximize_, close_, fullscreen_, message, result))
             return true;
         return QWidget::nativeEvent(event_type, message, result);
@@ -3534,11 +3534,11 @@ private:
     void updateSidebarVisibility() {
         if (sidebar_ == nullptr) return;
         const bool visible = !fullscreen_ && sidebar_requested_ && (sidebar_explicit_ || width() >= 1000);
-        const bool reduced = qEnvironmentVariable("MOONMARK_REDUCED_MOTION") == QStringLiteral("1");
+        const bool reduced = qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1");
         if (reduced || !isVisible()) {
             sidebar_animation_.stop();
             sidebar_target_visible_ = visible;
-            sidebar_->setFixedWidth(visible ? moonmark::style::metric::sidebar_width : 0);
+            sidebar_->setFixedWidth(visible ? wolfmark::style::metric::sidebar_width : 0);
             sidebar_->setVisible(visible);
             if (open_ != nullptr) open_->setVisible(!visible);
             if (title_symbol_ != nullptr) title_symbol_->setVisible(!visible);
@@ -3546,7 +3546,7 @@ private:
         }
         if (sidebar_animation_.state() == QAbstractAnimation::Running &&
             sidebar_target_visible_ == visible) return;
-        const int target = visible ? moonmark::style::metric::sidebar_width : 0;
+        const int target = visible ? wolfmark::style::metric::sidebar_width : 0;
         const int current = sidebar_->isVisible() ? sidebar_->width() : 0;
         if (current != target || sidebar_->isVisible() != visible) {
             sidebar_animation_.stop();
@@ -3560,7 +3560,7 @@ private:
             sidebar_animation_.setStartValue(current);
             sidebar_animation_.setEndValue(target);
             sidebar_animation_.setDuration(std::max(60, full_duration * remaining /
-                                                        moonmark::style::metric::sidebar_width));
+                                                        wolfmark::style::metric::sidebar_width));
             sidebar_animation_.setEasingCurve(QEasingCurve::InOutQuad);
             sidebar_animation_.start();
             return;
@@ -3573,7 +3573,7 @@ private:
         auto* shell = new QHBoxLayout(this);
         shell->setContentsMargins(0, 0, 0, 0);
         shell->setSpacing(0);
-        sidebar_ = new moonmark::qt::DocumentSidebar;
+        sidebar_ = new wolfmark::qt::DocumentSidebar;
         QObject::connect(&sidebar_animation_, &QVariantAnimation::valueChanged, this,
                          [this](const QVariant& width) {
             const int value = width.toInt();
@@ -3581,7 +3581,7 @@ private:
             sidebar_->setFixedWidth(value);
         });
         QObject::connect(&sidebar_animation_, &QVariantAnimation::finished, this, [this] {
-            sidebar_->setFixedWidth(sidebar_target_visible_ ? moonmark::style::metric::sidebar_width : 0);
+            sidebar_->setFixedWidth(sidebar_target_visible_ ? wolfmark::style::metric::sidebar_width : 0);
             sidebar_->setVisible(sidebar_target_visible_);
             if (open_ != nullptr) open_->setVisible(!sidebar_target_visible_);
             if (title_symbol_ != nullptr) title_symbol_->setVisible(!sidebar_target_visible_);
@@ -3603,7 +3603,7 @@ private:
         root->setContentsMargins(0, 0, 0, 0);
         root->setSpacing(0);
 
-        title_bar_ = new moonmark::qt::MoonTitleBar(this);
+        title_bar_ = new wolfmark::qt::WolfTitleBar(this);
         auto* title_layout = new QHBoxLayout(title_bar_);
         title_layout->setContentsMargins(14, 0, 0, 0);
         title_layout->setSpacing(9);
@@ -3631,7 +3631,7 @@ private:
         title_symbol_->setAttribute(Qt::WA_TransparentForMouseEvents);
         title_layout->addWidget(title_symbol_);
 
-        title_label_ = new ElidingLabel(QStringLiteral("Moonmark"));
+        title_label_ = new ElidingLabel(QStringLiteral("Wolfmark"));
         title_label_->setObjectName(QStringLiteral("documentTitle"));
         title_label_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
         title_label_->setMinimumWidth(60);
@@ -3706,7 +3706,7 @@ private:
         title_layout->addWidget(document_actions_);
         document_actions_->hide();
 
-        using Caption = moonmark::qt::CaptionButton;
+        using Caption = wolfmark::qt::CaptionButton;
         minimize_ = new Caption(Caption::Action::Minimize);
         maximize_ = new Caption(Caption::Action::Maximize);
         close_ = new Caption(Caption::Action::Close);
@@ -3732,7 +3732,7 @@ private:
         update_label_->setObjectName(QStringLiteral("updateLabel"));
         update_layout->addWidget(update_label_, 1);
         update_now_ = new MoonButton(QStringLiteral("Update now"));
-        update_now_->setAccessibleName(QStringLiteral("Download Moonmark update"));
+        update_now_->setAccessibleName(QStringLiteral("Download Wolfmark update"));
         QObject::connect(update_now_, &QPushButton::clicked, this, [this] { downloadUpdate(); });
         update_layout->addWidget(update_now_);
         auto* release_notes = new MoonButton(QStringLiteral("Release notes"));
@@ -3814,7 +3814,7 @@ private:
         }
         const auto path = QFileDialog::getOpenFileName(
             this, QStringLiteral("Open document"), initial,
-            QStringLiteral("Moonmark documents (*.md *.markdown *.txt);;Markdown files (*.md *.markdown);;Text files (*.txt);;All files (*)"));
+            QStringLiteral("Wolfmark documents (*.md *.markdown *.txt);;Markdown files (*.md *.markdown);;Text files (*.txt);;All files (*)"));
         if (!path.isEmpty()) {
             openDocument(path);
         }
@@ -3822,7 +3822,7 @@ private:
 
     void showSettings(const QString& snapshot_path = {}) {
         QDialog dialog(this);
-        dialog.setWindowTitle(QStringLiteral("Moonmark Settings"));
+        dialog.setWindowTitle(QStringLiteral("Wolfmark Settings"));
         dialog.setModal(true);
         dialog.setMinimumWidth(460);
         auto* layout = new QVBoxLayout(&dialog);
@@ -3833,7 +3833,7 @@ private:
         title->setObjectName(QStringLiteral("settingsTitle"));
         layout->addWidget(title);
         auto* explanation = new QLabel(QStringLiteral(
-            "Moonmark checks the public GitHub Releases feed. No account, token, or telemetry is used."));
+            "Wolfmark checks the public GitHub Releases feed. No account, token, or telemetry is used."));
         explanation->setObjectName(QStringLiteral("settingsHint"));
         explanation->setWordWrap(true);
         layout->addWidget(explanation);
@@ -3888,7 +3888,7 @@ private:
         user_settings_.setIncludePrereleases(prereleases->isChecked());
         QString error;
         if (!user_settings_.save(&error))
-            QMessageBox::warning(this, QStringLiteral("Moonmark Settings"), error);
+            QMessageBox::warning(this, QStringLiteral("Wolfmark Settings"), error);
     }
 
     void checkForUpdates(bool manual, QPointer<QLabel> result_label = {},
@@ -3898,18 +3898,18 @@ private:
             user_settings_.updates().include_prereleases);
         update_manager_->check(include, manual,
                                [this, manual, result_label, trigger](
-                                   moonmark::qt::UpdateCheckResult result) {
+                                   wolfmark::qt::UpdateCheckResult result) {
             if (trigger != nullptr) trigger->setEnabled(true);
-            if (result.status == moonmark::qt::UpdateCheckResult::Status::Available) {
+            if (result.status == wolfmark::qt::UpdateCheckResult::Status::Available) {
                 available_update_ = result.release;
-                update_label_->setText(QStringLiteral("Moonmark %1 is available")
+                update_label_->setText(QStringLiteral("Wolfmark %1 is available")
                                            .arg(result.release.version));
                 update_now_->setText(user_settings_.portable()
                                          ? QStringLiteral("Download update")
                                          : QStringLiteral("Update now"));
                 update_banner_->show();
                 if (result_label != nullptr) {
-                    result_label->setText(QStringLiteral("Moonmark %1 is available.")
+                    result_label->setText(QStringLiteral("Wolfmark %1 is available.")
                                               .arg(result.release.version));
                     result_label->show();
                 }
@@ -3917,12 +3917,12 @@ private:
             }
             if (result_label != nullptr) {
                 result_label->setText(
-                    result.status == moonmark::qt::UpdateCheckResult::Status::Current
-                        ? QStringLiteral("Moonmark is up to date.")
+                    result.status == wolfmark::qt::UpdateCheckResult::Status::Current
+                        ? QStringLiteral("Wolfmark is up to date.")
                         : result.message);
                 result_label->show();
-            } else if (manual && result.status == moonmark::qt::UpdateCheckResult::Status::Error) {
-                QMessageBox::warning(this, QStringLiteral("Moonmark Update"), result.message);
+            } else if (manual && result.status == wolfmark::qt::UpdateCheckResult::Status::Error) {
+                QMessageBox::warning(this, QStringLiteral("Wolfmark Update"), result.message);
             }
         });
     }
@@ -3930,34 +3930,34 @@ private:
     void downloadUpdate() {
         if (!available_update_.has_value()) return;
         update_now_->setEnabled(false);
-        update_label_->setText(QStringLiteral("Downloading and verifying Moonmark %1…")
+        update_label_->setText(QStringLiteral("Downloading and verifying Wolfmark %1…")
                                    .arg(available_update_->version));
         update_manager_->download(*available_update_, user_settings_.portable(),
-                                  [this](moonmark::qt::UpdateDownloadResult result) {
+                                  [this](wolfmark::qt::UpdateDownloadResult result) {
             update_now_->setEnabled(true);
             if (!result.valid) {
                 update_label_->setText(result.message);
-                QMessageBox::warning(this, QStringLiteral("Moonmark Update"), result.message);
+                QMessageBox::warning(this, QStringLiteral("Wolfmark Update"), result.message);
                 return;
             }
             if (user_settings_.portable()) {
                 update_label_->setText(QStringLiteral("Verified portable update downloaded."));
                 QMessageBox::information(
                     this, QStringLiteral("Portable update downloaded"),
-                    QStringLiteral("The verified ZIP was saved to:\n%1\n\nMoonmark will not overwrite its running portable folder.")
+                    QStringLiteral("The verified ZIP was saved to:\n%1\n\nWolfmark will not overwrite its running portable folder.")
                         .arg(QDir::toNativeSeparators(result.file_path)));
                 QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(result.file_path).absolutePath()));
                 return;
             }
             update_label_->setText(QStringLiteral("Verified installer downloaded."));
             const auto choice = QMessageBox::question(
-                this, QStringLiteral("Install Moonmark update"),
-                QStringLiteral("The Moonmark installer was downloaded and verified.\n\nRun it now and close Moonmark?"));
+                this, QStringLiteral("Install Wolfmark update"),
+                QStringLiteral("The Wolfmark installer was downloaded and verified.\n\nRun it now and close Wolfmark?"));
             if (choice == QMessageBox::Yes) {
                 if (QProcess::startDetached(result.file_path, {})) {
                     QCoreApplication::quit();
                 } else {
-                    QMessageBox::warning(this, QStringLiteral("Moonmark Update"),
+                    QMessageBox::warning(this, QStringLiteral("Wolfmark Update"),
                                          QStringLiteral("Windows could not start the verified installer."));
                 }
             }
@@ -4005,7 +4005,7 @@ private:
         }
 #ifdef _WIN32
         QTimer::singleShot(0, this, [this] {
-            moonmark::qt::windows::installNativeFrame(this);
+            wolfmark::qt::windows::installNativeFrame(this);
         });
 #endif
     }
@@ -4060,7 +4060,7 @@ private:
         const QFileInfo file(current_path_);
         title_label_->setFullText(file.dir().dirName() + QStringLiteral("   /   ") + file.fileName());
         title_label_->setToolTip(current_path_);
-        setWindowTitle(QStringLiteral("%1 — Moonmark").arg(file.fileName()));
+        setWindowTitle(QStringLiteral("%1 — Wolfmark").arg(file.fileName()));
         stack_->setCurrentWidget(document_);
         document_->setFocus(Qt::OtherFocusReason);
         reload_action_->setEnabled(true);
@@ -4091,9 +4091,9 @@ private:
         document_ = nullptr;
         current_path_.clear();
         stack_->setCurrentIndex(0);
-        title_label_->setFullText(QStringLiteral("Moonmark"));
+        title_label_->setFullText(QStringLiteral("Wolfmark"));
         title_label_->setToolTip({});
-        setWindowTitle(QStringLiteral("Moonmark"));
+        setWindowTitle(QStringLiteral("Wolfmark"));
         reload_action_->setEnabled(false);
         document_actions_->hide();
         zoom_label_->setText(QStringLiteral("100%"));
@@ -4116,15 +4116,15 @@ private:
         sidebar_->setOutline(active_ ? active_->outline : QJsonArray{});
     }
 
-    const MoonmarkApiTable* api_ = nullptr;
-    moonmark::qt::UserSettings user_settings_;
-    moonmark::qt::UpdateManager* update_manager_ = nullptr;
+    const WolfmarkApiTable* api_ = nullptr;
+    wolfmark::qt::UserSettings user_settings_;
+    wolfmark::qt::UpdateManager* update_manager_ = nullptr;
     void* backend_ = nullptr;
     void* window_state_ = nullptr;
-    moonmark::qt::DocumentSidebar* sidebar_ = nullptr;
+    wolfmark::qt::DocumentSidebar* sidebar_ = nullptr;
     bool sidebar_requested_ = true;
     bool sidebar_explicit_ = false;
-    moonmark::qt::MoonTitleBar* title_bar_ = nullptr;
+    wolfmark::qt::WolfTitleBar* title_bar_ = nullptr;
     QWidget* document_actions_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     DocumentView* document_ = nullptr;
@@ -4132,9 +4132,9 @@ private:
     QAction* reload_action_ = nullptr;
     MoonButton* zoom_out_ = nullptr;
     MoonButton* zoom_in_ = nullptr;
-    moonmark::qt::CaptionButton* minimize_ = nullptr;
-    moonmark::qt::CaptionButton* maximize_ = nullptr;
-    moonmark::qt::CaptionButton* close_ = nullptr;
+    wolfmark::qt::CaptionButton* minimize_ = nullptr;
+    wolfmark::qt::CaptionButton* maximize_ = nullptr;
+    wolfmark::qt::CaptionButton* close_ = nullptr;
     MoonButton* zoom_label_ = nullptr;
     QLabel* title_symbol_ = nullptr;
     ElidingLabel* title_label_ = nullptr;
@@ -4142,7 +4142,7 @@ private:
     QWidget* update_banner_ = nullptr;
     QLabel* update_label_ = nullptr;
     MoonButton* update_now_ = nullptr;
-    std::optional<moonmark::qt::ReleaseInfo> available_update_;
+    std::optional<wolfmark::qt::ReleaseInfo> available_update_;
     std::vector<std::unique_ptr<OpenDocumentSession>> documents_;
     OpenDocumentSession* active_ = nullptr;
     QString current_path_;
@@ -4154,19 +4154,19 @@ private:
     bool sidebar_target_visible_ = true;
 };
 
-void applyMoonmarkStyle(QApplication& application) {
-    moonmark::style::apply(application);
+void applyWolfmarkStyle(QApplication& application) {
+    wolfmark::style::apply(application);
 }
 
 } // namespace
 
-extern "C" int moonmark_qt_run(int argc, const char* const* argv, const MoonmarkApiTable* api) {
+extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const WolfmarkApiTable* api) {
     if (api == nullptr || api->version != 3) {
         return 2;
     }
-    QCoreApplication::setOrganizationName(QStringLiteral("Moonmark"));
-    QCoreApplication::setApplicationName(QStringLiteral("Moonmark"));
-    QCoreApplication::setApplicationVersion(QStringLiteral(MOONMARK_PRODUCT_VERSION));
+    QCoreApplication::setOrganizationName(QStringLiteral("Wolfmark"));
+    QCoreApplication::setApplicationName(QStringLiteral("Wolfmark"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(WOLFMARK_PRODUCT_VERSION));
 
     std::vector<QByteArray> argument_storage;
     std::vector<char*> qt_arguments;
@@ -4181,37 +4181,42 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
     int qt_argc = argc;
     QApplication application(qt_argc, qt_arguments.data());
     application.setWindowIcon(applicationIcon());
-    applyMoonmarkStyle(application);
+    applyWolfmarkStyle(application);
     // Smoke tests must not update the user's application settings.
     const bool motion_smoke = std::find(argument_storage.cbegin(), argument_storage.cend(),
                                         QByteArray("--smoke-motion")) != argument_storage.cend();
     const bool scroll_profile_smoke =
         std::find(argument_storage.cbegin(), argument_storage.cend(),
                   QByteArray("--smoke-scroll-profile")) != argument_storage.cend();
-    if (scroll_profile_smoke) qputenv("MOONMARK_SCROLL_TRACE", "1");
+    if (scroll_profile_smoke) qputenv("WOLFMARK_SCROLL_TRACE", "1");
     bool settings_smoke = false;
     bool updates_smoke = false;
     for (const auto& argument : argument_storage) {
         if (argument.startsWith("--smoke-")) {
             if (!motion_smoke && !scroll_profile_smoke)
-                qputenv("MOONMARK_REDUCED_MOTION", "1");
+                qputenv("WOLFMARK_REDUCED_MOTION", "1");
             if (argument != QByteArray("--smoke-portable-settings")) {
-                qputenv("MOONMARK_SETTINGS_ROOT",
-                        QDir::current().absoluteFilePath("out/tests/native-settings").toUtf8());
+                const auto settings_root = QDir::current().absoluteFilePath(
+                    QStringLiteral("out/tests/native-settings/%1")
+                        .arg(QCoreApplication::applicationPid()));
+                qputenv("WOLFMARK_SETTINGS_ROOT",
+                        settings_root.toUtf8());
             }
-            qputenv("MOONMARK_UPDATE_STATE_ROOT",
+            qputenv("WOLFMARK_UPDATE_STATE_ROOT",
                     QDir::current().absoluteFilePath("out/tests/native-updates").toUtf8());
-            qputenv("MOONMARK_DISABLE_UPDATE_CHECKS", "1");
+            qputenv("WOLFMARK_DISABLE_UPDATE_CHECKS", "1");
             QSettings::setDefaultFormat(QSettings::IniFormat);
-            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
-                              QDir::current().absoluteFilePath("out/tests/native-settings"));
+            const auto settings_root = qEnvironmentVariable("WOLFMARK_SETTINGS_ROOT");
+            if (!settings_root.isEmpty()) {
+                QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_root);
+            }
             settings_smoke = argument == QByteArray("--smoke-settings");
             updates_smoke = argument == QByteArray("--smoke-updates");
             break;
         }
     }
     if (settings_smoke) {
-        const auto root = qEnvironmentVariable("MOONMARK_SETTINGS_ROOT");
+        const auto root = qEnvironmentVariable("WOLFMARK_SETTINGS_ROOT");
         QDir(root).removeRecursively();
         QDir().mkpath(root);
         QSettings legacy;
@@ -4222,9 +4227,9 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
     if (updates_smoke) {
         QDir(QDir::current().absoluteFilePath("out/tests/native-updates")).removeRecursively();
     }
-    MoonmarkWindow window(api);
+    WolfmarkWindow window(api);
     window.show();
-    moonmark::qt::windows::installNativeFrame(&window);
+    wolfmark::qt::windows::installNativeFrame(&window);
     QString smoke_mode;
     QStringList document_paths;
     QStringList startup_errors;
@@ -4299,8 +4304,8 @@ extern "C" int moonmark_qt_run(int argc, const char* const* argv, const Moonmark
     if (smoke_mode.isEmpty() && !startup_errors.isEmpty()) {
         QTimer::singleShot(0, &window, [&window, startup_errors] {
             QMessageBox::warning(
-                &window, QStringLiteral("Moonmark could not open some files"),
-                QStringLiteral("Moonmark opens .md, .markdown, and .txt documents.\n\n%1")
+                &window, QStringLiteral("Wolfmark could not open some files"),
+                QStringLiteral("Wolfmark opens .md, .markdown, and .txt documents.\n\n%1")
                     .arg(startup_errors.join(QLatin1Char('\n'))));
         });
     }

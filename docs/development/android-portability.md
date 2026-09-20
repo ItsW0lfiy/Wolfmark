@@ -6,7 +6,7 @@ This is groundwork, not an Android release plan. No Android UI framework, Java/K
 
 The following Rust-owned layers contain no intentional Win32 or Qt UI types and are conceptually reusable:
 
-- Comrak parsing and Moonmark's Markdown compatibility preprocessing;
+- Comrak parsing and Wolfmark's Markdown compatibility preprocessing;
 - semantic Markdown nodes and conversion;
 - the framework-neutral presentation document/commands, TOC, metrics, and diagnostics;
 - syntax-language detection and highlighting policy;
@@ -14,7 +14,7 @@ The following Rust-owned layers contain no intentional Win32 or Qt UI types and 
 - theme tokens and settings values that are not tied to desktop storage;
 - the framework-neutral Normal/Maximized/BorderlessFullscreen state model (although those exact modes are desktop concepts and need not be reused by Android).
 
-This separation remains valuable: a future Android presentation can consume Moonmark semantics without importing Qt Widgets or reproducing the Markdown parser.
+This separation remains valuable: a future Android presentation can consume Wolfmark semantics without importing Qt Widgets or reproducing the Markdown parser.
 
 ## Current desktop/path coupling
 
@@ -32,7 +32,7 @@ The package `build.rs` currently supports only Windows and Linux and always buil
 
 ## Android document-access boundary
 
-Android's Storage Access Framework can grant a document through a `content://` URI that is not a normal path, may not have a stable canonical filesystem name, and may only be readable through a platform-provided descriptor/stream. Moonmark must not fake that URI as a `PathBuf`.
+Android's Storage Access Framework can grant a document through a `content://` URI that is not a normal path, may not have a stable canonical filesystem name, and may only be readable through a platform-provided descriptor/stream. Wolfmark must not fake that URI as a `PathBuf`.
 
 A later, explicitly approved experiment should introduce a small framework-neutral source boundary around concepts such as:
 

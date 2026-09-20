@@ -1,6 +1,6 @@
 # Literal-space local destinations
 
-The following references identify the same local image through Moonmark's three supported space forms.
+The following references identify the same local image through Wolfmark's three supported space forms.
 
 ![Literal spaces](images/image with spaces.png)
 
@@ -14,6 +14,6 @@ The following references identify the same local image through Moonmark's three 
 
 [Ordinary website](https://example.com)
 
-[Reference link][moonmark-reference]
+[Reference link][wolfmark-reference]
 
-[moonmark-reference]: https://example.com/reference
+[wolfmark-reference]: https://example.com/reference

@@ -9,8 +9,8 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{94F3571E-AA25-45B2-8D75-147826422679}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>MoonmarkSetup</RootNamespace>
-    <ProjectName>MoonmarkSetup</ProjectName>
+    <RootNamespace>WolfmarkSetup</RootNamespace>
+    <ProjectName>WolfmarkSetup</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -25,9 +25,9 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(MoonmarkOutputDir)\</OutDir>
-    <IntDir>$(MoonmarkIntermediateDir)\</IntDir>
-    <TargetName>MoonmarkSetup</TargetName>
+    <OutDir>$(WolfmarkOutputDir)\</OutDir>
+    <IntDir>$(WolfmarkIntermediateDir)\</IntDir>
+    <TargetName>WolfmarkSetup</TargetName>
     <RestoreProjectStyle>None</RestoreProjectStyle>
     <WixBaApiRoot Condition="'$(WixBaApiRoot)'==''">$(RestorePackagesPath)\wixtoolset.bootstrapperapplicationapi\7.0.0</WixBaApiRoot>
     <WixDUtilRoot Condition="'$(WixDUtilRoot)'==''">$(RestorePackagesPath)\wixtoolset.dutil\7.0.0</WixDUtilRoot>
@@ -43,7 +43,7 @@
     <ClInclude Include="src\setup_window.h" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="moonmark_setup.rc" />
+    <ResourceCompile Include="wolfmark_setup.rc" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -63,7 +63,7 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>$(MoonmarkGeneratedDir);$(ProjectRoot)\assets\icons;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(WolfmarkGeneratedDir);$(ProjectRoot)\assets\icons;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <Target Name="CheckWixLicenseAcceptance" BeforeTargets="ClCompile">

@@ -1,6 +1,6 @@
-#include "moon_title_bar.h"
+#include "wolf_title_bar.h"
 
-#include "moon_style.h"
+#include "wolf_style.h"
 
 #include <QMouseEvent>
 #include <QPainter>
@@ -11,7 +11,7 @@
 #include <windows.h>
 #endif
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 CaptionButton::CaptionButton(Action action, QWidget* parent)
     : QAbstractButton(parent), action_(action) {
@@ -67,12 +67,12 @@ void CaptionButton::paintEvent(QPaintEvent*) {
     }
 }
 
-MoonTitleBar::MoonTitleBar(QWidget* window) : QWidget(window), window_(window) {
+WolfTitleBar::WolfTitleBar(QWidget* window) : QWidget(window), window_(window) {
     setFixedHeight(style::metric::title_bar_height);
     setObjectName(QStringLiteral("titleBar"));
 }
 
-void MoonTitleBar::mousePressEvent(QMouseEvent* event) {
+void WolfTitleBar::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton && window_->windowHandle() != nullptr) {
         window_->windowHandle()->startSystemMove();
         event->accept();
@@ -95,7 +95,7 @@ void MoonTitleBar::mousePressEvent(QMouseEvent* event) {
     QWidget::mousePressEvent(event);
 }
 
-void MoonTitleBar::mouseDoubleClickEvent(QMouseEvent* event) {
+void WolfTitleBar::mouseDoubleClickEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         window_->isMaximized() ? window_->showNormal() : window_->showMaximized();
         event->accept();
@@ -104,4 +104,4 @@ void MoonTitleBar::mouseDoubleClickEvent(QMouseEvent* event) {
     QWidget::mouseDoubleClickEvent(event);
 }
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

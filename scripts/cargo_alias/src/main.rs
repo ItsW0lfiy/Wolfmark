@@ -13,7 +13,7 @@ fn project_root() -> PathBuf {
 
 fn main() -> ExitCode {
     let Some(action) = env::args().nth(1) else {
-        eprintln!("Moonmark Cargo alias action is missing.");
+        eprintln!("Wolfmark Cargo alias action is missing.");
         return ExitCode::FAILURE;
     };
     let root = project_root();
@@ -24,7 +24,7 @@ fn main() -> ExitCode {
         "clean" => ("clean.ps1", &[]),
         "deep-clean" => ("clean.ps1", &["-Deep"]),
         _ => {
-            eprintln!("Unknown Moonmark Cargo alias action: {action}");
+            eprintln!("Unknown Wolfmark Cargo alias action: {action}");
             return ExitCode::FAILURE;
         }
     };
@@ -46,11 +46,11 @@ fn main() -> ExitCode {
     match status {
         Ok(status) if status.success() => ExitCode::SUCCESS,
         Ok(status) => {
-            eprintln!("Moonmark {action} command failed with {status}.");
+            eprintln!("Wolfmark {action} command failed with {status}.");
             ExitCode::FAILURE
         }
         Err(error) => {
-            eprintln!("Could not launch PowerShell 7 for Moonmark {action}: {error}");
+            eprintln!("Could not launch PowerShell 7 for Wolfmark {action}: {error}");
             ExitCode::FAILURE
         }
     }

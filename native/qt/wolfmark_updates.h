@@ -1,6 +1,6 @@
 #pragma once
 
-#include "moonmark_api.h"
+#include "wolfmark_api.h"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -12,7 +12,7 @@
 
 class QNetworkAccessManager;
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 struct ReleaseInfo {
     QString version;
@@ -43,7 +43,7 @@ public:
     using CheckCallback = std::function<void(UpdateCheckResult)>;
     using DownloadCallback = std::function<void(UpdateDownloadResult)>;
 
-    explicit UpdateManager(const MoonmarkApiTable* api, QObject* parent = nullptr);
+    explicit UpdateManager(const WolfmarkApiTable* api, QObject* parent = nullptr);
 
     void check(bool include_prereleases, bool manual, CheckCallback callback);
     void download(const ReleaseInfo& release, bool portable, DownloadCallback callback);
@@ -64,8 +64,8 @@ private:
     void getBytes(const QUrl& url, std::function<void(bool, QByteArray, QString)> callback);
     [[nodiscard]] bool trustedDownloadUrl(const QUrl& url) const;
 
-    const MoonmarkApiTable* api_ = nullptr;
+    const WolfmarkApiTable* api_ = nullptr;
     QNetworkAccessManager* network_ = nullptr;
 };
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

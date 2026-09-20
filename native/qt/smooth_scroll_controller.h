@@ -9,7 +9,7 @@
 #include <QWidget>
 #include <functional>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 // Stateful, time-based wheel motion. Input updates the current trajectory rather
 // than restarting an easing curve. Floating-point state is retained until the
@@ -57,4 +57,4 @@ private:
     qint64 first_change_us_ = -1;
 };
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

@@ -1,10 +1,10 @@
 # UI style — New Moon, 0.1.0-dev.6
 
-Moonmark translates the approved lunar concept into native Windows controls: a near-black canvas, graphite navigation/header layers, silver text, restrained separators, and broad document width. It does not copy the illustration's macOS captions, decorative lunar scenery, or nonfunctional navigation.
+Wolfmark translates the approved lunar concept into native Windows controls: a near-black canvas, graphite navigation/header layers, silver text, restrained separators, and broad document width. It does not copy the illustration's macOS captions, decorative lunar scenery, or nonfunctional navigation.
 
 ## Shell and navigation
 
-The 236px collapsible sidebar contains real Open/Reload actions, a compact Open Documents list, and the active document's heading outline supplied by Moonmark's presentation model. Open-document entries activate retained sessions and expose a quiet close control. Outline entries navigate native document anchors by mouse or keyboard. There is no vault, folder browser, import requirement, Starred, or Archive. The sidebar collapses automatically below 1000px window width unless the user explicitly toggles it, and hides during F11. The 48px native titlebar retains Windows caption controls, a sidebar toggle, parent-directory/filename breadcrumb, compact zoom, and the secondary-actions menu. Open and the embedded symbol return to the header when the sidebar is hidden.
+The 236px collapsible sidebar contains real Open/Reload actions, a compact Open Documents list, and the active document's heading outline supplied by Wolfmark's presentation model. Open-document entries activate retained sessions and expose a quiet close control. Outline entries navigate native document anchors by mouse or keyboard. There is no vault, folder browser, import requirement, Starred, or Archive. The sidebar collapses automatically below 1000px window width unless the user explicitly toggles it, and hides during F11. The 48px native titlebar retains Windows caption controls, a sidebar toggle, parent-directory/filename breadcrumb, compact zoom, and the secondary-actions menu. Open and the embedded symbol return to the header when the sidebar is hidden.
 
 The empty state is a compact “Ready to read” prompt with Open and drag/drop guidance. Normal viewing has no permanent profiler/footer; F12 retains diagnostics. Native captions, drag, system menu, file dialog, and watcher behavior are preserved.
 

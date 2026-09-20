@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "moonmark-cargo-alias"
+name = "wolfmark-cargo-alias"
 version = "0.0.0"

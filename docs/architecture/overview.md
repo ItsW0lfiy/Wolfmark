@@ -1,12 +1,12 @@
 # Architecture
 
-Moonmark is a single native process with Cargo as its top-level workflow. Rust and C++20 are approved first-class implementation languages; subsystem ownership follows technical fit rather than a mandated language percentage.
+Wolfmark is a single native process with Cargo as its top-level workflow. Rust and C++20 are approved first-class implementation languages; subsystem ownership follows technical fit rather than a mandated language percentage.
 
 ```text
 ordinary Markdown file
   -> Rust document session and Comrak parsing
-  -> Moonmark semantic document model
-  -> Moonmark framework-neutral presentation commands
+  -> Wolfmark semantic document model
+  -> Wolfmark framework-neutral presentation commands
   -> versioned C ABI function table
   -> C++ Qt Widgets presentation adapter
   -> native QTextDocument / QTextEdit display
@@ -18,7 +18,7 @@ ordinary Markdown file
 - Comrak parsing and Markdown extension handling
 - semantic and presentation models
 - heading IDs and TOC targets
-- Syntect/two-face syntax classification and Moonmark token palette
+- Syntect/two-face syntax classification and Wolfmark token palette
 - local image canonicalization and remote-image policy
 - bounded image decode scheduling, deduplication, generation cancellation, and LRU cache
 - release metadata selection, SemVer comparison, and SHA-256 artifact verification
@@ -37,7 +37,7 @@ ordinary Markdown file
 
 ## Interoperability
 
-`src/native_api.rs` constructs a versioned table of `extern "C"` functions and calls `moonmark_qt_run`. `native/qt/moonmark_api.h` mirrors plain-layout structures for buffers, image results, and counters. Rust-owned buffers are released only through the supplied Rust callbacks. The only handwritten unsafe Rust block is the documented call across this ABI.
+`src/native_api.rs` constructs a versioned table of `extern "C"` functions and calls `wolfmark_qt_run`. `native/qt/wolfmark_api.h` mirrors plain-layout structures for buffers, image results, and counters. Rust-owned buffers are released only through the supplied Rust callbacks. The only handwritten unsafe Rust block is the documented call across this ABI.
 
 This narrow C ABI was selected over CXX-Qt because the existing framework-neutral presentation model already serializes cleanly, the ABI keeps ownership explicit, it avoids generated framework glue, and it preserves one process with Cargo in control. JSON is used only as an in-process presentation-data encoding; it is not a network or browser protocol.
 
@@ -49,7 +49,7 @@ The desktop window owns an ordered set of open-document sessions. Each session h
 
 Markdown sessions follow the normal Comrak semantic path. `.txt` sessions are explicitly tagged `plainText` by the Rust presentation contract and carry exact source text; they do not create a Comrak AST, Markdown commands, TOC entries, links, or image requests.
 
-`native/qt/moon_style.*` owns the New Moon palette, dimensions, and Qt interaction-state styling. `native/qt/moon_title_bar.*` owns native-painted caption controls plus title-bar move, double-click, and system-menu behavior. Markdown construction remains in the presentation adapter and does not depend on either component.
+`native/qt/wolf_style.*` owns the New Moon palette, dimensions, and Qt interaction-state styling. `native/qt/wolf_title_bar.*` owns native-painted caption controls plus title-bar move, double-click, and system-menu behavior. Markdown construction remains in the presentation adapter and does not depend on either component.
 
 Windows is primary. Shared Rust logic and most Qt Widgets code are portable; Win32 message handling is confined to the Qt adapter's guarded Windows sections. The Linux build path uses `pkg-config` for Qt6Widgets discovery, but compilation and behavior still require physical validation.
 

@@ -6,8 +6,8 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-pub const INSTALLER_ASSET: &str = "Moonmark-Setup-win-x64.exe";
-pub const PORTABLE_ASSET: &str = "Moonmark-portable-win-x64.zip";
+pub const INSTALLER_ASSET: &str = "Wolfmark-Setup-win-x64.exe";
+pub const PORTABLE_ASSET: &str = "Wolfmark-portable-win-x64.zip";
 pub const CHECKSUM_ASSET: &str = "SHA256SUMS.txt";
 
 #[derive(Debug, Deserialize)]
@@ -47,7 +47,7 @@ pub fn select_release(
     include_prereleases: bool,
 ) -> Result<Option<SelectedRelease>, String> {
     let current = Version::parse(current_version)
-        .map_err(|error| format!("Moonmark's current version is invalid: {error}"))?;
+        .map_err(|error| format!("Wolfmark's current version is invalid: {error}"))?;
     let releases: Vec<GitHubRelease> = serde_json::from_slice(releases_json)
         .map_err(|error| format!("GitHub returned malformed release metadata: {error}"))?;
 
@@ -265,14 +265,14 @@ mod tests {
     #[test]
     fn checksum_manifest_requires_exact_asset_and_hash() {
         let root =
-            std::env::temp_dir().join(format!("moonmark-update-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("wolfmark-update-test-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join(INSTALLER_ASSET);
-        std::fs::write(&file, b"moonmark").unwrap();
-        let good = b"cf0b31f6851715693cce86e1835ab18284948cc9faa36ded47e22632c3cf8e4b *Moonmark-Setup-win-x64.exe\n";
+        std::fs::write(&file, b"wolfmark").unwrap();
+        let good = b"a0e36022b25c053fc72dbf43ebf04c188a42a15b57d24f53fe8f84ab9f7835a4 *Wolfmark-Setup-win-x64.exe\n";
         verify_file_checksum(&file, good, INSTALLER_ASSET).unwrap();
         assert!(verify_file_checksum(&file, good, PORTABLE_ASSET).is_err());
-        let bad = b"0000000000000000000000000000000000000000000000000000000000000000 *Moonmark-Setup-win-x64.exe\n";
+        let bad = b"0000000000000000000000000000000000000000000000000000000000000000 *Wolfmark-Setup-win-x64.exe\n";
         assert!(verify_file_checksum(&file, bad, INSTALLER_ASSET).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }

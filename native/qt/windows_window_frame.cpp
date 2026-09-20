@@ -1,6 +1,6 @@
 #include "windows_window_frame.h"
 
-#include "moon_title_bar.h"
+#include "wolf_title_bar.h"
 
 #include <QAbstractButton>
 #include <QWidget>
@@ -17,7 +17,7 @@
 #pragma comment(lib, "dwmapi.lib")
 #endif
 
-namespace moonmark::qt::windows {
+namespace wolfmark::qt::windows {
 namespace {
 
 [[nodiscard]] bool contains(QWidget* window, QWidget* child, const QPoint& point) {
@@ -269,4 +269,4 @@ bool handleNativeFrameEvent(QWidget* window, QWidget* title_bar,
 #endif
 }
 
-} // namespace moonmark::qt::windows
+} // namespace wolfmark::qt::windows

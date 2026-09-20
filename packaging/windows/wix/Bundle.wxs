@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
   <Bundle
-      Name="Moonmark"
+      Name="Wolfmark"
       Manufacturer="ItsW0lfiy"
       Version="$(BundleVersion)"
-      UpgradeCode="{B33F6F20-A568-4F07-9732-32ABD5DE69AE}"
-      IconSourceFile="$(ProjectRoot)\assets\icons\moonmark.ico"
+      UpgradeCode="{84457DCA-5666-4684-92DF-9E7677C285FD}"
+      IconSourceFile="$(ProjectRoot)\assets\icons\wolfmark.ico"
       Compressed="yes">
 
     <BootstrapperApplication SourceFile="$(BootstrapperExe)">
       <Payloads Include="!(bindpath.Bootstrapper)\**" />
     </BootstrapperApplication>
 
-    <Variable Name="MoonmarkInstallFolder" Type="string" Value="[ProgramFiles64Folder]Moonmark" />
-    <Variable Name="MoonmarkDisplayVersion" Type="string" Value="$(DisplayVersion)" />
-    <Variable Name="MoonmarkFileAssociations" Type="numeric" Value="1" />
-    <Variable Name="MoonmarkDesktopShortcut" Type="numeric" Value="0" />
+    <Variable Name="WolfmarkInstallFolder" Type="string" Value="[ProgramFiles64Folder]Wolfmark" />
+    <Variable Name="WolfmarkDisplayVersion" Type="string" Value="$(DisplayVersion)" />
+    <Variable Name="WolfmarkFileAssociations" Type="numeric" Value="1" />
+    <Variable Name="WolfmarkDesktopShortcut" Type="numeric" Value="0" />
 
     <Chain>
-      <MsiPackage Id="MoonmarkMsi" SourceFile="$(MsiPath)" Visible="no" Vital="yes" ForcePerMachine="yes">
-        <MsiProperty Name="INSTALLFOLDER" Value="[MoonmarkInstallFolder]" />
-        <MsiProperty Name="MOONMARK_FILE_ASSOC" Value="[MoonmarkFileAssociations]" />
-        <MsiProperty Name="MOONMARK_DESKTOP_SHORTCUT" Value="[MoonmarkDesktopShortcut]" />
+      <MsiPackage Id="WolfmarkMsi" SourceFile="$(MsiPath)" Visible="no" Vital="yes" ForcePerMachine="yes">
+        <MsiProperty Name="INSTALLFOLDER" Value="[WolfmarkInstallFolder]" />
+        <MsiProperty Name="WOLFMARK_FILE_ASSOC" Value="[WolfmarkFileAssociations]" />
+        <MsiProperty Name="WOLFMARK_DESKTOP_SHORTCUT" Value="[WolfmarkDesktopShortcut]" />
       </MsiPackage>
     </Chain>
   </Bundle>

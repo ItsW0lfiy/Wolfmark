@@ -6,7 +6,7 @@
 #include <QTextTable>
 #include <vector>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 // Immutable 100% presentation metrics; positions stay valid in the read-only document.
 class DocumentZoom {
@@ -29,4 +29,4 @@ private:
     std::vector<Cell> cells_;
 };
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

@@ -38,7 +38,7 @@ pub fn highlight_code(language: &str, source: &str) -> Vec<CodeSpan> {
     }
 
     let syntax_set = syntax_set();
-    let mut highlighter = HighlightLines::new(syntax, moonmark_theme());
+    let mut highlighter = HighlightLines::new(syntax, wolfmark_theme());
     let mut output = Vec::new();
     for line in source.split_inclusive('\n') {
         let Ok(ranges) = highlighter.highlight_line(line, syntax_set) else {
@@ -100,11 +100,11 @@ fn language_tokens(language: &str) -> &'static [&'static str] {
     }
 }
 
-fn moonmark_theme() -> &'static Theme {
+fn wolfmark_theme() -> &'static Theme {
     static THEME: OnceLock<Theme> = OnceLock::new();
     THEME.get_or_init(|| Theme {
-        name: Some("Moonmark Code".into()),
-        author: Some("Moonmark".into()),
+        name: Some("Wolfmark Code".into()),
+        author: Some("Wolfmark".into()),
         settings: ThemeSettings {
             foreground: Some(PLAIN),
             background: Some(BACKGROUND),
@@ -160,7 +160,7 @@ fn moonmark_theme() -> &'static Theme {
 
 fn theme_item(selector: &str, foreground: Color, font_style: FontStyle) -> ThemeItem {
     ThemeItem {
-        scope: ScopeSelectors::from_str(selector).expect("static Moonmark scope selector"),
+        scope: ScopeSelectors::from_str(selector).expect("static Wolfmark scope selector"),
         style: StyleModifier {
             foreground: Some(foreground),
             background: None,
@@ -230,7 +230,7 @@ mod tests {
         let fixtures = [
             (
                 "rust",
-                "fn main() { let value = \"Moonmark\"; println!(\"{value}\"); }",
+                "fn main() { let value = \"Wolfmark\"; println!(\"{value}\"); }",
             ),
             ("json", "{\"ready\": true, \"count\": 3}"),
             (
@@ -239,7 +239,7 @@ mod tests {
             ),
             (
                 "powershell",
-                "$name = \"Moonmark\"\nWrite-Output -InputObject $name # quiet",
+                "$name = \"Wolfmark\"\nWrite-Output -InputObject $name # quiet",
             ),
         ];
         for (language, source) in fixtures {

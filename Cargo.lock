@@ -556,26 +556,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moonmark"
-version = "0.1.0-dev.7"
-dependencies = [
- "cc",
- "comrak",
- "crossbeam-channel",
- "image",
- "percent-encoding",
- "pkg-config",
- "rayon",
- "resvg",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "two-face",
- "url",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1235,6 +1215,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "wolfmark"
+version = "0.1.0-dev.7"
+dependencies = [
+ "cc",
+ "comrak",
+ "crossbeam-channel",
+ "image",
+ "percent-encoding",
+ "pkg-config",
+ "rayon",
+ "resvg",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "two-face",
+ "url",
 ]
 
 [[package]]

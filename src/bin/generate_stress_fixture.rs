@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "images/large-4096.png",
     ];
     let mut markdown = String::from(
-        "# Moonmark 250-image stress fixture\n\nGenerated deterministically. Images intentionally repeat to exercise decode deduplication.\n\n",
+        "# Wolfmark 250-image stress fixture\n\nGenerated deterministically. Images intentionally repeat to exercise decode deduplication.\n\n",
     );
     for group in 0..25 {
         writeln!(markdown, "## Image group {}\n", group + 1)?;
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         markdown.push_str("- compact list item\n  - nested list item\n\n");
         markdown.push_str("| Group | State |\n|---:|:---|\n");
         writeln!(markdown, "| {} | generated |\n", group + 1)?;
-        markdown.push_str("```rust\nlet renderer = \"Moonmark\";\n```\n\n");
+        markdown.push_str("```rust\nlet renderer = \"Wolfmark\";\n```\n\n");
         for item in 0..10 {
             let reference = references[(group * 10 + item) % references.len()];
             writeln!(
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     std::fs::write(root.join("image-stress.md"), markdown)?;
 
-    let mut large_text = String::from("# Moonmark 10,000-block fixture\n\n");
+    let mut large_text = String::from("# Wolfmark 10,000-block fixture\n\n");
     for index in 0..10_000 {
         writeln!(
             large_text,

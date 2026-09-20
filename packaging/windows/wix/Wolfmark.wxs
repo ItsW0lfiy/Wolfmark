@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
+  <Package
+      Name="Wolfmark"
+      Manufacturer="ItsW0lfiy"
+      Version="$(MsiVersion)"
+      UpgradeCode="{24F5627C-0519-4BC3-9C73-4DEBD580BA11}"
+      ProductCode="*"
+      Scope="perMachine"
+      InstallerVersion="500"
+      Compressed="yes">
+
+    <SummaryInformation Description="Wolfmark native Markdown viewer" Manufacturer="ItsW0lfiy" />
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of Wolfmark is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch
+          Id="WolfmarkInstallFolderSearch"
+          Root="HKLM"
+          Key="Software\ItsW0lfiy\Wolfmark\Installer"
+          Name="InstallDir"
+          Type="raw"
+          Bitness="always64" />
+    </Property>
+    <Property Id="WOLFMARK_FILE_ASSOC" Value="1" Secure="yes" />
+    <Property Id="WOLFMARK_DESKTOP_SHORTCUT" Value="0" Secure="yes" />
+    <Property Id="ARPPRODUCTICON" Value="WolfmarkProductIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ItsW0lfiy/Moonmark/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ItsW0lfiy/Moonmark" />
+    <Property Id="ARPCOMMENTS" Value="Native Markdown and text document viewer" />
+
+    <Icon Id="WolfmarkProductIcon" SourceFile="$(ProjectRoot)\assets\icons\wolfmark.ico" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Wolfmark">
+        <Files Include="!(bindpath.Payload)\**" />
+
+        <Component Id="InstallerRegistration" Guid="{58789CDA-72F7-4217-B455-C3D9B42459C9}" Bitness="always64">
+          <RegistryValue
+              Root="HKLM"
+              Key="Software\ItsW0lfiy\Wolfmark\Installer"
+              Name="InstallDir"
+              Type="string"
+              Value="[INSTALLFOLDER]"
+              KeyPath="yes" />
+          <RegistryValue
+              Root="HKLM"
+              Key="Software\ItsW0lfiy\Wolfmark\Installer"
+              Name="Version"
+              Type="string"
+              Value="$(DisplayVersion)" />
+        </Component>
+
+        <Component
+            Id="FileAssociations"
+            Guid="{4A7A64C9-F7B5-4C91-95F4-80EB99D55932}"
+            Bitness="always64"
+            Condition="WOLFMARK_FILE_ASSOC = 1"
+            Transitive="yes">
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Installer" Name="FileAssociations" Type="integer" Value="1" KeyPath="yes" />
+          <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="Wolfmark" Type="string" Value="Software\ItsW0lfiy\Wolfmark\Capabilities" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities" Name="ApplicationName" Type="string" Value="Wolfmark" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities" Name="ApplicationDescription" Type="string" Value="Native Markdown and text document viewer" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities" Name="ApplicationIcon" Type="string" Value="[INSTALLFOLDER]Wolfmark.exe,0" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities\FileAssociations" Name=".md" Type="string" Value="Wolfmark.MarkdownDocument" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities\FileAssociations" Name=".markdown" Type="string" Value="Wolfmark.MarkdownDocument" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Capabilities\FileAssociations" Name=".txt" Type="string" Value="Wolfmark.TextDocument" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.MarkdownDocument" Type="string" Value="Wolfmark Markdown Document" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.MarkdownDocument\DefaultIcon" Type="string" Value="[INSTALLFOLDER]assets\icons\wolfmark-markdown.ico" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.MarkdownDocument\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Wolfmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.TextDocument" Type="string" Value="Wolfmark Text Document" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.TextDocument\DefaultIcon" Type="string" Value="[INSTALLFOLDER]assets\icons\wolfmark-text.ico" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Wolfmark.TextDocument\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Wolfmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe" Name="FriendlyAppName" Type="string" Value="Wolfmark" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Wolfmark.exe,0" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Wolfmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe\SupportedTypes" Name=".md" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe\SupportedTypes" Name=".markdown" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Wolfmark.exe\SupportedTypes" Name=".txt" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.md\OpenWithProgids" Name="Wolfmark.MarkdownDocument" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.markdown\OpenWithProgids" Name="Wolfmark.MarkdownDocument" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.txt\OpenWithProgids" Name="Wolfmark.TextDocument" Type="string" Value="" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="WolfmarkProgramMenuFolder" Name="Wolfmark">
+        <Component Id="StartMenuShortcut" Guid="{BAA22E72-12BE-47A2-B9A0-12CB39912E66}">
+          <Shortcut Id="WolfmarkStartMenuShortcut" Name="Wolfmark" Target="[INSTALLFOLDER]Wolfmark.exe" WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveWolfmarkProgramMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Installer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component
+          Id="DesktopShortcut"
+          Guid="{8216DCE1-E15B-43ED-AC4E-E90153D00EEE}"
+          Condition="WOLFMARK_DESKTOP_SHORTCUT = 1"
+          Transitive="yes">
+        <Shortcut Id="WolfmarkDesktopShortcut" Name="Wolfmark" Target="[INSTALLFOLDER]Wolfmark.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Wolfmark\Installer" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

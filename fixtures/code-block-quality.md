@@ -5,7 +5,7 @@ continuous graphite containment.
 
 ```rust
 fn main() {
-    let message = "Moonmark";
+    let message = "Wolfmark";
 
     if !message.is_empty() {
         println!("{message}");

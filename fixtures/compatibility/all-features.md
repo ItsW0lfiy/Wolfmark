@@ -1,9 +1,9 @@
 ---
 fixture: compatibility
-title: Moonmark compatibility
+title: Wolfmark compatibility
 ---
 
-# Moonmark compatibility fixture
+# Wolfmark compatibility fixture
 
 Plain paragraph with a  
 hard break and a soft
@@ -29,7 +29,7 @@ line break.
 
 ```rust
 fn main() {
-    println!("Moonmark");
+    println!("Wolfmark");
 }
 ```
 

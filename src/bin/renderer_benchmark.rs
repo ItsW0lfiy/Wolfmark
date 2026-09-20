@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::time::Instant;
 
-use moonmark::presentation::PresentationMetrics;
-use moonmark::settings::Settings;
+use wolfmark::presentation::PresentationMetrics;
+use wolfmark::settings::Settings;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
@@ -12,10 +12,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let document_path = Path::new(&path);
     let settings = Settings::default();
     let cold_started = Instant::now();
-    let cold_model = moonmark::markdown::parse(&source);
+    let cold_model = wolfmark::markdown::parse(&source);
     let cold_parse_ms = cold_started.elapsed().as_secs_f64() * 1000.0;
     let cold_render_started = Instant::now();
-    let _ = moonmark::markdown::to_presentation(
+    let _ = wolfmark::markdown::to_presentation(
         &cold_model,
         document_path,
         PresentationMetrics {
@@ -31,11 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut blocks = 0;
     for _ in 0..20 {
         let started = Instant::now();
-        let model = moonmark::markdown::parse(&source);
+        let model = wolfmark::markdown::parse(&source);
         blocks = model.blocks.len();
         parse_timings.push(started.elapsed().as_secs_f64() * 1000.0);
         let render_started = Instant::now();
-        let _ = moonmark::markdown::to_presentation(
+        let _ = wolfmark::markdown::to_presentation(
             &model,
             document_path,
             PresentationMetrics {
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     parse_timings.sort_by(f64::total_cmp);
     render_timings.sort_by(f64::total_cmp);
-    println!("Moonmark Rust semantic benchmark");
+    println!("Wolfmark Rust semantic benchmark");
     println!(
         "source_bytes={} top_level_blocks={} runs=20",
         source.len(),

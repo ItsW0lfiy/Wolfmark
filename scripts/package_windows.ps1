@@ -14,28 +14,28 @@ function Assert-UnderOut([string]$Path) {
     $fullPath = [IO.Path]::GetFullPath($Path)
     $prefix = $outRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     if (-not $fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to modify a path outside Moonmark's out directory: $fullPath"
+        throw "Refusing to modify a path outside Wolfmark's out directory: $fullPath"
     }
     return $fullPath
 }
 
-function Get-MoonmarkVersion {
+function Get-WolfmarkVersion {
     $metadata = (& cargo metadata --format-version 1 --no-deps) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'cargo metadata failed.' }
     $manifestPath = [IO.Path]::GetFullPath((Join-Path $projectRoot 'Cargo.toml'))
     $package = $metadata.packages | Where-Object {
         [IO.Path]::GetFullPath($_.manifest_path) -eq $manifestPath
     } | Select-Object -First 1
-    if (-not $package) { throw 'Moonmark package metadata was not found.' }
+    if (-not $package) { throw 'Wolfmark package metadata was not found.' }
     return $package.version
 }
 
 function Get-WindowsVersions([string]$Version) {
     if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$') {
-        throw "Moonmark version '$Version' cannot be represented as a Windows installer version."
+        throw "Wolfmark version '$Version' cannot be represented as a Windows installer version."
     }
     $build = ([int]$Matches[3] * 1000) + $(if ($Matches[4]) { [int]$Matches[4] } else { 999 })
-    if ($build -gt 65535) { throw "Moonmark version '$Version' exceeds Windows Installer version limits." }
+    if ($build -gt 65535) { throw "Wolfmark version '$Version' exceeds Windows Installer version limits." }
     return [pscustomobject]@{
         Msi = "$($Matches[1]).$($Matches[2]).$build"
         Bundle = "$($Matches[1]).$($Matches[2]).$build.0"
@@ -44,7 +44,7 @@ function Get-WindowsVersions([string]$Version) {
 }
 
 function Find-Wix {
-    $candidates = @($WixExecutable, $env:MOONMARK_WIX)
+    $candidates = @($WixExecutable, $env:WOLFMARK_WIX)
     $candidates += Join-Path $outRoot 'toolchains/wix/wix.exe'
     $command = Get-Command wix.exe -ErrorAction SilentlyContinue
     if ($command) { $candidates += $command.Source }
@@ -53,7 +53,7 @@ function Find-Wix {
     $selected = [IO.Path]::GetFullPath($selected)
     $reported = (& $selected --version).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $reported.StartsWith('7.0.0', [StringComparison]::Ordinal)) {
-        throw "Moonmark requires WiX Toolset 7.0.0; $selected reported '$reported'."
+        throw "Wolfmark requires WiX Toolset 7.0.0; $selected reported '$reported'."
     }
     return $selected
 }
@@ -117,36 +117,36 @@ function Copy-RequiredFile([string]$Source, [string]$Destination) {
 
 Push-Location $projectRoot
 try {
-    $version = Get-MoonmarkVersion
+    $version = Get-WolfmarkVersion
     $windowsVersion = Get-WindowsVersions $version
-    if (-not $QtRoot) { $QtRoot = if ($env:MOONMARK_QT_DIR) { $env:MOONMARK_QT_DIR } else { Join-Path $outRoot 'toolchains/qt' } }
+    if (-not $QtRoot) { $QtRoot = if ($env:WOLFMARK_QT_DIR) { $env:WOLFMARK_QT_DIR } else { Join-Path $outRoot 'toolchains/qt' } }
     $QtRoot = [IO.Path]::GetFullPath($QtRoot)
     if (-not $OutputDirectory) { $OutputDirectory = Join-Path $outRoot "release/$version" }
     $OutputDirectory = Assert-UnderOut $OutputDirectory
-    $packageRoot = Assert-UnderOut (Join-Path $outRoot "package/staging/$version/Moonmark")
-    $zipPath = Join-Path $OutputDirectory 'Moonmark-portable-win-x64.zip'
-    $msiPath = Join-Path $OutputDirectory 'Moonmark-win-x64.msi'
-    $setupPath = Join-Path $OutputDirectory 'Moonmark-Setup-win-x64.exe'
+    $packageRoot = Assert-UnderOut (Join-Path $outRoot "package/staging/$version/Wolfmark")
+    $zipPath = Join-Path $OutputDirectory 'Wolfmark-portable-win-x64.zip'
+    $msiPath = Join-Path $OutputDirectory 'Wolfmark-win-x64.msi'
+    $setupPath = Join-Path $OutputDirectory 'Wolfmark-Setup-win-x64.exe'
     $checksumPath = Join-Path $OutputDirectory 'SHA256SUMS.txt'
     $visualStudio = Find-VisualStudio
     $redist = Find-VcRedistDirectory $visualStudio
     New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
-    foreach ($name in 'Moonmark-Setup-win-x64.exe', 'Moonmark-Setup-win-x64.wixpdb', 'Moonmark-win-x64.msi', 'Moonmark-win-x64.wixpdb', 'Moonmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
+    foreach ($name in 'Wolfmark-Setup-win-x64.exe', 'Wolfmark-Setup-win-x64.wixpdb', 'Wolfmark-win-x64.msi', 'Wolfmark-win-x64.wixpdb', 'Wolfmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
         $stale = Join-Path $OutputDirectory $name
         if (Test-Path -LiteralPath $stale) { Remove-Item -Force -LiteralPath $stale }
     }
 
     & cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw 'Moonmark release build failed.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Wolfmark release build failed.' }
 
     if (Test-Path -LiteralPath $packageRoot) { Remove-Item -Recurse -Force -LiteralPath $packageRoot }
     New-Item -ItemType Directory -Force (Join-Path $packageRoot 'platforms'), (Join-Path $packageRoot 'assets/branding'), (Join-Path $packageRoot 'assets/icons'), (Join-Path $packageRoot 'licenses'), $OutputDirectory | Out-Null
-    Copy-RequiredFile 'out/cargo/release/moonmark.exe' (Join-Path $packageRoot 'Moonmark.exe')
+    Copy-RequiredFile 'out/cargo/release/wolfmark.exe' (Join-Path $packageRoot 'Wolfmark.exe')
     foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $packageRoot }
     Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $packageRoot 'platforms')
-    Copy-RequiredFile 'assets/branding/moonmark-symbol.png' (Join-Path $packageRoot 'assets/branding')
-    Copy-RequiredFile 'assets/icons/moonmark-markdown.ico' (Join-Path $packageRoot 'assets/icons')
-    Copy-RequiredFile 'assets/icons/moonmark-text.ico' (Join-Path $packageRoot 'assets/icons')
+    Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' (Join-Path $packageRoot 'assets/branding')
+    Copy-RequiredFile 'assets/icons/wolfmark-markdown.ico' (Join-Path $packageRoot 'assets/icons')
+    Copy-RequiredFile 'assets/icons/wolfmark-text.ico' (Join-Path $packageRoot 'assets/icons')
     Copy-RequiredFile 'assets/deployment/qt.conf' (Join-Path $packageRoot 'qt.conf')
     Copy-RequiredFile 'THIRD_PARTY_NOTICES.txt' $packageRoot
     Copy-RequiredFile 'LICENSE' $packageRoot
@@ -158,8 +158,8 @@ try {
     $savedPath = $env:PATH
     try {
         $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-        $smoke = Start-Process -FilePath (Join-Path $packageRoot 'Moonmark.exe') -ArgumentList '--smoke-icon' -WorkingDirectory $packageRoot -Wait -PassThru -WindowStyle Hidden
-        if ($smoke.ExitCode -ne 0) { throw "Packaged Moonmark smoke test failed with exit code $($smoke.ExitCode)." }
+        $smoke = Start-Process -FilePath (Join-Path $packageRoot 'Wolfmark.exe') -ArgumentList '--smoke-icon' -WorkingDirectory $packageRoot -Wait -PassThru -WindowStyle Hidden
+        if ($smoke.ExitCode -ne 0) { throw "Packaged Wolfmark smoke test failed with exit code $($smoke.ExitCode)." }
     } finally { $env:PATH = $savedPath }
 
     $artifacts = @()
@@ -177,17 +177,17 @@ try {
         if (Test-Path -LiteralPath $baPayload) { Remove-Item -Recurse -Force -LiteralPath $baPayload }
         $generated = Join-Path $baBuild 'generated'
         New-Item -ItemType Directory -Force $generated, (Join-Path $baPayload 'platforms') | Out-Null
-        Set-Content -LiteralPath (Join-Path $generated 'moonmark_setup_version.h') -Encoding ascii -Value @(
-            "#define MOONMARK_SETUP_VERSION_COMMAS $($windowsVersion.Resource)",
-            "#define MOONMARK_SETUP_VERSION_STRING `"$version`""
+        Set-Content -LiteralPath (Join-Path $generated 'wolfmark_setup_version.h') -Encoding ascii -Value @(
+            "#define WOLFMARK_SETUP_VERSION_COMMAS $($windowsVersion.Resource)",
+            "#define WOLFMARK_SETUP_VERSION_STRING `"$version`""
         )
         Invoke-MsBuild $msbuild @(
-            'packaging\windows\bootstrapper\MoonmarkSetup.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
-            "/p:QtRoot=$QtRoot", "/p:ProjectRoot=$projectRoot", "/p:MoonmarkOutputDir=$(Join-Path $baBuild 'bin')",
-            "/p:MoonmarkIntermediateDir=$(Join-Path $baBuild 'obj')", "/p:MoonmarkGeneratedDir=$generated",
+            'packaging\windows\bootstrapper\WolfmarkSetup.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
+            "/p:QtRoot=$QtRoot", "/p:ProjectRoot=$projectRoot", "/p:WolfmarkOutputDir=$(Join-Path $baBuild 'bin')",
+            "/p:WolfmarkIntermediateDir=$(Join-Path $baBuild 'obj')", "/p:WolfmarkGeneratedDir=$generated",
             "/p:RestorePackagesPath=$nugetPackages", '/p:AcceptEula=wix7', '/m:1', '/nr:false', '/v:minimal'
         )
-        $bootstrapperExe = Join-Path $baBuild 'bin/MoonmarkSetup.exe'
+        $bootstrapperExe = Join-Path $baBuild 'bin/WolfmarkSetup.exe'
         if (-not (Test-Path -LiteralPath $bootstrapperExe -PathType Leaf)) { throw "Native bootstrapper is missing: $bootstrapperExe" }
         foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $baPayload }
         Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $baPayload 'platforms')
@@ -198,12 +198,12 @@ try {
         $msiBuild = Join-Path $wixRoot 'msi'
         $bundleBuild = Join-Path $wixRoot 'bundle'
         New-Item -ItemType Directory -Force $msiBuild, $bundleBuild | Out-Null
-        $builtMsi = Join-Path $msiBuild 'Moonmark-win-x64.msi'
-        $builtSetup = Join-Path $bundleBuild 'Moonmark-Setup-win-x64.exe'
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Moonmark.wxs' -o $builtMsi
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtMsi -PathType Leaf)) { throw 'Moonmark MSI compilation failed.' }
+        $builtMsi = Join-Path $msiBuild 'Wolfmark-win-x64.msi'
+        $builtSetup = Join-Path $bundleBuild 'Wolfmark-Setup-win-x64.exe'
+        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtMsi -PathType Leaf)) { throw 'Wolfmark MSI compilation failed.' }
         & $wix build -acceptEula wix7 -arch x64 -bindpath "Bootstrapper=$baPayload" -d "BundleVersion=$($windowsVersion.Bundle)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -d "MsiPath=$builtMsi" -d "BootstrapperExe=$bootstrapperExe" -intermediatefolder (Join-Path $bundleBuild 'obj') 'packaging/windows/wix/Bundle.wxs' -o $builtSetup
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtSetup -PathType Leaf)) { throw 'Moonmark setup bundle compilation failed.' }
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtSetup -PathType Leaf)) { throw 'Wolfmark setup bundle compilation failed.' }
         Copy-Item -LiteralPath $builtMsi -Destination $msiPath
         Copy-Item -LiteralPath $builtSetup -Destination $setupPath
         $artifacts += $setupPath, $msiPath

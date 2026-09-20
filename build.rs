@@ -13,41 +13,41 @@ fn main() {
     } else if target_os == "linux" {
         compile_qt_bridge_linux(&manifest);
     } else {
-        panic!("Moonmark's Qt desktop build currently supports Windows and Linux targets");
+        panic!("Wolfmark's Qt desktop build currently supports Windows and Linux targets");
     }
 
     for file in [
-        "native/qt/moonmark_api.h",
-        "native/qt/moonmark_qt.h",
-        "native/qt/moonmark_qt.cpp",
-        "native/qt/moonmark_settings.h",
-        "native/qt/moonmark_settings.cpp",
-        "native/qt/moonmark_updates.h",
-        "native/qt/moonmark_updates.cpp",
-        "native/qt/moon_style.h",
-        "native/qt/moon_style.cpp",
+        "native/qt/wolfmark_api.h",
+        "native/qt/wolfmark_qt.h",
+        "native/qt/wolfmark_qt.cpp",
+        "native/qt/wolfmark_settings.h",
+        "native/qt/wolfmark_settings.cpp",
+        "native/qt/wolfmark_updates.h",
+        "native/qt/wolfmark_updates.cpp",
+        "native/qt/wolf_style.h",
+        "native/qt/wolf_style.cpp",
         "native/qt/document_zoom.h",
         "native/qt/document_zoom.cpp",
         "native/qt/document_sidebar.h",
         "native/qt/document_sidebar.cpp",
         "native/qt/smooth_scroll_controller.h",
         "native/qt/smooth_scroll_controller.cpp",
-        "native/qt/moon_title_bar.h",
-        "native/qt/moon_title_bar.cpp",
+        "native/qt/wolf_title_bar.h",
+        "native/qt/wolf_title_bar.cpp",
         "native/qt/windows_window_frame.h",
         "native/qt/windows_window_frame.cpp",
-        "assets/icons/moonmark.rc",
-        "assets/icons/moonmark.ico",
+        "assets/icons/wolfmark.rc",
+        "assets/icons/wolfmark.ico",
     ] {
         println!("cargo:rerun-if-changed={file}");
     }
-    println!("cargo:rerun-if-env-changed=MOONMARK_QT_DIR");
+    println!("cargo:rerun-if-env-changed=WOLFMARK_QT_DIR");
     println!("cargo:rerun-if-env-changed=QTDIR");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
 }
 
 fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
-    for variable in ["MOONMARK_QT_DIR", "QTDIR"] {
+    for variable in ["WOLFMARK_QT_DIR", "QTDIR"] {
         if let Some(value) = std::env::var_os(variable) {
             let candidate = PathBuf::from(value);
             if qt_is_usable(&candidate) {
@@ -74,7 +74,7 @@ fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    Err("Qt 6.11.2 or another compatible Qt 6 Widgets SDK was not found. Set MOONMARK_QT_DIR or QTDIR, or run scripts/bootstrap_qt.ps1 on Windows.".into())
+    Err("Qt 6.11.2 or another compatible Qt 6 Widgets SDK was not found. Set WOLFMARK_QT_DIR or QTDIR, or run scripts/bootstrap_qt.ps1 on Windows.".into())
 }
 
 fn qt_is_usable(path: &Path) -> bool {
@@ -95,17 +95,17 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
     build
         .cpp(true)
         .std("c++20")
-        .file(manifest.join("native/qt/moonmark_qt.cpp"))
-        .file(manifest.join("native/qt/moonmark_settings.cpp"))
-        .file(manifest.join("native/qt/moonmark_updates.cpp"))
-        .file(manifest.join("native/qt/moon_style.cpp"))
+        .file(manifest.join("native/qt/wolfmark_qt.cpp"))
+        .file(manifest.join("native/qt/wolfmark_settings.cpp"))
+        .file(manifest.join("native/qt/wolfmark_updates.cpp"))
+        .file(manifest.join("native/qt/wolf_style.cpp"))
         .file(manifest.join("native/qt/document_zoom.cpp"))
         .file(manifest.join("native/qt/document_sidebar.cpp"))
         .file(manifest.join("native/qt/smooth_scroll_controller.cpp"))
-        .file(manifest.join("native/qt/moon_title_bar.cpp"))
+        .file(manifest.join("native/qt/wolf_title_bar.cpp"))
         .file(manifest.join("native/qt/windows_window_frame.cpp"))
         .include(manifest.join("native/qt"))
-        .define("MOONMARK_PRODUCT_VERSION", product_version.as_str())
+        .define("WOLFMARK_PRODUCT_VERSION", product_version.as_str())
         .warnings(true);
     build
 }
@@ -124,7 +124,7 @@ fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {
         .flag("/utf-8")
         .flag("/wd4996")
         .flag("/W4");
-    build.compile("moonmark_qt");
+    build.compile("wolfmark_qt");
 
     println!(
         "cargo:rustc-link-search=native={}",
@@ -162,7 +162,7 @@ fn compile_qt_bridge_linux(manifest: &Path) {
     for (name, value) in qt.defines {
         build.define(&name, value.as_deref());
     }
-    build.compile("moonmark_qt");
+    build.compile("wolfmark_qt");
 }
 
 fn profile_output_dir() -> PathBuf {
@@ -193,7 +193,7 @@ fn stage_windows_runtime(qt: &Path) {
 
 fn stage_application_assets(manifest: &Path) {
     let output = profile_output_dir();
-    let relative = "assets/branding/moonmark-symbol.png";
+    let relative = "assets/branding/wolfmark-symbol.png";
     copy_if_changed(&manifest.join(relative), &output.join(relative));
 }
 
@@ -234,28 +234,28 @@ fn compile_windows_resources() {
         return;
     };
     let output_dir = PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
-    let output = output_dir.join("moonmark.res");
+    let output = output_dir.join("wolfmark.res");
     let package_version = std::env::var("CARGO_PKG_VERSION").expect("Cargo package version");
     let numeric_version = windows_numeric_version(&package_version);
     let version_header = format!(
-        "#define MOONMARK_VERSION_COMMAS {},{},{},{}\n#define MOONMARK_VERSION_STRING \"{}\"\n",
+        "#define WOLFMARK_VERSION_COMMAS {},{},{},{}\n#define WOLFMARK_VERSION_STRING \"{}\"\n",
         numeric_version[0],
         numeric_version[1],
         numeric_version[2],
         numeric_version[3],
         package_version
     );
-    std::fs::write(output_dir.join("moonmark_version.h"), version_header)
+    std::fs::write(output_dir.join("wolfmark_version.h"), version_header)
         .expect("write Windows version resource header");
     let status = Command::new(rc)
         .arg("/nologo")
         .arg(format!("/I{}", output_dir.display()))
         .arg(format!("/fo{}", output.display()))
-        .arg("assets/icons/moonmark.rc")
+        .arg("assets/icons/wolfmark.rc")
         .status()
         .expect("launch Windows resource compiler");
     assert!(status.success(), "Windows resource compilation failed");
-    println!("cargo:rustc-link-arg-bin=moonmark={}", output.display());
+    println!("cargo:rustc-link-arg-bin=wolfmark={}", output.display());
 }
 
 fn windows_numeric_version(version: &str) -> [u16; 4] {

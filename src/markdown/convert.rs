@@ -81,7 +81,7 @@ pub fn to_presentation(
         title: document_path
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("Moonmark")
+            .unwrap_or("Wolfmark")
             .to_owned(),
         source_type: "markdown".into(),
         literal_text: String::new(),
@@ -442,7 +442,7 @@ mod tests {
     #[test]
     fn repeated_image_references_share_one_decode_request() {
         let root =
-            std::env::temp_dir().join(format!("moonmark-duplicate-image-{}", std::process::id()));
+            std::env::temp_dir().join(format!("wolfmark-duplicate-image-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("create test directory");
         let document_path = root.join("document.md");
         let image_path = root.join("shared.png");
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn reserves_intrinsic_image_geometry_before_decode() {
         let root =
-            std::env::temp_dir().join(format!("moonmark-image-geometry-{}", std::process::id()));
+            std::env::temp_dir().join(format!("wolfmark-image-geometry-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("create test directory");
         let document_path = root.join("document.md");
         let image_path = root.join("image with spaces.png");
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn literal_encoded_and_bracketed_space_paths_share_the_local_asset() {
         let root = std::env::temp_dir().join(format!(
-            "moonmark-literal-space-image-{}",
+            "wolfmark-literal-space-image-{}",
             std::process::id()
         ));
         let images = root.join("images");

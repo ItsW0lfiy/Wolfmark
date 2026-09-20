@@ -1,4 +1,4 @@
-#include "moonmark_updates.h"
+#include "wolfmark_updates.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -15,13 +15,13 @@
 
 #include <utility>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 namespace {
 
 constexpr auto releases_endpoint = "https://api.github.com/repos/ItsW0lfiy/Moonmark/releases?per_page=30";
 constexpr qint64 automatic_check_interval_seconds = 6 * 60 * 60;
 
-QJsonObject jsonFromBuffer(const MoonmarkApiTable* api, MoonmarkBuffer buffer) {
+QJsonObject jsonFromBuffer(const WolfmarkApiTable* api, WolfmarkBuffer buffer) {
     const QByteArray bytes(reinterpret_cast<const char*>(buffer.data),
                            static_cast<qsizetype>(buffer.len));
     api->buffer_free(buffer);
@@ -39,7 +39,7 @@ QString networkMessage(QNetworkReply* reply) {
 
 } // namespace
 
-UpdateManager::UpdateManager(const MoonmarkApiTable* api, QObject* parent)
+UpdateManager::UpdateManager(const WolfmarkApiTable* api, QObject* parent)
     : QObject(parent), api_(api), network_(new QNetworkAccessManager(this)) {}
 
 void UpdateManager::check(bool include_prereleases, bool manual, CheckCallback callback) {
@@ -50,14 +50,14 @@ void UpdateManager::check(bool include_prereleases, bool manual, CheckCallback c
         return;
     }
 
-    const auto test_endpoint = qEnvironmentVariable("MOONMARK_UPDATE_TEST_ENDPOINT");
+    const auto test_endpoint = qEnvironmentVariable("WOLFMARK_UPDATE_TEST_ENDPOINT");
     QNetworkRequest request(test_endpoint.isEmpty()
                                 ? QUrl(QString::fromLatin1(releases_endpoint))
                                 : QUrl(test_endpoint));
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
     request.setRawHeader("User-Agent",
-                         QStringLiteral("Moonmark/%1").arg(QCoreApplication::applicationVersion()).toUtf8());
+                         QStringLiteral("Wolfmark/%1").arg(QCoreApplication::applicationVersion()).toUtf8());
     request.setTransferTimeout(15000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -95,11 +95,11 @@ void UpdateManager::check(bool include_prereleases, bool manual, CheckCallback c
 
 void UpdateManager::download(const ReleaseInfo& release, bool portable,
                              DownloadCallback callback) {
-    const auto asset_name = portable ? QStringLiteral("Moonmark-portable-win-x64.zip")
-                                     : QStringLiteral("Moonmark-Setup-win-x64.exe");
+    const auto asset_name = portable ? QStringLiteral("Wolfmark-portable-win-x64.zip")
+                                     : QStringLiteral("Wolfmark-Setup-win-x64.exe");
     const auto asset_url = portable ? release.portable_url : release.installer_url;
     if (!trustedDownloadUrl(asset_url) || !trustedDownloadUrl(release.checksums_url)) {
-        callback({false, {}, QStringLiteral("The release is missing a trusted Moonmark update asset.")});
+        callback({false, {}, QStringLiteral("The release is missing a trusted Wolfmark update asset.")});
         return;
     }
 
@@ -120,13 +120,13 @@ void UpdateManager::download(const ReleaseInfo& release, bool portable,
             }
             const auto directory = QDir(downloadRoot()).filePath(release.version);
             if (!QDir().mkpath(directory)) {
-                callback({false, {}, QStringLiteral("Moonmark could not create the update cache directory.")});
+                callback({false, {}, QStringLiteral("Wolfmark could not create the update cache directory.")});
                 return;
             }
             const auto path = QDir(directory).filePath(asset_name);
             QSaveFile file(path);
             if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
-                callback({false, {}, QStringLiteral("Moonmark could not save the downloaded update.")});
+                callback({false, {}, QStringLiteral("Wolfmark could not save the downloaded update.")});
                 return;
             }
 
@@ -151,7 +151,7 @@ void UpdateManager::download(const ReleaseInfo& release, bool portable,
 }
 
 QString UpdateManager::stateFilePath() const {
-    const auto override_root = qEnvironmentVariable("MOONMARK_UPDATE_STATE_ROOT");
+    const auto override_root = qEnvironmentVariable("WOLFMARK_UPDATE_STATE_ROOT");
     const auto root = override_root.isEmpty()
         ? QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
         : override_root;
@@ -159,7 +159,7 @@ QString UpdateManager::stateFilePath() const {
 }
 
 QString UpdateManager::downloadRoot() const {
-    const auto override_root = qEnvironmentVariable("MOONMARK_UPDATE_STATE_ROOT");
+    const auto override_root = qEnvironmentVariable("WOLFMARK_UPDATE_STATE_ROOT");
     if (!override_root.isEmpty()) return QDir(override_root).filePath(QStringLiteral("updates"));
     return QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
         .filePath(QStringLiteral("updates"));
@@ -224,7 +224,7 @@ void UpdateManager::getBytes(const QUrl& url,
     QNetworkRequest request(url);
     request.setRawHeader("Accept", "application/octet-stream");
     request.setRawHeader("User-Agent",
-                         QStringLiteral("Moonmark/%1").arg(QCoreApplication::applicationVersion()).toUtf8());
+                         QStringLiteral("Wolfmark/%1").arg(QCoreApplication::applicationVersion()).toUtf8());
     request.setTransferTimeout(60000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -248,4 +248,4 @@ bool UpdateManager::trustedDownloadUrl(const QUrl& url) const {
         url.host().compare(QStringLiteral("github.com"), Qt::CaseInsensitive) == 0;
 }
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

@@ -11,7 +11,7 @@ class QLabel;
 class QPushButton;
 class QTreeWidgetItem;
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 class SmoothTreeWidget;
 class DocumentSidebar final : public QWidget {
 public:
@@ -42,4 +42,4 @@ private:
     SmoothTreeWidget* outline_;
     QHash<QString, QTreeWidgetItem*> outline_items_;
 };
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

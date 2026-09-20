@@ -1,4 +1,4 @@
-#include "moonmark_settings.h"
+#include "wolfmark_settings.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -14,7 +14,7 @@
 
 #include <utility>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 namespace {
 
 struct SettingsLocation {
@@ -23,7 +23,7 @@ struct SettingsLocation {
 };
 
 SettingsLocation settingsLocation() {
-    const auto override_root = qEnvironmentVariable("MOONMARK_SETTINGS_ROOT");
+    const auto override_root = qEnvironmentVariable("WOLFMARK_SETTINGS_ROOT");
     if (!override_root.isEmpty()) {
         return {QDir(override_root).filePath(QStringLiteral("settings.json")), false};
     }
@@ -61,7 +61,7 @@ UserSettings UserSettings::load(bool include_prereleases_default) {
     QFile file(location.file_path);
     if (file.exists()) {
         if (!file.open(QIODevice::ReadOnly)) {
-            settings.recovery_warning_ = QStringLiteral("Moonmark could not read settings.json; defaults are active.");
+            settings.recovery_warning_ = QStringLiteral("Wolfmark could not read settings.json; defaults are active.");
             return settings;
         }
         QJsonParseError parse_error;
@@ -70,8 +70,8 @@ UserSettings UserSettings::load(bool include_prereleases_default) {
         if (parse_error.error != QJsonParseError::NoError || !document.isObject()) {
             const auto backup = preserveMalformedSettings(location.file_path);
             settings.recovery_warning_ = backup.isEmpty()
-                ? QStringLiteral("Moonmark found malformed settings.json and used defaults.")
-                : QStringLiteral("Moonmark preserved malformed settings as %1 and used defaults.")
+                ? QStringLiteral("Wolfmark found malformed settings.json and used defaults.")
+                : QStringLiteral("Wolfmark preserved malformed settings as %1 and used defaults.")
                     .arg(QFileInfo(backup).fileName());
             return settings;
         }
@@ -106,7 +106,7 @@ UserSettings UserSettings::load(bool include_prereleases_default) {
 bool UserSettings::save(QString* error) const {
     const QFileInfo target(file_path_);
     if (!QDir().mkpath(target.absolutePath())) {
-        if (error != nullptr) *error = QStringLiteral("Moonmark could not create the settings directory.");
+        if (error != nullptr) *error = QStringLiteral("Wolfmark could not create the settings directory.");
         return false;
     }
 
@@ -122,15 +122,15 @@ bool UserSettings::save(QString* error) const {
 
     QSaveFile file(file_path_);
     if (!file.open(QIODevice::WriteOnly)) {
-        if (error != nullptr) *error = QStringLiteral("Moonmark could not open settings.json for writing.");
+        if (error != nullptr) *error = QStringLiteral("Wolfmark could not open settings.json for writing.");
         return false;
     }
     const auto bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (file.write(bytes) != bytes.size() || !file.commit()) {
-        if (error != nullptr) *error = QStringLiteral("Moonmark could not save settings.json atomically.");
+        if (error != nullptr) *error = QStringLiteral("Wolfmark could not save settings.json atomically.");
         return false;
     }
     return true;
 }
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

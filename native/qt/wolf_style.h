@@ -2,7 +2,7 @@
 
 class QApplication;
 
-namespace moonmark::style {
+namespace wolfmark::style {
 
 namespace colour {
 inline constexpr auto background = "#080808";
@@ -43,4 +43,4 @@ inline constexpr int standard_spacing = 10;
 
 void apply(QApplication& application);
 
-} // namespace moonmark::style
+} // namespace wolfmark::style

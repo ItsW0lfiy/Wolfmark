@@ -17,7 +17,7 @@ pub struct PresentationDocument {
 impl PresentationDocument {
     pub fn error(message: String) -> Self {
         Self {
-            title: "Moonmark".into(),
+            title: "Wolfmark".into(),
             source_type: "error".into(),
             literal_text: String::new(),
             error: message,

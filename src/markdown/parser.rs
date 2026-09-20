@@ -22,7 +22,7 @@ pub fn parse(source: &str) -> DocumentModel {
 }
 
 /// CommonMark requires angle brackets around destinations containing spaces.
-/// Moonmark accepts the unbracketed form for local paths by normalizing only
+/// Wolfmark accepts the unbracketed form for local paths by normalizing only
 /// the parser input; the semantic destination and original document stay intact.
 fn normalize_literal_space_destinations(source: &str) -> Cow<'_, str> {
     let mut output = String::with_capacity(source.len());
@@ -443,7 +443,7 @@ mod tests {
     #[test]
     fn preserves_links_images_and_code() {
         let document = parse(
-            "[Moonmark](https://example.invalid) ![alt](images/a.png) `code`\n\n```rust\nlet x = 1;\n```",
+            "[Wolfmark](https://example.invalid) ![alt](images/a.png) `code`\n\n```rust\nlet x = 1;\n```",
         );
         assert_eq!(document.blocks.len(), 2);
         assert!(matches!(document.blocks[1], Block::CodeBlock { .. }));

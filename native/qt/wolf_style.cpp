@@ -1,10 +1,10 @@
-#include "moon_style.h"
+#include "wolf_style.h"
 
 #include <QApplication>
 #include <QColor>
 #include <QPalette>
 
-namespace moonmark::style {
+namespace wolfmark::style {
 
 void apply(QApplication& application) {
     application.setStyle(QStringLiteral("Fusion"));
@@ -77,4 +77,4 @@ void apply(QApplication& application) {
     )"));
 }
 
-} // namespace moonmark::style
+} // namespace wolfmark::style

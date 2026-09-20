@@ -1,10 +1,10 @@
 [package]
-name = "moonmark"
+name = "wolfmark"
 version = "0.1.0-dev.7"
 edition = "2024"
 rust-version = "1.94"
 build = "build.rs"
-default-run = "moonmark"
+default-run = "wolfmark"
 description = "Native Markdown viewer built with Rust, C++20, Qt 6 Widgets, and QTextDocument"
 license = "GPL-3.0-only"
 authors = ["ItsW0lfiy"]

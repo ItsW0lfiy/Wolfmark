@@ -9,9 +9,9 @@ $projectPrefix = $projectRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
 function Remove-ProjectPath([string]$RelativePath) {
     $path = [IO.Path]::GetFullPath((Join-Path $projectRoot $RelativePath))
     if (-not $path.StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to clean outside Moonmark: $path"
+        throw "Refusing to clean outside Wolfmark: $path"
     }
-    if ((Test-Path -LiteralPath $path) -and $PSCmdlet.ShouldProcess($path, 'Remove generated Moonmark output')) {
+    if ((Test-Path -LiteralPath $path) -and $PSCmdlet.ShouldProcess($path, 'Remove generated Wolfmark output')) {
         Remove-Item -LiteralPath $path -Recurse -Force
         Write-Host "Removed $RelativePath"
     }

@@ -1,4 +1,4 @@
-# Moonmark visual rendering fixture
+# Wolfmark visual rendering fixture
 
 This fixture checks the wide native document layout, comfortable body typography, **strong text**, *emphasis*, ***combined emphasis***, ~~strikethrough~~, [an achromatic link](https://example.invalid), and `inline code`.
 
@@ -41,7 +41,7 @@ line break remains compatible with ordinary Markdown flow.
 | Feature | Native owner | Status |
 |:--|:--|--:|
 | Markdown model | Rust | Ready |
-| Text layout | Moonmark native document view | Native Qt / QTextDocument |
+| Text layout | Wolfmark native document view | Native Qt / QTextDocument |
 | Browser engine | None | 0 |
 
 ## Code
@@ -71,6 +71,6 @@ End of chapter paragraph immediately before a thematic break.
 
 ![Image immediately after a heading](images/image-with-spaces.png)
 
-Unicode: Moonmark — maan — 月 — λ. Escaped characters: \*literal asterisks\* and \[literal brackets\].
+Unicode: Wolfmark — maan — 月 — λ. Escaped characters: \*literal asterisks\* and \[literal brackets\].
 
-Long line: This deliberately long line exercises the wide desktop layout and confirms that Moonmark uses the available window rather than squeezing rendered Markdown into a narrow centered article card that leaves most of a large monitor unused.
+Long line: This deliberately long line exercises the wide desktop layout and confirms that Wolfmark uses the available window rather than squeezing rendered Markdown into a narrow centered article card that leaves most of a large monitor unused.

@@ -1,5 +1,5 @@
 #include "document_sidebar.h"
-#include "moon_style.h"
+#include "wolf_style.h"
 #include "smooth_scroll_controller.h"
 
 #include <QApplication>
@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 class SmoothTreeWidget final : public QTreeWidget {
 public:
@@ -38,7 +38,7 @@ public:
         }
         destination = std::clamp(destination, verticalScrollBar()->minimum(),
                                  verticalScrollBar()->maximum());
-        const bool reduced = qEnvironmentVariable("MOONMARK_REDUCED_MOTION") == QStringLiteral("1");
+        const bool reduced = qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1");
         if (animate && !reduced) {
             scrolling_.addWheelDistance(destination - verticalScrollBar()->value());
         } else {
@@ -68,7 +68,7 @@ protected:
             const double movement = std::trunc(wheel_fraction_);
             wheel_fraction_ -= movement;
             const double distance = movement == 0.0 ? std::copysign(1.0, scaled) : movement;
-            if (qEnvironmentVariable("MOONMARK_REDUCED_MOTION") == QStringLiteral("1")) {
+            if (qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1")) {
                 scrolling_.moveDirectlyTo(verticalScrollBar()->value() +
                                           static_cast<int>(std::lround(distance)));
             } else {
@@ -106,7 +106,7 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     auto* identity = new QHBoxLayout;
     auto* symbol = new QLabel;
     symbol->setPixmap(QApplication::windowIcon().pixmap(24, 24));
-    auto* name = new QLabel(QStringLiteral("Moonmark"));
+    auto* name = new QLabel(QStringLiteral("Wolfmark"));
     name->setObjectName(QStringLiteral("sidebarIdentity"));
     identity->addWidget(symbol);
     identity->addSpacing(6);
@@ -282,4 +282,4 @@ bool DocumentSidebar::testPartialOutlineWheel() {
 void DocumentSidebar::cancelOutlineScroll() {
     outline_->cancelSmoothScroll();
 }
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

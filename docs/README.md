@@ -1,6 +1,6 @@
-# Moonmark documentation
+# Wolfmark documentation
 
-Moonmark's current documentation is grouped by purpose:
+Wolfmark's current documentation is grouped by purpose:
 
 - [Architecture overview](architecture/overview.md), [native renderer](architecture/renderer.md), [image pipeline](architecture/images.md), and [window behavior](architecture/windowing.md)
 - [Building](development/building.md) and [Android portability audit](development/android-portability.md)

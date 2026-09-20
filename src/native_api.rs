@@ -1,7 +1,7 @@
-//! Stable C ABI consumed by Moonmark's Qt Widgets presentation adapter.
+//! Stable C ABI consumed by Wolfmark's Qt Widgets presentation adapter.
 //!
 //! The boundary deliberately exchanges UTF-8 JSON presentation data, integer identifiers, and
-//! decoded RGBA buffers. No UI-framework type is part of Moonmark's core contract.
+//! decoded RGBA buffers. No UI-framework type is part of Wolfmark's core contract.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -74,20 +74,20 @@ pub struct NativeApiTable {
 
 static NATIVE_API: NativeApiTable = NativeApiTable {
     version: 3,
-    backend_new: moonmark_backend_new,
-    backend_free: moonmark_backend_free,
-    open_document: moonmark_open_document,
-    queue_image: moonmark_queue_image,
-    poll_image: moonmark_poll_image,
-    backend_counters: moonmark_backend_counters,
-    select_update: moonmark_select_update,
-    verify_update: moonmark_verify_update,
-    buffer_free: moonmark_buffer_free,
-    window_state_new: moonmark_window_state_new,
-    window_state_free: moonmark_window_state_free,
-    window_set_mode: moonmark_window_set_mode,
-    window_enter_fullscreen: moonmark_window_enter_fullscreen,
-    window_leave_fullscreen: moonmark_window_leave_fullscreen,
+    backend_new: wolfmark_backend_new,
+    backend_free: wolfmark_backend_free,
+    open_document: wolfmark_open_document,
+    queue_image: wolfmark_queue_image,
+    poll_image: wolfmark_poll_image,
+    backend_counters: wolfmark_backend_counters,
+    select_update: wolfmark_select_update,
+    verify_update: wolfmark_verify_update,
+    buffer_free: wolfmark_buffer_free,
+    window_state_new: wolfmark_window_state_new,
+    window_state_free: wolfmark_window_state_free,
+    window_set_mode: wolfmark_window_set_mode,
+    window_enter_fullscreen: wolfmark_window_enter_fullscreen,
+    window_leave_fullscreen: wolfmark_window_leave_fullscreen,
 };
 
 pub fn table_address() -> usize {
@@ -107,43 +107,43 @@ impl NativeImageResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn moonmark_api_version() -> u32 {
+pub extern "C" fn wolfmark_api_version() -> u32 {
     3
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn moonmark_backend_new() -> *mut Backend {
+pub extern "C" fn wolfmark_backend_new() -> *mut Backend {
     Box::into_raw(Box::<Backend>::default())
 }
 
 /// # Safety
-/// `backend` must be either null or a pointer returned by `moonmark_backend_new` that has not
+/// `backend` must be either null or a pointer returned by `wolfmark_backend_new` that has not
 /// previously been freed.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_backend_free(backend: *mut Backend) {
+pub unsafe extern "C" fn wolfmark_backend_free(backend: *mut Backend) {
     if !backend.is_null() {
         // SAFETY: guaranteed by this function's contract.
         let backend = unsafe { Box::from_raw(backend) };
         // Dropping the owned Rayon pool waits for any decode already inside a codec.
         // Final application shutdown must not block Qt's UI thread on that wait.
         let _ = std::thread::Builder::new()
-            .name("moonmark-image-shutdown".into())
+            .name("wolfmark-image-shutdown".into())
             .spawn(move || drop(backend));
     }
 }
 
 /// # Safety
-/// `backend` must reference a live Moonmark backend. `path` must point to `path_len` readable
+/// `backend` must reference a live Wolfmark backend. `path` must point to `path_len` readable
 /// bytes for the duration of the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_open_document(
+pub unsafe extern "C" fn wolfmark_open_document(
     backend: *mut Backend,
     path: *const u8,
     path_len: usize,
 ) -> NativeBuffer {
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: guaranteed by this function's contract and checked for null below.
-        let backend = unsafe { backend.as_mut() }.ok_or("Moonmark backend is unavailable")?;
+        let backend = unsafe { backend.as_mut() }.ok_or("Wolfmark backend is unavailable")?;
         if path.is_null() {
             return Err("Document path is unavailable");
         }
@@ -151,19 +151,19 @@ pub unsafe extern "C" fn moonmark_open_document(
         let bytes = unsafe { std::slice::from_raw_parts(path, path_len) };
         let path = std::str::from_utf8(bytes).map_err(|_| "Document path is not valid UTF-8")?;
         serde_json::to_vec(&backend.open_document(path))
-            .map_err(|_| "Could not encode Moonmark presentation data")
+            .map_err(|_| "Could not encode Wolfmark presentation data")
     }));
     match result {
         Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
         Ok(Err(message)) => error_document(message),
-        Err(_) => error_document("Moonmark core failed while opening the document"),
+        Err(_) => error_document("Wolfmark core failed while opening the document"),
     }
 }
 
 /// # Safety
-/// `backend` must reference a live Moonmark backend.
+/// `backend` must reference a live Wolfmark backend.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_queue_image(
+pub unsafe extern "C" fn wolfmark_queue_image(
     backend: *mut Backend,
     id: u32,
     max_width: u32,
@@ -176,9 +176,9 @@ pub unsafe extern "C" fn moonmark_queue_image(
 }
 
 /// # Safety
-/// `backend` must reference a live Moonmark backend.
+/// `backend` must reference a live Wolfmark backend.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_poll_image(backend: *const Backend) -> NativeImageResult {
+pub unsafe extern "C" fn wolfmark_poll_image(backend: *const Backend) -> NativeImageResult {
     catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: guaranteed by this function's contract and checked for null below.
         let Some(backend) = (unsafe { backend.as_ref() }) else {
@@ -199,9 +199,9 @@ pub unsafe extern "C" fn moonmark_poll_image(backend: *const Backend) -> NativeI
 }
 
 /// # Safety
-/// `backend` must reference a live Moonmark backend.
+/// `backend` must reference a live Wolfmark backend.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_backend_counters(backend: *const Backend) -> NativeCounters {
+pub unsafe extern "C" fn wolfmark_backend_counters(backend: *const Backend) -> NativeCounters {
     let Some(backend) = (unsafe { backend.as_ref() }) else {
         return NativeCounters {
             parse_count: 0,
@@ -221,7 +221,7 @@ pub unsafe extern "C" fn moonmark_backend_counters(backend: *const Backend) -> N
 /// # Safety
 /// `releases_json` must point to `releases_len` readable bytes for the duration of the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_select_update(
+pub unsafe extern "C" fn wolfmark_select_update(
     releases_json: *const u8,
     releases_len: usize,
     include_prereleases: bool,
@@ -240,12 +240,12 @@ pub unsafe extern "C" fn moonmark_select_update(
                 "message": message,
             })),
         }
-        .map_err(|_| "Could not encode Moonmark update data")
+        .map_err(|_| "Could not encode Wolfmark update data")
     }));
     match result {
         Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
         Ok(Err(message)) => update_error_buffer(message),
-        Err(_) => update_error_buffer("Moonmark failed while selecting an update"),
+        Err(_) => update_error_buffer("Wolfmark failed while selecting an update"),
     }
 }
 
@@ -253,7 +253,7 @@ pub unsafe extern "C" fn moonmark_select_update(
 /// Each pointer must reference its corresponding readable byte length for the duration of the
 /// call. The file path and asset name must be UTF-8.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_verify_update(
+pub unsafe extern "C" fn wolfmark_verify_update(
     file_path: *const u8,
     file_path_len: usize,
     manifest: *const u8,
@@ -279,15 +279,15 @@ pub unsafe extern "C" fn moonmark_verify_update(
     match result {
         Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
         Ok(Err(message)) => update_verification_error_buffer(message),
-        Err(_) => update_verification_error_buffer("Moonmark failed while verifying the update"),
+        Err(_) => update_verification_error_buffer("Wolfmark failed while verifying the update"),
     }
 }
 
 /// # Safety
-/// `buffer` must be empty or have been returned by a Moonmark native API function, and must not
+/// `buffer` must be empty or have been returned by a Wolfmark native API function, and must not
 /// have previously been freed.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_buffer_free(buffer: NativeBuffer) {
+pub unsafe extern "C" fn wolfmark_buffer_free(buffer: NativeBuffer) {
     if !buffer.data.is_null() {
         // SAFETY: guaranteed by this function's contract.
         drop(unsafe { Vec::from_raw_parts(buffer.data, buffer.len, buffer.capacity) });
@@ -295,15 +295,15 @@ pub unsafe extern "C" fn moonmark_buffer_free(buffer: NativeBuffer) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn moonmark_window_state_new() -> *mut WindowState {
+pub extern "C" fn wolfmark_window_state_new() -> *mut WindowState {
     Box::into_raw(Box::<WindowState>::default())
 }
 
 /// # Safety
-/// `state` must be either null or a pointer returned by `moonmark_window_state_new` that has not
+/// `state` must be either null or a pointer returned by `wolfmark_window_state_new` that has not
 /// previously been freed.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_window_state_free(state: *mut WindowState) {
+pub unsafe extern "C" fn wolfmark_window_state_free(state: *mut WindowState) {
     if !state.is_null() {
         // SAFETY: guaranteed by this function's contract.
         drop(unsafe { Box::from_raw(state) });
@@ -311,18 +311,18 @@ pub unsafe extern "C" fn moonmark_window_state_free(state: *mut WindowState) {
 }
 
 /// # Safety
-/// `state` must reference a live Moonmark window state.
+/// `state` must reference a live Wolfmark window state.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_window_set_mode(state: *mut WindowState, mode: u8) {
+pub unsafe extern "C" fn wolfmark_window_set_mode(state: *mut WindowState, mode: u8) {
     if let Some(state) = unsafe { state.as_mut() } {
         state.mode = decode_window_mode(mode);
     }
 }
 
 /// # Safety
-/// `state` must reference a live Moonmark window state.
+/// `state` must reference a live Wolfmark window state.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_window_enter_fullscreen(state: *mut WindowState) -> u8 {
+pub unsafe extern "C" fn wolfmark_window_enter_fullscreen(state: *mut WindowState) -> u8 {
     let Some(state) = (unsafe { state.as_mut() }) else {
         return 0;
     };
@@ -331,9 +331,9 @@ pub unsafe extern "C" fn moonmark_window_enter_fullscreen(state: *mut WindowStat
 }
 
 /// # Safety
-/// `state` must reference a live Moonmark window state.
+/// `state` must reference a live Wolfmark window state.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn moonmark_window_leave_fullscreen(state: *mut WindowState) -> u8 {
+pub unsafe extern "C" fn wolfmark_window_leave_fullscreen(state: *mut WindowState) -> u8 {
     let Some(state) = (unsafe { state.as_mut() }) else {
         return 0;
     };

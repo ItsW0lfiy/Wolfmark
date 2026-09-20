@@ -1,26 +1,26 @@
-# Moonmark roadmap
+# Wolfmark roadmap
 
 The roadmap records intended product direction, not release dates or promises.
 
-Moonmark is being built as a **renderer-first, file-first, all-in-one Markdown application**. It takes inspiration from applications such as FeatherMD, Obsidian, MarkText, and other strong Markdown workflows, but Moonmark should keep its own architecture, renderer, interaction model, and visual identity.
+Wolfmark is being built as a **renderer-first, file-first, all-in-one Markdown application**. It takes inspiration from applications such as FeatherMD, Obsidian, MarkText, and other strong Markdown workflows, but Wolfmark should keep its own architecture, renderer, interaction model, and visual identity.
 
 The central product rule is simple:
 
 > **Add capability without making the default interface look bloated.**
 
-Feature growth must not require visible interface growth. Advanced capabilities should use progressive disclosure, contextual UI, commands, shortcuts, optional panels, and user-controlled visibility. A user who only wants to open and read a Markdown file should still be able to use Moonmark as a quiet, simple reader even after the application becomes much more capable.
+Feature growth must not require visible interface growth. Advanced capabilities should use progressive disclosure, contextual UI, commands, shortcuts, optional panels, and user-controlled visibility. A user who only wants to open and read a Markdown file should still be able to use Wolfmark as a quiet, simple reader even after the application becomes much more capable.
 
-Moonmark remains based around ordinary files. Features may understand folders, repositories, links, metadata, and related documents, but Moonmark should not require users to adopt a proprietary vault or database just to use the application.
+Wolfmark remains based around ordinary files. Features may understand folders, repositories, links, metadata, and related documents, but Wolfmark should not require users to adopt a proprietary vault or database just to use the application.
 
-Official features designed and maintained as part of Moonmark belong in **core Moonmark**. The project should not move desirable first-party functionality into mods merely to keep the core artificially small. Mods exist for functionality outside the curated Moonmark product vision.
+Official features designed and maintained as part of Wolfmark belong in **core Wolfmark**. The project should not move desirable first-party functionality into mods merely to keep the core artificially small. Mods exist for functionality outside the curated Wolfmark product vision.
 
 ## Free-software and funding principle
 
-Moonmark is free and open source. Every official first-party feature must remain available without payment. Moonmark will not introduce Plus, Pro, Premium, or other paid editions; subscriptions required for functionality; feature paywalls; paid unlocks; artificial limits removed by payment; or trials that require payment to keep using Moonmark.
+Wolfmark is free and open source. Every official first-party feature must remain available without payment. Wolfmark will not introduce Plus, Pro, Premium, or other paid editions; subscriptions required for functionality; feature paywalls; paid unlocks; artificial limits removed by payment; or trials that require payment to keep using Wolfmark.
 
-Moonmark may offer an optional **Donate** or **Support Moonmark** action. Donations are voluntary and may support development, but they must never unlock features, increase limits, remove restrictions, change update access, create another edition, or otherwise alter the application's functionality. A user who never donates receives the complete first-party Moonmark application. No payment-provider dependency or donation UI is selected by this principle.
+Wolfmark may offer an optional **Donate** or **Support Wolfmark** action. Donations are voluntary and may support development, but they must never unlock features, increase limits, remove restrictions, change update access, create another edition, or otherwise alter the application's functionality. A user who never donates receives the complete first-party Wolfmark application. No payment-provider dependency or donation UI is selected by this principle.
 
-Build and distribution dependencies remain subject to their own current terms. In particular, Moonmark must re-evaluate WiX Toolset's licensing and Open Source Maintenance Fee terms if WiX's terms or Moonmark's funding/revenue model materially changes. This is an engineering policy, not a guarantee that third-party terms will remain unchanged.
+Build and distribution dependencies remain subject to their own current terms. In particular, Wolfmark must re-evaluate WiX Toolset's licensing and Open Source Maintenance Fee terms if WiX's terms or Wolfmark's funding/revenue model materially changes. This is an engineering policy, not a guarantee that third-party terms will remain unchanged.
 
 ---
 
@@ -39,7 +39,7 @@ The current development baseline includes:
 - file watching and retained per-document state
 - GPL-3.0-only project licensing and release documentation
 - a broad, document-first desktop layout
-- Moonmark's restrained lunar/graphite visual identity
+- Wolfmark's restrained lunar/graphite visual identity
 
 This milestone is still an early foundation. The long-term roadmap is intentionally much larger than the current implementation.
 
@@ -57,10 +57,10 @@ Planned work includes:
 - use the explicitly approved WiX Toolset 7.0.0 engine with a native Qt bootstrapper
 - ship both the normal Burn setup executable and a genuine MSI
 - install under Program Files
-- register Moonmark in Installed Apps / uninstall
+- register Wolfmark in Installed Apps / uninstall
 - Start Menu shortcut
 - optional desktop shortcut
-- safe upgrades between Moonmark versions
+- safe upgrades between Wolfmark versions
 - Windows Open With integration
 - file associations for supported document types
 - include required native libraries, plugins, CRT files, assets, notices, and licenses
@@ -88,7 +88,7 @@ Planned behavior:
 
 ## Around `0.1.0-dev.9` — WinGet
 
-Prepare optional WinGet publication using the conceptual identifier `ItsW0lfiy.Moonmark`.
+Prepare optional WinGet publication using the conceptual identifier `ItsW0lfiy.Wolfmark`.
 
 Before publishing:
 
@@ -103,7 +103,7 @@ Before publishing:
 
 # Core renderer roadmap
 
-Moonmark's renderer is the foundation of the application. Other features should build around it rather than replacing it with a second unrelated rendering path.
+Wolfmark's renderer is the foundation of the application. Other features should build around it rather than replacing it with a second unrelated rendering path.
 
 Planned renderer work includes:
 
@@ -131,26 +131,26 @@ Planned renderer work includes:
 - continue profiling large-document QTextDocument/layout costs
 - preserve native selection, copying, accessibility, and text interaction
 - improve source-position/semantic-position mapping where useful for future editing and diagnostics
-- investigate additional Markdown-adjacent rendering features such as math and diagrams when they can be integrated without compromising Moonmark's architecture or renderer quality
+- investigate additional Markdown-adjacent rendering features such as math and diagrams when they can be integrated without compromising Wolfmark's architecture or renderer quality
 - consider richer frontmatter presentation while keeping raw metadata available
 - keep raw HTML inert or deliberately constrained unless a future design explicitly changes that policy
 
-Moonmark should prefer a smaller number of well-integrated renderer features over a large collection of fragile rendering hacks.
+Wolfmark should prefer a smaller number of well-integrated renderer features over a large collection of fragile rendering hacks.
 
 ---
 
 # Markdown compatibility profiles
 
-Moonmark should be able to interpret ordinary Markdown according to selectable compatibility profiles while continuing to use one parser/semantic-model/renderer architecture.
+Wolfmark should be able to interpret ordinary Markdown according to selectable compatibility profiles while continuing to use one parser/semantic-model/renderer architecture.
 
-The goal is not to emulate every Markdown application perfectly. The goal is to let users choose how broadly Moonmark interprets Markdown syntax and to combine useful extensions without forcing the document into a proprietary format.
+The goal is not to emulate every Markdown application perfectly. The goal is to let users choose how broadly Wolfmark interprets Markdown syntax and to combine useful extensions without forcing the document into a proprietary format.
 
 Planned profile direction includes:
 
 - **CommonMark** — conservative standards-oriented Markdown behavior
 - **GitHub Flavored Markdown** — CommonMark plus the supported GFM feature set such as tables, task lists, strikethrough, and autolinks
-- **Moonmark** — Moonmark's curated default feature set, combining broadly useful supported syntax while remaining predictable and portable
-- **Extended** — opt into additional Moonmark-supported Markdown-adjacent syntax as those features are implemented
+- **Wolfmark** — Wolfmark's curated default feature set, combining broadly useful supported syntax while remaining predictable and portable
+- **Extended** — opt into additional Wolfmark-supported Markdown-adjacent syntax as those features are implemented
 - **Custom** — advanced per-feature controls for users who want to decide exactly which syntax extensions are enabled
 
 Profile selection should configure parser behavior rather than switch to unrelated rendering engines. Where the parser already exposes individual extension options, profiles should be built from those options instead of duplicating parser logic.
@@ -169,9 +169,9 @@ Potential custom controls may include:
 - future math syntax
 - other deliberately adopted Markdown extensions
 
-Compatibility and appearance must remain separate concepts. A Markdown profile decides **what syntax means**; themes and document appearance decide **how the resulting document looks**. Users should be able to combine any supported compatibility profile with any supported Moonmark visual theme or presentation configuration.
+Compatibility and appearance must remain separate concepts. A Markdown profile decides **what syntax means**; themes and document appearance decide **how the resulting document looks**. Users should be able to combine any supported compatibility profile with any supported Wolfmark visual theme or presentation configuration.
 
-Application-specific syntaxes such as Wiki links, callouts, embeds, highlight syntax, or math should only enter a compatibility profile after Moonmark deliberately implements and validates them. A profile must not imply compatibility that the parser and renderer do not actually provide.
+Application-specific syntaxes such as Wiki links, callouts, embeds, highlight syntax, or math should only enter a compatibility profile after Wolfmark deliberately implements and validates them. A profile must not imply compatibility that the parser and renderer do not actually provide.
 
 The normal settings UI should keep this simple: expose a compact profile selector, with detailed extension switches hidden behind **Custom** or another advanced surface. This keeps compatibility powerful without turning the default settings page into a wall of Markdown feature toggles.
 
@@ -179,7 +179,7 @@ The normal settings UI should keep this simple: expose a compact profile selecto
 
 # Reader and navigation roadmap
 
-Moonmark should grow from a good single-document reader into a strong Markdown navigation application without forcing a workspace model.
+Wolfmark should grow from a good single-document reader into a strong Markdown navigation application without forcing a workspace model.
 
 Planned directions include:
 
@@ -214,7 +214,7 @@ Planned directions include:
 - Wiki-style link support if adopted
 - backlinks / incoming-link discovery if adopted
 - related-document navigation
-- optional document relationship/graph tooling if it can remain non-intrusive and does not redefine Moonmark as a vault application
+- optional document relationship/graph tooling if it can remain non-intrusive and does not redefine Wolfmark as a vault application
 
 Folder/repository-aware features should remain optional. Opening one standalone Markdown file must remain a first-class workflow.
 
@@ -222,7 +222,7 @@ Folder/repository-aware features should remain optional. Opening one standalone 
 
 # File and document exploration
 
-Moonmark may become much stronger at navigating ordinary collections of Markdown while keeping the filesystem authoritative.
+Wolfmark may become much stronger at navigating ordinary collections of Markdown while keeping the filesystem authoritative.
 
 Planned directions include:
 
@@ -234,17 +234,17 @@ Planned directions include:
 - include/exclude patterns
 - safe handling of symlinks and canonical paths
 - folder-level refresh/file watching where practical
-- support for repositories without requiring repository ownership by Moonmark
+- support for repositories without requiring repository ownership by Wolfmark
 - optional archive viewing/research if it fits the product cleanly
 - clear distinction between a single opened file and a deliberately opened folder/source
 
-Moonmark should not silently turn every opened file into a managed workspace.
+Wolfmark should not silently turn every opened file into a managed workspace.
 
 ---
 
 # Metadata, properties, and knowledge features
 
-Moonmark can borrow useful ideas from knowledge-oriented Markdown applications without requiring a vault/database workflow.
+Wolfmark can borrow useful ideas from knowledge-oriented Markdown applications without requiring a vault/database workflow.
 
 Possible core features include:
 
@@ -262,13 +262,13 @@ Possible core features include:
 - document link diagnostics
 - lightweight graph/relationship views where genuinely useful
 
-These features should operate on ordinary Markdown files and selected folders/repositories. They should not require converting documents into a Moonmark-owned format.
+These features should operate on ordinary Markdown files and selected folders/repositories. They should not require converting documents into a Wolfmark-owned format.
 
 ---
 
 # Integrated editor roadmap
 
-Moonmark remains **viewer-first**, but a future editor is planned as an integrated optional capability inside the same application.
+Wolfmark remains **viewer-first**, but a future editor is planned as an integrated optional capability inside the same application.
 
 Read-only viewing must remain complete and valid without enabling editing.
 
@@ -294,16 +294,16 @@ Planned editor directions include:
 - optional formatting commands
 - preserve ordinary files and normal OS file semantics
 - do not permanently write-lock documents just because editing exists
-- reuse Moonmark's normal parser/semantic model/renderer for preview rather than maintaining a separate unrelated renderer
+- reuse Wolfmark's normal parser/semantic model/renderer for preview rather than maintaining a separate unrelated renderer
 - avoid loading heavy editor infrastructure when the editor is unused
 
-The editor should expand Moonmark's lifecycle from reading into reading + writing without turning Moonmark into an editor-first IDE.
+The editor should expand Wolfmark's lifecycle from reading into reading + writing without turning Wolfmark into an editor-first IDE.
 
 ---
 
 # Git and document history tools
 
-For Markdown stored in Git repositories, Moonmark may provide read-oriented repository tooling without trying to become a complete Git client.
+For Markdown stored in Git repositories, Wolfmark may provide read-oriented repository tooling without trying to become a complete Git client.
 
 Potential core features include:
 
@@ -322,7 +322,7 @@ Potential core features include:
 
 # Annotations and reading tools
 
-Moonmark may support reader annotations without requiring changes to the source Markdown.
+Wolfmark may support reader annotations without requiring changes to the source Markdown.
 
 Potential features include:
 
@@ -337,13 +337,13 @@ Potential features include:
 - annotation import/export
 - configurable visibility of annotations
 
-If annotations are implemented, Moonmark should clearly distinguish app-managed annotation data from the user's Markdown file.
+If annotations are implemented, Wolfmark should clearly distinguish app-managed annotation data from the user's Markdown file.
 
 ---
 
 # Export and publishing tools
 
-Moonmark should eventually become useful not only for displaying Markdown but also for producing polished output from it.
+Wolfmark should eventually become useful not only for displaying Markdown but also for producing polished output from it.
 
 Potential core features include:
 
@@ -362,13 +362,13 @@ Potential core features include:
 - export preview
 - export diagnostics for missing assets or unsupported content
 
-Export should reuse Moonmark's renderer/semantic model as much as practical rather than becoming a separate rendering product hidden inside the application.
+Export should reuse Wolfmark's renderer/semantic model as much as practical rather than becoming a separate rendering product hidden inside the application.
 
 ---
 
 # Customization and settings
 
-Heavy customization is a planned first-class Moonmark capability.
+Heavy customization is a planned first-class Wolfmark capability.
 
 The default configuration should remain intentionally simple, but users should be able to decide how much interface they want to see.
 
@@ -379,8 +379,8 @@ Planned settings include:
 - compact compatibility-profile selector
 - CommonMark profile
 - GitHub Flavored Markdown profile
-- Moonmark curated profile
-- Extended profile as Moonmark adopts additional syntax
+- Wolfmark curated profile
+- Extended profile as Wolfmark adopts additional syntax
 - Custom profile with advanced per-extension controls
 - keep parser compatibility independent from visual themes and document appearance
 - make compatibility changes predictable and clearly scoped to syntax interpretation
@@ -436,7 +436,7 @@ Potential toggles/reordering include:
 
 Where practical, modules should support ordering, collapsing, pinning, and default-open/default-closed behavior.
 
-Moonmark should distinguish between concepts such as:
+Wolfmark should distinguish between concepts such as:
 
 - **enabled** — the feature exists and can be invoked
 - **visible** — the feature has persistent UI
@@ -444,13 +444,13 @@ Moonmark should distinguish between concepts such as:
 
 Hiding a button should not necessarily disable the underlying feature. Keyboard shortcuts and the command palette should remain useful for users who want a nearly chrome-free interface.
 
-The long-term customization goal is that a minimal user and a power user can run the same Moonmark build with dramatically different visible UI density.
+The long-term customization goal is that a minimal user and a power user can run the same Wolfmark build with dramatically different visible UI density.
 
 ---
 
 # Anti-bloat UI principle
 
-Moonmark may become feature-rich, but it should not become visually noisy by default.
+Wolfmark may become feature-rich, but it should not become visually noisy by default.
 
 Permanent product rules for new features:
 
@@ -464,16 +464,16 @@ Permanent product rules for new features:
 - avoid filling the title bar with controls
 - avoid permanent multi-row toolbars unless a future workflow genuinely requires them
 - advanced functionality should be discoverable without being permanently visible
-- closing a temporary tool should return Moonmark to a clean reader state
+- closing a temporary tool should return Wolfmark to a clean reader state
 - the empty/reader experience should remain understandable to a first-time user
 
-A future Moonmark with dozens or hundreds of capabilities should still be able to look like a simple Markdown reader when configured that way.
+A future Wolfmark with dozens or hundreds of capabilities should still be able to look like a simple Markdown reader when configured that way.
 
 ---
 
 # Platform roadmap
 
-Moonmark is **Windows-first, not Windows-only**.
+Wolfmark is **Windows-first, not Windows-only**.
 
 Current platform priority:
 
@@ -530,7 +530,7 @@ Planned direction includes:
 - support for `content://`-style document access where required
 - mobile image viewing
 - mobile reader customization
-- preserve Moonmark's recognizable visual identity
+- preserve Wolfmark's recognizable visual identity
 - reuse portable parsing/semantic/document logic where practical
 - decide Android editing separately rather than assuming desktop editing must be copied to mobile
 
@@ -545,7 +545,7 @@ Accessibility should improve alongside feature growth rather than being postpone
 Planned work includes:
 
 - keyboard-complete navigation
-- visible but Moonmark-consistent focus indicators
+- visible but Wolfmark-consistent focus indicators
 - screen-reader/UI automation validation
 - semantic controls and labels
 - scalable text/UI
@@ -554,25 +554,25 @@ Planned work includes:
 - touchpad behavior
 - mouse and keyboard parity where practical
 - touch-first behavior on Android
-- sensible high-contrast behavior without breaking Moonmark's identity
+- sensible high-contrast behavior without breaking Wolfmark's identity
 
 ---
 
 # Optional mod-loader support
 
-Moonmark core may expose a deliberate, versioned support surface for an **optional separately installed Mod Loader**.
+Wolfmark core may expose a deliberate, versioned support surface for an **optional separately installed Mod Loader**.
 
 The important architecture rule is:
 
-> **Moonmark supports the loader, but Moonmark itself does not discover or load ordinary mods when the loader is absent.**
+> **Wolfmark supports the loader, but Wolfmark itself does not discover or load ordinary mods when the loader is absent.**
 
-Without the Mod Loader installed, Moonmark must start and behave normally as vanilla Moonmark.
+Without the Mod Loader installed, Wolfmark must start and behave normally as vanilla Wolfmark.
 
 The intended model is:
 
-`Moonmark core <-> optional Mod Loader <-> mods / loader-managed extensions`
+`Wolfmark core <-> optional Mod Loader <-> mods / loader-managed extensions`
 
-Moonmark may provide stable events, commands, contribution points, or communication hooks that the Mod Loader can use. The loader is responsible for the actual mod ecosystem.
+Wolfmark may provide stable events, commands, contribution points, or communication hooks that the Mod Loader can use. The loader is responsible for the actual mod ecosystem.
 
 The Mod Loader should own concerns such as:
 
@@ -586,9 +586,9 @@ The Mod Loader should own concerns such as:
 - mod failures
 - extension/mod lifecycle
 - optional mod update mechanisms
-- translating mod contributions into the supported Moonmark interface
+- translating mod contributions into the supported Wolfmark interface
 
-Moonmark core should remain functional if:
+Wolfmark core should remain functional if:
 
 - the loader is not installed
 - the loader is disabled
@@ -596,11 +596,11 @@ Moonmark core should remain functional if:
 - the loader crashes or disconnects
 - an individual mod fails
 
-Moonmark should not require users to install the loader to obtain normal first-party features.
+Wolfmark should not require users to install the loader to obtain normal first-party features.
 
-Official Moonmark functionality remains core functionality. The mod ecosystem exists for users who want to add behavior beyond the curated product.
+Official Wolfmark functionality remains core functionality. The mod ecosystem exists for users who want to add behavior beyond the curated product.
 
-Forking remains another valid way for developers to create substantially different Moonmark-derived applications, subject to the project license.
+Forking remains another valid way for developers to create substantially different Wolfmark-derived applications, subject to the project license.
 
 The exact loader transport/runtime/API is intentionally not locked yet. It should be designed only when mod-loader implementation work begins.
 
@@ -608,7 +608,7 @@ The exact loader transport/runtime/API is intentionally not locked yet. It shoul
 
 # Features that should remain core
 
-When Moonmark itself adopts a feature as part of the official product vision, it should normally be implemented directly in core rather than shipped as an official mod.
+When Wolfmark itself adopts a feature as part of the official product vision, it should normally be implemented directly in core rather than shipped as an official mod.
 
 Examples of core-class functionality include:
 
@@ -636,7 +636,7 @@ Mods are for functionality beyond the official curated scope, experimentation, n
 
 # Performance roadmap
 
-Performance remains part of Moonmark's product identity, especially for image-heavy Markdown.
+Performance remains part of Wolfmark's product identity, especially for image-heavy Markdown.
 
 Continue measuring and improving:
 
@@ -666,7 +666,7 @@ New features should not casually regress the simple read-only path.
 
 # Security and trust boundaries
 
-As Moonmark gains features, ordinary Markdown files should remain untrusted input.
+As Wolfmark gains features, ordinary Markdown files should remain untrusted input.
 
 Future work should preserve clear boundaries around:
 
@@ -689,7 +689,7 @@ Features that involve remote content, arbitrary code, or external processes requ
 
 # Longer-term product direction
 
-Moonmark's eventual scope may include most of the useful lifecycle around Markdown:
+Wolfmark's eventual scope may include most of the useful lifecycle around Markdown:
 
 - open
 - read
@@ -706,7 +706,7 @@ Moonmark's eventual scope may include most of the useful lifecycle around Markdo
 - review history
 - continue on another supported platform
 
-The application may become an all-in-one Markdown tool, but it should remain recognizably Moonmark rather than turning into a generic IDE or visually dense knowledge-management dashboard.
+The application may become an all-in-one Markdown tool, but it should remain recognizably Wolfmark rather than turning into a generic IDE or visually dense knowledge-management dashboard.
 
 The desired end state is:
 
@@ -718,12 +718,12 @@ The desired end state is:
 
 These should be decided when implementation is close enough to justify locking them:
 
-- shell/file-association behavior when Moonmark is already running
+- shell/file-association behavior when Wolfmark is already running
 - single-instance versus multi-instance policy
 - exact integrated editor widget/engine and buffer architecture
 - exact live-preview strategy
 - exact Markdown compatibility-profile definitions and persistence behavior
-- exact strategy for Moonmark-specific syntax that is not directly supported by Comrak
+- exact strategy for Wolfmark-specific syntax that is not directly supported by Comrak
 - exact math/diagram renderer strategy
 - exact folder/search indexing strategy
 - exact annotation persistence format
@@ -752,4 +752,4 @@ As features become concrete:
 - link completed issues to the release/commit that shipped them
 - keep completed issues as useful feature-development history rather than deleting them
 
-The roadmap should remain readable as the description of where Moonmark is going rather than becoming a giant release checklist.
+The roadmap should remain readable as the description of where Wolfmark is going rather than becoming a giant release checklist.

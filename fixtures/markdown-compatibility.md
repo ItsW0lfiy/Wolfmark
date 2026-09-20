@@ -53,7 +53,7 @@ fn example() {}
 
 A footnote reference remains visible.[^compatibility]
 
-[^compatibility]: Moonmark currently presents footnotes as basic text.
+[^compatibility]: Wolfmark currently presents footnotes as basic text.
 
 <div data-kind="inert">
 Block HTML remains inert source text.

@@ -16,7 +16,7 @@ QString readRegistryString(const wchar_t* name) {
     DWORD size = static_cast<DWORD>(value.size() * sizeof(wchar_t));
     const LSTATUS status = RegGetValueW(
         HKEY_LOCAL_MACHINE,
-        L"Software\\ItsW0lfiy\\Moonmark\\Installer",
+        L"Software\\ItsW0lfiy\\Wolfmark\\Installer",
         name,
         RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY,
         nullptr,
@@ -30,7 +30,7 @@ bool readRegistryFlag(const wchar_t* name, bool fallback) {
     DWORD size = sizeof(value);
     const LSTATUS status = RegGetValueW(
         HKEY_LOCAL_MACHINE,
-        L"Software\\ItsW0lfiy\\Moonmark\\Installer",
+        L"Software\\ItsW0lfiy\\Wolfmark\\Installer",
         name,
         RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY,
         nullptr,
@@ -61,7 +61,7 @@ STDMETHODIMP BurnController::OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_
             ? BOOTSTRAPPER_SCOPE_PER_MACHINE
             : command->commandLineScope;
         targetBundleVersion_ = engineString(L"WixBundleVersion");
-        state_.targetVersion = engineString(L"MoonmarkDisplayVersion");
+        state_.targetVersion = engineString(L"WolfmarkDisplayVersion");
         if (state_.targetVersion.isEmpty()) {
             state_.targetVersion = targetBundleVersion_;
         }
@@ -111,7 +111,7 @@ STDMETHODIMP BurnController::OnDetectPackageComplete(
     HRESULT,
     BOOTSTRAPPER_PACKAGE_STATE packageState,
     BOOL) {
-    if (QString::fromWCharArray(packageId) == QStringLiteral("MoonmarkMsi") &&
+    if (QString::fromWCharArray(packageId) == QStringLiteral("WolfmarkMsi") &&
         packageState != BOOTSTRAPPER_PACKAGE_STATE_ABSENT &&
         packageState != BOOTSTRAPPER_PACKAGE_STATE_UNKNOWN) {
         state_.installed = true;
@@ -121,7 +121,7 @@ STDMETHODIMP BurnController::OnDetectPackageComplete(
 
 STDMETHODIMP BurnController::OnDetectComplete(HRESULT status, BOOL) {
     if (FAILED(status)) {
-        postError(QStringLiteral("Moonmark setup could not inspect this computer."), status);
+        postError(QStringLiteral("Wolfmark setup could not inspect this computer."), status);
         return S_OK;
     }
     QMetaObject::invokeMethod(qApp, [this] { presentDetectedState(); }, Qt::QueuedConnection);
@@ -178,31 +178,31 @@ void BurnController::begin(InstallerAction action, const InstallerOptions& optio
     state_.activeAction = action;
     state_.options = options;
     state_.applying = true;
-    m_pEngine->SetVariableNumeric(L"MoonmarkFileAssociations", options.fileAssociations ? 1 : 0);
-    m_pEngine->SetVariableNumeric(L"MoonmarkDesktopShortcut", options.desktopShortcut ? 1 : 0);
+    m_pEngine->SetVariableNumeric(L"WolfmarkFileAssociations", options.fileAssociations ? 1 : 0);
+    m_pEngine->SetVariableNumeric(L"WolfmarkDesktopShortcut", options.desktopShortcut ? 1 : 0);
     const std::wstring folder = QDir::toNativeSeparators(options.installFolder).toStdWString();
-    m_pEngine->SetVariableString(L"MoonmarkInstallFolder", folder.c_str(), FALSE);
+    m_pEngine->SetVariableString(L"WolfmarkInstallFolder", folder.c_str(), FALSE);
     if (window_) {
         window_->showProgress(action);
     }
     const HRESULT status = m_pEngine->Plan(burnAction(action), commandScope_);
     if (FAILED(status)) {
         state_.applying = false;
-        postError(QStringLiteral("Moonmark setup could not prepare the requested change."), status);
+        postError(QStringLiteral("Wolfmark setup could not prepare the requested change."), status);
     }
 }
 
 STDMETHODIMP BurnController::OnPlanComplete(HRESULT status) {
     if (FAILED(status)) {
         state_.applying = false;
-        postError(QStringLiteral("Moonmark setup could not prepare the requested change."), status);
+        postError(QStringLiteral("Wolfmark setup could not prepare the requested change."), status);
         return S_OK;
     }
     QMetaObject::invokeMethod(qApp, [this] {
         const HRESULT applyStatus = m_pEngine->Apply(window_ ? window_->nativeHandle() : nullptr);
         if (FAILED(applyStatus)) {
             state_.applying = false;
-            postError(QStringLiteral("Moonmark setup could not start the requested change."), applyStatus);
+            postError(QStringLiteral("Wolfmark setup could not start the requested change."), applyStatus);
         }
     }, Qt::QueuedConnection);
     return S_OK;
@@ -230,8 +230,8 @@ STDMETHODIMP BurnController::OnExecutePackageBegin(
     if (window_) {
         QString detail;
         switch (state_.activeAction) {
-        case InstallerAction::Uninstall: detail = QStringLiteral("Removing Moonmark-owned files..."); break;
-        case InstallerAction::Repair: detail = QStringLiteral("Restoring Moonmark application files..."); break;
+        case InstallerAction::Uninstall: detail = QStringLiteral("Removing Wolfmark-owned files..."); break;
+        case InstallerAction::Repair: detail = QStringLiteral("Restoring Wolfmark application files..."); break;
         case InstallerAction::Modify: detail = QStringLiteral("Applying Windows integration options..."); break;
         default: detail = QStringLiteral("Installing application files..."); break;
         }
@@ -258,9 +258,9 @@ STDMETHODIMP BurnController::OnApplyComplete(
             }, Qt::QueuedConnection);
         }
     } else if (status == HRESULT_FROM_WIN32(ERROR_INSTALL_USEREXIT)) {
-        postError(QStringLiteral("Moonmark setup was cancelled safely."), status);
+        postError(QStringLiteral("Wolfmark setup was cancelled safely."), status);
     } else {
-        postError(QStringLiteral("Moonmark setup could not complete the requested change."), status);
+        postError(QStringLiteral("Wolfmark setup could not complete the requested change."), status);
     }
     return S_OK;
 }
@@ -294,7 +294,7 @@ QString BurnController::engineString(const wchar_t* name) const {
 void BurnController::loadInstalledOptions() {
     state_.options.installFolder = readRegistryString(L"InstallDir");
     if (state_.options.installFolder.isEmpty()) {
-        state_.options.installFolder = QString::fromLocal8Bit(qgetenv("ProgramFiles")) + QStringLiteral("/Moonmark");
+        state_.options.installFolder = QString::fromLocal8Bit(qgetenv("ProgramFiles")) + QStringLiteral("/Wolfmark");
     }
     state_.options.fileAssociations = readRegistryFlag(L"FileAssociations", true);
     state_.options.desktopShortcut = readRegistryFlag(L"DesktopShortcut", false);

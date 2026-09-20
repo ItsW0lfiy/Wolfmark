@@ -1,9 +1,9 @@
-use moonmark::markdown::convert::{kind, style};
-use moonmark::markdown::{Block, Inline, parse, to_presentation};
-use moonmark::presentation::PresentationMetrics;
-use moonmark::settings::Settings;
-use moonmark::theme::palette::ALL_DEFAULT_COLOURS;
-use moonmark::window::{WindowMode, WindowState};
+use wolfmark::markdown::convert::{kind, style};
+use wolfmark::markdown::{Block, Inline, parse, to_presentation};
+use wolfmark::presentation::PresentationMetrics;
+use wolfmark::settings::Settings;
+use wolfmark::theme::palette::ALL_DEFAULT_COLOURS;
+use wolfmark::window::{WindowMode, WindowState};
 
 #[test]
 fn required_markdown_constructs_reach_the_semantic_model() {
@@ -78,7 +78,7 @@ fn presentation_heading_targets_match_unique_toc_anchors() {
     let model = parse("# Repeat\n\n## Repeat\n\n[Jump](#repeat-1)");
     let (presentation, images) = to_presentation(
         &model,
-        std::path::Path::new("C:/Moonmark/document.md"),
+        std::path::Path::new("C:/Wolfmark/document.md"),
         PresentationMetrics {
             revision: 1,
             ..PresentationMetrics::default()
@@ -116,7 +116,7 @@ fn practical_markdown_profile_reaches_the_presentation_model() {
     let model = parse(&fixture);
     let (presentation, images) = to_presentation(
         &model,
-        std::path::Path::new("C:/Moonmark/markdown-compatibility.md"),
+        std::path::Path::new("C:/Wolfmark/markdown-compatibility.md"),
         PresentationMetrics::default(),
         &Settings::default(),
     );

@@ -3,7 +3,7 @@
 #include <QWidget>
 #include <QAbstractButton>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 
 class CaptionButton final : public QAbstractButton {
 public:
@@ -22,9 +22,9 @@ private:
     bool native_pressed_ = false;
 };
 
-class MoonTitleBar final : public QWidget {
+class WolfTitleBar final : public QWidget {
 public:
-    explicit MoonTitleBar(QWidget* window);
+    explicit WolfTitleBar(QWidget* window);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -34,4 +34,4 @@ private:
     QWidget* window_ = nullptr;
 };
 
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

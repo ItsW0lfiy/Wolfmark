@@ -1,13 +1,13 @@
 ## JSON
 
 ```json
-{"name": "Moonmark", "ready": true, "images": 250, "note": null}
+{"name": "Wolfmark", "ready": true, "images": 250, "note": null}
 ```
 
 ## PowerShell
 
 ```powershell
-$name = "Moonmark"
+$name = "Wolfmark"
 Write-Output -InputObject $name # Native viewer
 ```
 

@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <cmath>
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 namespace {
 template <typename Format>
 Format scaled(Format format, double ratio) {
@@ -108,7 +108,7 @@ void DocumentZoom::apply(int percent) {
     }
     for (auto& cell : cells_) cell.cell.setFormat(scaled(cell.format, ratio));
     cursor.endEditBlock();
-    if (qEnvironmentVariableIsSet("MOONMARK_PROFILE"))
+    if (qEnvironmentVariableIsSet("WOLFMARK_PROFILE"))
         std::fprintf(stdout, "ZOOM_FORMAT text_us=%lld total_us=%lld\n",
                      static_cast<long long>(text_us), static_cast<long long>(timer.nsecsElapsed() / 1000));
 }
@@ -143,4 +143,4 @@ bool DocumentZoom::matches(int percent) const {
     }
     return true;
 }
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

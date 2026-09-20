@@ -1,8 +1,8 @@
-param([string]$Executable = 'out/cargo/release/moonmark.exe')
+param([string]$Executable = 'out/cargo/release/wolfmark.exe')
 $ErrorActionPreference = 'Stop'
 foreach ($case in @(
     @('image-geometry', 'fixtures/image-layout-regression.md'),
-    @('zoom', 'fixtures/moonmark-visual-test.md'),
+    @('zoom', 'fixtures/wolfmark-visual-test.md'),
     @('zoom', 'fixtures/generated/large-text.md'),
     @('images', 'fixtures/generated/image-stress.md'),
     @('scroll-profile', 'fixtures/generated/large-text.md'),

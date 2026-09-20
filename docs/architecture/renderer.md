@@ -1,12 +1,12 @@
 # Native renderer
 
-Comrak 0.54 parses Markdown in Rust. CommonMark is the baseline, with the GFM table, strikethrough, task-list, and autolink extensions deliberately enabled. Moonmark converts its semantic DocumentModel to framework-neutral PresentationDocument commands. The Qt adapter builds QTextDocument through native cursor, block, frame, table, and character APIs. Markdown is never converted to HTML; raw HTML remains inert source.
+Comrak 0.54 parses Markdown in Rust. CommonMark is the baseline, with the GFM table, strikethrough, task-list, and autolink extensions deliberately enabled. Wolfmark converts its semantic DocumentModel to framework-neutral PresentationDocument commands. The Qt adapter builds QTextDocument through native cursor, block, frame, table, and character APIs. Markdown is never converted to HTML; raw HTML remains inert source.
 
 Supported presentation includes H1–H6, paragraphs, soft/hard breaks, bold/italic/combined emphasis/strike, inline code, inline/reference/collapsed/shortcut links, autolinks, anchors/outline, nested ordered/unordered/task lists, quotes, rules, fences, syntax highlighting, tables with alignment, and local images. Footnotes have basic textual presentation, frontmatter remains inert source, and GitHub alerts receive ordinary quote presentation rather than dedicated alert semantics.
 
 ## Compatibility profile
 
-Moonmark aims for broad practical Markdown compatibility through one coherent parser profile; it does not claim every Markdown dialect. Standard CommonMark syntax and the enabled GFM extensions above are supported through Moonmark's semantic and native presentation layers. Local inline image and link destinations additionally accept literal filesystem spaces without requiring angle brackets or percent encoding. That compatibility step is limited to local-looking destinations outside code and leaves ordinary remote URLs, reference definitions, and existing `<...>` / `%20` forms to Comrak.
+Wolfmark aims for broad practical Markdown compatibility through one coherent parser profile; it does not claim every Markdown dialect. Standard CommonMark syntax and the enabled GFM extensions above are supported through Wolfmark's semantic and native presentation layers. Local inline image and link destinations additionally accept literal filesystem spaces without requiring angle brackets or percent encoding. That compatibility step is limited to local-looking destinations outside code and leaves ordinary remote URLs, reference definitions, and existing `<...>` / `%20` forms to Comrak.
 
 | Feature | Parsing | Native presentation |
 | --- | --- | --- |
@@ -16,12 +16,12 @@ Moonmark aims for broad practical Markdown compatibility through one coherent pa
 | Footnotes | Enabled Comrak extension | Basic text, without backlink navigation |
 | YAML frontmatter | Enabled delimiter recognition | Inert source text |
 | Raw HTML | Parsed, never executed | Inert source text |
-| Literal-space local destinations | Narrow Moonmark parser-input normalization | Existing local resolver and presentation |
+| Literal-space local destinations | Narrow Wolfmark parser-input normalization | Existing local resolver and presentation |
 | GitHub alerts | Not specially enabled | Ordinary blockquote content only |
 
 Obsidian wiki links and embeds, GitHub website integrations, dedicated GitHub alert/callout styling, description lists, math, emoji shortcodes, and other dialect-specific extensions are not enabled. They may be evaluated individually later; there is no dialect/profile framework in the current early-development renderer.
 
-Comrak accepts optional titles on ordinary links and images. Image titles cross Moonmark's semantic/presentation boundary; link destinations and content are retained, but the current native viewer does not yet expose link titles as tooltips. Rich footnote navigation/backlinks and dedicated alert presentation are later renderer work rather than implicit compatibility claims.
+Comrak accepts optional titles on ordinary links and images. Image titles cross Wolfmark's semantic/presentation boundary; link destinations and content are retained, but the current native viewer does not yet expose link titles as tooltips. Rich footnote navigation/backlinks and dedicated alert presentation are later renderer work rather than implicit compatibility claims.
 
 Code remains one graphite QTextFrame with metadata, a real separator, preserved whitespace, and Copy. Rust classifies syntax once during presentation construction; unknown languages fall back to plain monospace. The palette uses warm amber, sage, orange, cream, red, and silver, never blue/cyan/teal.
 

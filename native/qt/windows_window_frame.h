@@ -4,7 +4,7 @@
 
 class QWidget;
 
-namespace moonmark::qt {
+namespace wolfmark::qt {
 class CaptionButton;
 
 namespace windows {
@@ -46,4 +46,4 @@ bool handleNativeFrameEvent(QWidget* window, QWidget* title_bar,
                             qintptr* result);
 
 } // namespace windows
-} // namespace moonmark::qt
+} // namespace wolfmark::qt

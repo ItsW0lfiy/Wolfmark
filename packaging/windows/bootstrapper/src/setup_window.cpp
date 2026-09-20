@@ -21,11 +21,11 @@
 #include "burn_controller.h"
 
 namespace {
-class MoonmarkSymbol final : public QWidget {
+class WolfmarkSymbol final : public QWidget {
 public:
-    explicit MoonmarkSymbol(QWidget* parent = nullptr) : QWidget(parent) {
+    explicit WolfmarkSymbol(QWidget* parent = nullptr) : QWidget(parent) {
         setFixedSize(44, 44);
-        setAccessibleName(QStringLiteral("Moonmark crescent"));
+        setAccessibleName(QStringLiteral("Wolfmark crescent"));
     }
 
 protected:
@@ -60,10 +60,10 @@ QFrame* separator() {
 
 SetupWindow::SetupWindow(BurnController* controller) : controller_(controller) {
     setObjectName(QStringLiteral("setupWindow"));
-    setWindowTitle(QStringLiteral("Moonmark Setup"));
+    setWindowTitle(QStringLiteral("Wolfmark Setup"));
     setFixedSize(660, 480);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
-    setAccessibleName(QStringLiteral("Moonmark Setup"));
+    setAccessibleName(QStringLiteral("Wolfmark Setup"));
 
     pages_ = new QStackedWidget(this);
     installPage_ = createInstallPage();
@@ -87,7 +87,7 @@ QWidget* SetupWindow::createIdentityHeader(const QString& eyebrow, const QString
     auto* row = new QHBoxLayout(container);
     row->setContentsMargins(0, 0, 0, 0);
     row->setSpacing(16);
-    row->addWidget(new MoonmarkSymbol);
+    row->addWidget(new WolfmarkSymbol);
     auto* copy = new QVBoxLayout;
     copy->setSpacing(4);
     auto* eyebrowLabel = new QLabel(eyebrow);
@@ -110,8 +110,8 @@ QWidget* SetupWindow::createInstallPage() {
     layout->setContentsMargins(42, 34, 42, 34);
     layout->setSpacing(18);
     auto* header = createIdentityHeader(
-        QStringLiteral("MOONMARK SETUP"),
-        QStringLiteral("Install Moonmark"),
+        QStringLiteral("WOLFMARK SETUP"),
+        QStringLiteral("Install Wolfmark"),
         QStringLiteral("A native Markdown experience without the clutter."));
     const auto labels = header->findChildren<QLabel*>();
     installEyebrow_ = labels.at(0);
@@ -127,16 +127,16 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->setSpacing(10);
     locationEdit_ = new QLineEdit;
     locationEdit_->setReadOnly(true);
-    locationEdit_->setAccessibleName(QStringLiteral("Moonmark install location"));
+    locationEdit_->setAccessibleName(QStringLiteral("Wolfmark install location"));
     locationButton_ = makeButton(QStringLiteral("Change"));
     connect(locationButton_, &QPushButton::clicked, this, [this] { chooseInstallFolder(); });
     locationRow->addWidget(locationEdit_, 1);
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
-    associationsCheck_ = new QCheckBox(QStringLiteral("Add Moonmark to Open With"));
+    associationsCheck_ = new QCheckBox(QStringLiteral("Add Wolfmark to Open With"));
     desktopCheck_ = new QCheckBox(QStringLiteral("Create a desktop shortcut"));
-    associationsCheck_->setAccessibleName(QStringLiteral("Add Moonmark to Open With"));
+    associationsCheck_->setAccessibleName(QStringLiteral("Add Wolfmark to Open With"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
     layout->addWidget(associationsCheck_);
     layout->addWidget(desktopCheck_);
@@ -144,7 +144,7 @@ QWidget* SetupWindow::createInstallPage() {
 
     auto* actions = new QHBoxLayout;
     actions->addStretch(1);
-    primaryButton_ = makeButton(QStringLiteral("Install Moonmark"), true);
+    primaryButton_ = makeButton(QStringLiteral("Install Wolfmark"), true);
     connect(primaryButton_, &QPushButton::clicked, this, [this] {
         if (controller_) {
             controller_->begin(state_.activeAction, optionsFromControls());
@@ -163,8 +163,8 @@ QWidget* SetupWindow::createMaintenancePage() {
     layout->setContentsMargins(42, 34, 42, 34);
     layout->setSpacing(16);
     layout->addWidget(createIdentityHeader(
-        QStringLiteral("MOONMARK SETUP"),
-        QStringLiteral("Moonmark is installed"),
+        QStringLiteral("WOLFMARK SETUP"),
+        QStringLiteral("Wolfmark is installed"),
         QStringLiteral("Maintain the application without affecting your documents or settings.")));
     layout->addWidget(separator());
     maintenanceVersion_ = new QLabel;
@@ -172,7 +172,7 @@ QWidget* SetupWindow::createMaintenancePage() {
     layout->addWidget(maintenanceVersion_);
     auto* repair = makeButton(QStringLiteral("Repair installation"));
     auto* modify = makeButton(QStringLiteral("Change installation options"));
-    auto* uninstall = makeButton(QStringLiteral("Uninstall Moonmark"));
+    auto* uninstall = makeButton(QStringLiteral("Uninstall Wolfmark"));
     uninstall->setProperty("danger", true);
     connect(repair, &QPushButton::clicked, this, [this] { showConfirmation(InstallerAction::Repair, state_); });
     connect(modify, &QPushButton::clicked, this, [this] {
@@ -198,14 +198,14 @@ QWidget* SetupWindow::createConfirmationPage() {
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(42, 34, 42, 34);
     layout->setSpacing(16);
-    auto* header = createIdentityHeader(QStringLiteral("MOONMARK SETUP"), QString(), QString());
+    auto* header = createIdentityHeader(QStringLiteral("WOLFMARK SETUP"), QString(), QString());
     const auto labels = header->findChildren<QLabel*>();
     confirmationTitle_ = labels.at(1);
     confirmationDetail_ = labels.at(2);
     layout->addWidget(header);
     layout->addWidget(separator());
     auto* assurance = new QLabel(QStringLiteral(
-        "Your Markdown and text documents will not be changed. Per-user Moonmark settings are preserved."));
+        "Your Markdown and text documents will not be changed. Per-user Wolfmark settings are preserved."));
     assurance->setObjectName(QStringLiteral("assurance"));
     assurance->setWordWrap(true);
     layout->addWidget(assurance);
@@ -233,7 +233,7 @@ QWidget* SetupWindow::createProgressPage() {
     auto* layout = new QVBoxLayout(page);
     layout->setContentsMargins(42, 48, 42, 48);
     layout->setSpacing(20);
-    auto* header = createIdentityHeader(QStringLiteral("MOONMARK SETUP"), QStringLiteral("Installing Moonmark"), QString());
+    auto* header = createIdentityHeader(QStringLiteral("WOLFMARK SETUP"), QStringLiteral("Installing Wolfmark"), QString());
     const auto labels = header->findChildren<QLabel*>();
     progressTitle_ = labels.at(1);
     progressDetail_ = labels.at(2);
@@ -264,22 +264,22 @@ QWidget* SetupWindow::createCompletePage() {
     layout->setContentsMargins(42, 48, 42, 42);
     layout->setSpacing(18);
     auto* header = createIdentityHeader(
-        QStringLiteral("MOONMARK SETUP"),
-        QStringLiteral("Moonmark is ready"),
+        QStringLiteral("WOLFMARK SETUP"),
+        QStringLiteral("Wolfmark is ready"),
         QStringLiteral("Installation completed successfully."));
     const auto labels = header->findChildren<QLabel*>();
     completeTitle_ = labels.at(1);
     completeDetail_ = labels.at(2);
     layout->addWidget(header);
     layout->addWidget(separator());
-    launchCheck_ = new QCheckBox(QStringLiteral("Launch Moonmark"));
+    launchCheck_ = new QCheckBox(QStringLiteral("Launch Wolfmark"));
     launchCheck_->setChecked(true);
     layout->addWidget(launchCheck_);
     layout->addStretch(1);
     auto* finish = makeButton(QStringLiteral("Finish"), true);
     connect(finish, &QPushButton::clicked, this, [this] {
         if (launchCheck_->isVisible() && launchCheck_->isChecked()) {
-            QProcess::startDetached(state_.options.installFolder + QStringLiteral("/Moonmark.exe"));
+            QProcess::startDetached(state_.options.installFolder + QStringLiteral("/Wolfmark.exe"));
         }
         if (controller_) {
             controller_->quit();
@@ -299,7 +299,7 @@ QWidget* SetupWindow::createErrorPage() {
     layout->setContentsMargins(42, 42, 42, 42);
     layout->setSpacing(16);
     auto* header = createIdentityHeader(
-        QStringLiteral("MOONMARK SETUP"), QStringLiteral("Moonmark could not be changed"), QString());
+        QStringLiteral("WOLFMARK SETUP"), QStringLiteral("Wolfmark could not be changed"), QString());
     errorSummary_ = header->findChildren<QLabel*>().at(2);
     layout->addWidget(header);
     layout->addWidget(separator());
@@ -326,10 +326,10 @@ QWidget* SetupWindow::createErrorPage() {
 void SetupWindow::showInstall(const InstallerState& state) {
     state_ = state;
     const bool modifying = state.activeAction == InstallerAction::Modify;
-    installEyebrow_->setText(modifying ? QStringLiteral("MOONMARK MAINTENANCE") : QStringLiteral("MOONMARK SETUP"));
-    installTitle_->setText(modifying ? QStringLiteral("Change Moonmark") : QStringLiteral("Install Moonmark"));
+    installEyebrow_->setText(modifying ? QStringLiteral("WOLFMARK MAINTENANCE") : QStringLiteral("WOLFMARK SETUP"));
+    installTitle_->setText(modifying ? QStringLiteral("Change Wolfmark") : QStringLiteral("Install Wolfmark"));
     installDetail_->setText(modifying
-        ? QStringLiteral("Choose the Windows integration Moonmark should maintain.")
+        ? QStringLiteral("Choose the Windows integration Wolfmark should maintain.")
         : QStringLiteral("A native Markdown experience without the clutter."));
     locationLabel_->setVisible(!modifying);
     locationEdit_->setVisible(!modifying);
@@ -337,7 +337,7 @@ void SetupWindow::showInstall(const InstallerState& state) {
     locationEdit_->setText(state.options.installFolder);
     associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
-    primaryButton_->setText(modifying ? QStringLiteral("Apply changes") : QStringLiteral("Install Moonmark"));
+    primaryButton_->setText(modifying ? QStringLiteral("Apply changes") : QStringLiteral("Install Wolfmark"));
     pages_->setCurrentWidget(installPage_);
     primaryButton_->setFocus();
 }
@@ -345,8 +345,8 @@ void SetupWindow::showInstall(const InstallerState& state) {
 void SetupWindow::showUpdate(const InstallerState& state) {
     state_ = state;
     state_.activeAction = InstallerAction::Update;
-    installEyebrow_->setText(QStringLiteral("MOONMARK UPDATE"));
-    installTitle_->setText(QStringLiteral("Update Moonmark"));
+    installEyebrow_->setText(QStringLiteral("WOLFMARK UPDATE"));
+    installTitle_->setText(QStringLiteral("Update Wolfmark"));
     installDetail_->setText(QStringLiteral(
         "Installed: %1\nNew version: %2\n\nYour settings and documents will be preserved.")
         .arg(state.installedVersion, state.targetVersion));
@@ -355,7 +355,7 @@ void SetupWindow::showUpdate(const InstallerState& state) {
     locationButton_->setVisible(false);
     associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
-    primaryButton_->setText(QStringLiteral("Update Moonmark"));
+    primaryButton_->setText(QStringLiteral("Update Wolfmark"));
     pages_->setCurrentWidget(installPage_);
     primaryButton_->setFocus();
 }
@@ -370,10 +370,10 @@ void SetupWindow::showConfirmation(InstallerAction action, const InstallerState&
     state_ = state;
     confirmationAction_ = action;
     const bool repair = action == InstallerAction::Repair;
-    confirmationTitle_->setText(repair ? QStringLiteral("Repair Moonmark") : QStringLiteral("Uninstall Moonmark?"));
+    confirmationTitle_->setText(repair ? QStringLiteral("Repair Wolfmark") : QStringLiteral("Uninstall Wolfmark?"));
     confirmationDetail_->setText(repair
-        ? QStringLiteral("Moonmark will verify and restore its installed files.")
-        : QStringLiteral("Moonmark itself will be removed."));
+        ? QStringLiteral("Wolfmark will verify and restore its installed files.")
+        : QStringLiteral("Wolfmark itself will be removed."));
     confirmationButton_->setText(repair ? QStringLiteral("Repair") : QStringLiteral("Uninstall"));
     confirmationButton_->setProperty("danger", !repair);
     confirmationButton_->style()->unpolish(confirmationButton_);
@@ -403,23 +403,23 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
     state_.applying = false;
     switch (action) {
     case InstallerAction::Update:
-        completeTitle_->setText(QStringLiteral("Moonmark has been updated"));
-        completeDetail_->setText(QStringLiteral("The latest Moonmark development build is ready."));
+        completeTitle_->setText(QStringLiteral("Wolfmark has been updated"));
+        completeDetail_->setText(QStringLiteral("The latest Wolfmark development build is ready."));
         break;
     case InstallerAction::Repair:
-        completeTitle_->setText(QStringLiteral("Moonmark has been repaired"));
-        completeDetail_->setText(QStringLiteral("Installed Moonmark files were verified and restored."));
+        completeTitle_->setText(QStringLiteral("Wolfmark has been repaired"));
+        completeDetail_->setText(QStringLiteral("Installed Wolfmark files were verified and restored."));
         break;
     case InstallerAction::Modify:
-        completeTitle_->setText(QStringLiteral("Moonmark options were updated"));
+        completeTitle_->setText(QStringLiteral("Wolfmark options were updated"));
         completeDetail_->setText(QStringLiteral("Windows integration now matches your choices."));
         break;
     case InstallerAction::Uninstall:
-        completeTitle_->setText(QStringLiteral("Moonmark has been removed"));
+        completeTitle_->setText(QStringLiteral("Wolfmark has been removed"));
         completeDetail_->setText(QStringLiteral("Your documents and per-user settings were preserved."));
         break;
     default:
-        completeTitle_->setText(QStringLiteral("Moonmark is ready"));
+        completeTitle_->setText(QStringLiteral("Wolfmark is ready"));
         completeDetail_->setText(QStringLiteral("Installation completed successfully."));
         break;
     }
@@ -439,7 +439,7 @@ void SetupWindow::showSmokeState(const QString& stateName) {
     smoke.installed = true;
     smoke.installedVersion = QStringLiteral("0.1.0-dev.6");
     smoke.targetVersion = QStringLiteral("0.1.0-dev.7");
-    smoke.options.installFolder = QStringLiteral("C:/Program Files/Moonmark");
+    smoke.options.installFolder = QStringLiteral("C:/Program Files/Wolfmark");
     smoke.options.fileAssociations = true;
     if (stateName == QStringLiteral("install")) {
         smoke.activeAction = InstallerAction::Install;
@@ -459,7 +459,7 @@ void SetupWindow::showSmokeState(const QString& stateName) {
         showComplete(InstallerAction::Install, smoke);
     } else {
         showFailure(
-            QStringLiteral("Moonmark could not be installed"),
+            QStringLiteral("Wolfmark could not be installed"),
             QStringLiteral("Error 0x80070643\nThe installer log contains diagnostic details."));
     }
 }
@@ -472,8 +472,8 @@ void SetupWindow::closeEvent(QCloseEvent* event) {
     if (state_.applying) {
         const auto answer = QMessageBox::question(
             this,
-            QStringLiteral("Cancel Moonmark setup?"),
-            QStringLiteral("Moonmark will stop safely and roll back incomplete changes."));
+            QStringLiteral("Cancel Wolfmark setup?"),
+            QStringLiteral("Wolfmark will stop safely and roll back incomplete changes."));
         if (answer != QMessageBox::Yes) {
             event->ignore();
             return;
@@ -508,7 +508,7 @@ InstallerOptions SetupWindow::optionsFromControls() const {
 
 void SetupWindow::chooseInstallFolder() {
     const QString folder = QFileDialog::getExistingDirectory(
-        this, QStringLiteral("Choose Moonmark install location"), locationEdit_->text());
+        this, QStringLiteral("Choose Wolfmark install location"), locationEdit_->text());
     if (!folder.isEmpty()) {
         locationEdit_->setText(folder);
     }
@@ -516,21 +516,21 @@ void SetupWindow::chooseInstallFolder() {
 
 QString SetupWindow::actionTitle(InstallerAction action) const {
     switch (action) {
-    case InstallerAction::Update: return QStringLiteral("Updating Moonmark");
-    case InstallerAction::Modify: return QStringLiteral("Changing Moonmark");
-    case InstallerAction::Repair: return QStringLiteral("Repairing Moonmark");
-    case InstallerAction::Uninstall: return QStringLiteral("Removing Moonmark");
-    default: return QStringLiteral("Installing Moonmark");
+    case InstallerAction::Update: return QStringLiteral("Updating Wolfmark");
+    case InstallerAction::Modify: return QStringLiteral("Changing Wolfmark");
+    case InstallerAction::Repair: return QStringLiteral("Repairing Wolfmark");
+    case InstallerAction::Uninstall: return QStringLiteral("Removing Wolfmark");
+    default: return QStringLiteral("Installing Wolfmark");
     }
 }
 
 QString SetupWindow::actionProgressDetail(InstallerAction action) const {
     switch (action) {
-    case InstallerAction::Update: return QStringLiteral("Preparing the Moonmark update...");
+    case InstallerAction::Update: return QStringLiteral("Preparing the Wolfmark update...");
     case InstallerAction::Modify: return QStringLiteral("Applying installation options...");
     case InstallerAction::Repair: return QStringLiteral("Verifying installed files...");
-    case InstallerAction::Uninstall: return QStringLiteral("Removing Moonmark-owned files...");
-    default: return QStringLiteral("Preparing Moonmark...");
+    case InstallerAction::Uninstall: return QStringLiteral("Removing Wolfmark-owned files...");
+    default: return QStringLiteral("Preparing Wolfmark...");
     }
 }
 

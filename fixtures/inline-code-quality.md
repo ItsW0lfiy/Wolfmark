@@ -1,6 +1,6 @@
 # Inline code surfaces
 
-Use `cargo run` to open Moonmark. Compare `first`, `second` and `third` on one line without changing their copied contents.
+Use `cargo run` to open Wolfmark. Compare `first`, `second` and `third` on one line without changing their copied contents.
 
 This deliberately longer paragraph tests wrapping near the edge of the viewport with `a-path/with-several-components/file.md` and ordinary text continuing after the code span. Resize the window to check the same unchanged source.
 

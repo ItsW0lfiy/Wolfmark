@@ -1,4 +1,4 @@
-param([string]$Executable = 'out/cargo/debug/moonmark.exe')
+param([string]$Executable = 'out/cargo/debug/wolfmark.exe')
 $ErrorActionPreference = 'Stop'
 $cases = @(
     @('inline-prose-table', 'fixtures/inline-code-quality.md', 1200, 900, 0),
@@ -6,8 +6,8 @@ $cases = @(
     @('inline-selected', 'fixtures/inline-code-quality.md', 1200, 900, 0, 100, 'SELECTION'),
     @('image-gap-after', 'fixtures/image-layout-regression.md', 1280, 820, 450),
     @('empty', '', 1200, 820, 0),
-    @('prose', 'fixtures/moonmark-visual-test.md', 1200, 820, 0),
-    @('headings-lists', 'fixtures/moonmark-visual-test.md', 1200, 820, 300),
+    @('prose', 'fixtures/wolfmark-visual-test.md', 1200, 820, 0),
+    @('headings-lists', 'fixtures/wolfmark-visual-test.md', 1200, 820, 300),
     @('tables', 'fixtures/document-tables.md', 1200, 960, 0),
     @('code', 'fixtures/code-block-quality.md', 1200, 900, 0),
     @('plain-text', 'fixtures/text/literal.txt', 1200, 900, 0),
@@ -24,20 +24,20 @@ $cases = @(
     @('zoom-150', 'fixtures/concept-presentation.md', 1440, 960, 0, 150),
     @('code-150', 'fixtures/code-block-quality.md', 1200, 900, 0, 150)
 )
-$names = 'MOONMARK_SNAPSHOT_NAME', 'MOONMARK_SNAPSHOT_WIDTH', 'MOONMARK_SNAPSHOT_HEIGHT', 'MOONMARK_SNAPSHOT_SCROLL',
-    'MOONMARK_SNAPSHOT_ZOOM', 'MOONMARK_SNAPSHOT_MENU', 'MOONMARK_SNAPSHOT_SELECTION', 'MOONMARK_SNAPSHOT_NO_SIDEBAR'
+$names = 'WOLFMARK_SNAPSHOT_NAME', 'WOLFMARK_SNAPSHOT_WIDTH', 'WOLFMARK_SNAPSHOT_HEIGHT', 'WOLFMARK_SNAPSHOT_SCROLL',
+    'WOLFMARK_SNAPSHOT_ZOOM', 'WOLFMARK_SNAPSHOT_MENU', 'WOLFMARK_SNAPSHOT_SELECTION', 'WOLFMARK_SNAPSHOT_NO_SIDEBAR'
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
     foreach ($case in $cases) {
-        $env:MOONMARK_SNAPSHOT_NAME = $case[0]
-        $env:MOONMARK_SNAPSHOT_WIDTH = $case[2]
-        $env:MOONMARK_SNAPSHOT_HEIGHT = $case[3]
-        $env:MOONMARK_SNAPSHOT_SCROLL = $case[4]
-        $env:MOONMARK_SNAPSHOT_ZOOM = if ($case.Count -gt 5) { $case[5] } else { 100 }
+        $env:WOLFMARK_SNAPSHOT_NAME = $case[0]
+        $env:WOLFMARK_SNAPSHOT_WIDTH = $case[2]
+        $env:WOLFMARK_SNAPSHOT_HEIGHT = $case[3]
+        $env:WOLFMARK_SNAPSHOT_SCROLL = $case[4]
+        $env:WOLFMARK_SNAPSHOT_ZOOM = if ($case.Count -gt 5) { $case[5] } else { 100 }
         foreach ($mode in 'MENU', 'SELECTION', 'NO_SIDEBAR') {
             $value = if ($case.Count -gt 6 -and $case[6] -eq $mode) { '1' } else { $null }
-            [Environment]::SetEnvironmentVariable("MOONMARK_SNAPSHOT_$mode", $value, 'Process')
+            [Environment]::SetEnvironmentVariable("WOLFMARK_SNAPSHOT_$mode", $value, 'Process')
         }
         $arguments = @('--smoke-snapshot')
         if ($case[1]) {

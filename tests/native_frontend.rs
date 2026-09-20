@@ -19,15 +19,15 @@ fn run_smoke_many(mode: &str, fixture_names: &[&str]) -> String {
         .iter()
         .map(|name| fixture(name))
         .collect::<Vec<_>>();
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg(mode)
         .args(fixtures)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark native smoke test");
+        .expect("launch Wolfmark native smoke test");
     assert!(
         output.status.success(),
-        "Moonmark smoke failed ({:?}): {}{}",
+        "Wolfmark smoke failed ({:?}): {}{}",
         output.status.code(),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -47,15 +47,15 @@ fn numeric_metric(output: &str, name: &str) -> u64 {
 }
 
 fn run_startup_arguments_smoke(arguments: &[PathBuf]) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-startup-arguments")
         .args(arguments)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark startup-argument smoke test");
+        .expect("launch Wolfmark startup-argument smoke test");
     assert!(
         output.status.success(),
-        "Moonmark startup-argument smoke failed ({:?}): {}{}",
+        "Wolfmark startup-argument smoke failed ({:?}): {}{}",
         output.status.code(),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -91,7 +91,7 @@ fn shell_startup_arguments_open_supported_documents_once() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("out")
             .join("tests")
-            .join("moonmark-native-tests")
+            .join("wolfmark-native-tests")
             .join("startup-arguments"),
     );
     let root = generated.path();
@@ -146,14 +146,14 @@ fn shell_startup_arguments_open_supported_documents_once() {
 
 #[test]
 fn native_settings_migrate_and_recover_safely() {
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-settings")
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark settings smoke test");
+        .expect("launch Wolfmark settings smoke test");
     assert!(
         output.status.success(),
-        "Moonmark settings smoke failed ({:?}): {}{}",
+        "Wolfmark settings smoke failed ({:?}): {}{}",
         output.status.code(),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -175,7 +175,7 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
             "draft": false,
             "prerelease": true,
             "tag_name": "0.1.0-dev.8",
-            "name": "Moonmark dev.8 fixture",
+            "name": "Wolfmark dev.8 fixture",
             "body": "Fixture release",
             "html_url": "https://github.com/ItsW0lfiy/Moonmark/releases/tag/0.1.0-dev.8",
             "assets": []
@@ -196,12 +196,12 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
             }
             let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(
-                request.contains("user-agent: moonmark/0.1.0-dev.7"),
+                request.contains("user-agent: wolfmark/0.1.0-dev.7"),
                 "{request}"
             );
             if request_index == 0 {
                 let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"moonmark-test\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"wolfmark-test\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     release_json.len(),
                     release_json
                 );
@@ -210,7 +210,7 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
                     .expect("write update response");
             } else {
                 assert!(
-                    request.contains("if-none-match: \"moonmark-test\""),
+                    request.contains("if-none-match: \"wolfmark-test\""),
                     "{request}"
                 );
                 stream.write_all(
@@ -220,16 +220,16 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
         }
     });
 
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-updates")
-        .env("MOONMARK_UPDATE_TEST_ENDPOINT", endpoint)
+        .env("WOLFMARK_UPDATE_TEST_ENDPOINT", endpoint)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark update transport smoke test");
+        .expect("launch Wolfmark update transport smoke test");
     server.join().expect("join update fixture server");
     assert!(
         output.status.success(),
-        "Moonmark update smoke failed ({:?}): {}{}",
+        "Wolfmark update smoke failed ({:?}): {}{}",
         output.status.code(),
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -351,7 +351,7 @@ fn qt_frontend_smoke_matrix() {
     assert!(output.contains("duplicate=deduplicated"), "{output}");
     assert!(output.contains("state=retained"), "{output}");
     assert!(output.contains("counters=stable"), "{output}");
-    let output = run_smoke("--smoke-zoom", "moonmark-visual-test.md");
+    let output = run_smoke("--smoke-zoom", "wolfmark-visual-test.md");
     assert!(output.contains("zoom=ok"), "{output}");
     assert!(output.contains("image_request_delta=0"), "{output}");
 
@@ -377,7 +377,7 @@ fn qt_frontend_smoke_matrix() {
     let output = run_smoke("--smoke-layout-normal", "layout-transitions.md");
     assert!(output.contains("layout_normal=ok"), "{output}");
     assert!(output.contains("geometry=restored"), "{output}");
-    let output = run_smoke("--smoke-images", "moonmark-visual-test.md");
+    let output = run_smoke("--smoke-images", "wolfmark-visual-test.md");
     assert!(output.contains("images=ok"), "{output}");
     assert!(output.contains("failed=0"), "{output}");
     assert!(output.contains("pending=0"), "{output}");
@@ -385,17 +385,17 @@ fn qt_frontend_smoke_matrix() {
     let watcher_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("out")
         .join("tests")
-        .join("moonmark-native-tests");
+        .join("wolfmark-native-tests");
     std::fs::create_dir_all(&watcher_root).expect("create native test directory");
     let watcher_fixture = watcher_root.join("watcher.md");
     std::fs::write(&watcher_fixture, "# Watcher fixture\n\nOriginal content.\n")
         .expect("write watcher fixture");
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-watcher")
         .arg(&watcher_fixture)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark watcher smoke test");
+        .expect("launch Wolfmark watcher smoke test");
     assert!(
         output.status.success(),
         "{}{}",
@@ -412,7 +412,7 @@ fn qt_background_text_watcher_updates_only_its_session() {
     let watcher_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("out")
         .join("tests")
-        .join("moonmark-native-tests");
+        .join("wolfmark-native-tests");
     std::fs::create_dir_all(&watcher_root).expect("create native test directory");
     let active_fixture = watcher_root.join("active.md");
     let background_fixture = watcher_root.join("background.txt");
@@ -423,18 +423,18 @@ fn qt_background_text_watcher_updates_only_its_session() {
     .expect("write active watcher fixture");
     std::fs::write(&background_fixture, "Literal **background** text.\n")
         .expect("write background watcher fixture");
-    let output = Command::new(env!("CARGO_BIN_EXE_moonmark"))
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-multidoc-watcher")
         .arg(&active_fixture)
         .arg(&background_fixture)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
-        .expect("launch Moonmark background watcher smoke test");
+        .expect("launch Wolfmark background watcher smoke test");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "Moonmark background watcher smoke failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "Wolfmark background watcher smoke failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     assert!(stdout.contains("multidoc_watcher=ok"), "{stdout}");
     assert!(stdout.contains("active=stable"), "{stdout}");
