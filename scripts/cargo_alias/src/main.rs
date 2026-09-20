@@ -1,5 +1,5 @@
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
@@ -28,7 +28,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let forwarded_arguments: Vec<OsString> = env::args_os().skip(2).collect();
+    let mut forwarded_arguments: Vec<OsString> = env::args_os().skip(2).collect();
+    if forwarded_arguments
+        .first()
+        .is_some_and(|argument| argument.as_os_str() == OsStr::new("--"))
+    {
+        forwarded_arguments.remove(0);
+    }
 
     let status = Command::new("pwsh")
         .args(["-NoProfile", "-File"])
