@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
+  <Package
+      Name="Moonmark"
+      Manufacturer="ItsW0lfiy"
+      Version="$(MsiVersion)"
+      UpgradeCode="{48D9AFC3-ECEB-4DB2-BC50-C176246E388A}"
+      ProductCode="*"
+      Scope="perMachine"
+      InstallerVersion="500"
+      Compressed="yes">
+
+    <SummaryInformation Description="Moonmark native Markdown viewer" Manufacturer="ItsW0lfiy" />
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of Moonmark is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch
+          Id="MoonmarkInstallFolderSearch"
+          Root="HKLM"
+          Key="Software\ItsW0lfiy\Moonmark\Installer"
+          Name="InstallDir"
+          Type="raw"
+          Bitness="always64" />
+    </Property>
+    <Property Id="MOONMARK_FILE_ASSOC" Value="1" Secure="yes" />
+    <Property Id="MOONMARK_DESKTOP_SHORTCUT" Value="0" Secure="yes" />
+    <Property Id="ARPPRODUCTICON" Value="MoonmarkProductIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ItsW0lfiy/Moonmark/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ItsW0lfiy/Moonmark" />
+    <Property Id="ARPCOMMENTS" Value="Native Markdown and text document viewer" />
+
+    <Icon Id="MoonmarkProductIcon" SourceFile="$(ProjectRoot)\assets\icons\moonmark.ico" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Moonmark">
+        <Files Include="!(bindpath.Payload)\**" />
+
+        <Component Id="InstallerRegistration" Guid="{06E9915B-ECC7-4070-A111-C031C5FBEDDC}" Bitness="always64">
+          <RegistryValue
+              Root="HKLM"
+              Key="Software\ItsW0lfiy\Moonmark\Installer"
+              Name="InstallDir"
+              Type="string"
+              Value="[INSTALLFOLDER]"
+              KeyPath="yes" />
+          <RegistryValue
+              Root="HKLM"
+              Key="Software\ItsW0lfiy\Moonmark\Installer"
+              Name="Version"
+              Type="string"
+              Value="$(DisplayVersion)" />
+        </Component>
+
+        <Component
+            Id="FileAssociations"
+            Guid="{D139046D-8380-4718-85F6-7CAA7A6F5516}"
+            Bitness="always64"
+            Condition="MOONMARK_FILE_ASSOC = 1"
+            Transitive="yes">
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Installer" Name="FileAssociations" Type="integer" Value="1" KeyPath="yes" />
+          <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="Moonmark" Type="string" Value="Software\ItsW0lfiy\Moonmark\Capabilities" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities" Name="ApplicationName" Type="string" Value="Moonmark" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities" Name="ApplicationDescription" Type="string" Value="Native Markdown and text document viewer" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities" Name="ApplicationIcon" Type="string" Value="[INSTALLFOLDER]Moonmark.exe,0" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations" Name=".md" Type="string" Value="Moonmark.MarkdownDocument" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations" Name=".markdown" Type="string" Value="Moonmark.MarkdownDocument" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations" Name=".txt" Type="string" Value="Moonmark.TextDocument" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.MarkdownDocument" Type="string" Value="Moonmark Markdown Document" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.MarkdownDocument\DefaultIcon" Type="string" Value="[INSTALLFOLDER]assets\icons\moonmark-markdown.ico" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.MarkdownDocument\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Moonmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.TextDocument" Type="string" Value="Moonmark Text Document" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.TextDocument\DefaultIcon" Type="string" Value="[INSTALLFOLDER]assets\icons\moonmark-text.ico" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Moonmark.TextDocument\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Moonmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe" Name="FriendlyAppName" Type="string" Value="Moonmark" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe\DefaultIcon" Type="string" Value="[INSTALLFOLDER]Moonmark.exe,0" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]Moonmark.exe&quot; &quot;%1&quot;" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe\SupportedTypes" Name=".md" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe\SupportedTypes" Name=".markdown" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\Applications\Moonmark.exe\SupportedTypes" Name=".txt" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.md\OpenWithProgids" Name="Moonmark.MarkdownDocument" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.markdown\OpenWithProgids" Name="Moonmark.MarkdownDocument" Type="string" Value="" />
+          <RegistryValue Root="HKLM" Key="Software\Classes\.txt\OpenWithProgids" Name="Moonmark.TextDocument" Type="string" Value="" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MoonmarkProgramMenuFolder" Name="Moonmark">
+        <Component Id="StartMenuShortcut" Guid="{79F6A443-C33F-468D-AF1B-1A0CDFE732AA}">
+          <Shortcut Id="MoonmarkStartMenuShortcut" Name="Moonmark" Target="[INSTALLFOLDER]Moonmark.exe" WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveMoonmarkProgramMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Installer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component
+          Id="DesktopShortcut"
+          Guid="{7684B80E-DD7B-4B63-8CBF-575D36146094}"
+          Condition="MOONMARK_DESKTOP_SHORTCUT = 1"
+          Transitive="yes">
+        <Shortcut Id="MoonmarkDesktopShortcut" Name="Moonmark" Target="[INSTALLFOLDER]Moonmark.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKLM" Key="Software\ItsW0lfiy\Moonmark\Installer" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

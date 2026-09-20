@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="7.0.0">
+  <Bundle
+      Name="Moonmark"
+      Manufacturer="ItsW0lfiy"
+      Version="$(BundleVersion)"
+      UpgradeCode="{B33F6F20-A568-4F07-9732-32ABD5DE69AE}"
+      IconSourceFile="$(ProjectRoot)\assets\icons\moonmark.ico"
+      Compressed="yes">
+
+    <BootstrapperApplication SourceFile="$(BootstrapperExe)">
+      <Payloads Include="!(bindpath.Bootstrapper)\**" />
+    </BootstrapperApplication>
+
+    <Variable Name="MoonmarkInstallFolder" Type="string" Value="[ProgramFiles64Folder]Moonmark" />
+    <Variable Name="MoonmarkDisplayVersion" Type="string" Value="$(DisplayVersion)" />
+    <Variable Name="MoonmarkFileAssociations" Type="numeric" Value="1" />
+    <Variable Name="MoonmarkDesktopShortcut" Type="numeric" Value="0" />
+
+    <Chain>
+      <MsiPackage Id="MoonmarkMsi" SourceFile="$(MsiPath)" Visible="no" Vital="yes" ForcePerMachine="yes">
+        <MsiProperty Name="INSTALLFOLDER" Value="[MoonmarkInstallFolder]" />
+        <MsiProperty Name="MOONMARK_FILE_ASSOC" Value="[MoonmarkFileAssociations]" />
+        <MsiProperty Name="MOONMARK_DESKTOP_SHORTCUT" Value="[MoonmarkDesktopShortcut]" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>

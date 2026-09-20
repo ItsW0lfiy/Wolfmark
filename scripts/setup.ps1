@@ -4,8 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $qtRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/qt'))
-$innoCompiler = [IO.Path]::GetFullPath(
-    (Join-Path $projectRoot 'out/toolchains/inno/7.1.0/ISCC.exe'))
+$wix = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/wix/wix.exe'))
 $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
 
 function Assert-MsvcToolchain {
@@ -86,18 +85,9 @@ try {
         }
     }
 
-    if (Test-Path -LiteralPath $innoCompiler -PathType Leaf) {
-        $innoVersion = (& $innoCompiler --version).Trim()
-        if ($LASTEXITCODE -ne 0 -or $innoVersion -ne '7.1.0') {
-            throw "Unexpected project-local Inno Setup compiler at $innoCompiler (reported '$innoVersion')."
-        }
-        Write-Host "Project-local Inno Setup $innoVersion is already available at $innoCompiler"
-    } else {
-        Write-Host 'Project-local Inno Setup is missing; running the existing verified Inno bootstrap.'
-        Invoke-Bootstrap 'bootstrap_inno.ps1'
-        if (-not (Test-Path -LiteralPath $innoCompiler -PathType Leaf)) {
-            throw "Inno Setup bootstrap completed, but ISCC.exe is missing at $innoCompiler."
-        }
+    Invoke-Bootstrap 'bootstrap_wix.ps1'
+    if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) {
+        throw "WiX bootstrap completed, but wix.exe is missing at $wix."
     }
 
     Write-Host 'Moonmark development tooling is ready.'
