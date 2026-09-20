@@ -176,7 +176,7 @@ try {
         if (Test-Path -LiteralPath $baBuild) { Remove-Item -Recurse -Force -LiteralPath $baBuild }
         if (Test-Path -LiteralPath $baPayload) { Remove-Item -Recurse -Force -LiteralPath $baPayload }
         $generated = Join-Path $baBuild 'generated'
-        New-Item -ItemType Directory -Force $generated, (Join-Path $baPayload 'platforms') | Out-Null
+        New-Item -ItemType Directory -Force $generated, (Join-Path $baPayload 'platforms'), (Join-Path $baPayload 'assets/branding') | Out-Null
         Set-Content -LiteralPath (Join-Path $generated 'wolfmark_setup_version.h') -Encoding ascii -Value @(
             "#define WOLFMARK_SETUP_VERSION_COMMAS $($windowsVersion.Resource)",
             "#define WOLFMARK_SETUP_VERSION_STRING `"$version`""
@@ -191,6 +191,7 @@ try {
         if (-not (Test-Path -LiteralPath $bootstrapperExe -PathType Leaf)) { throw "Native bootstrapper is missing: $bootstrapperExe" }
         foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $baPayload }
         Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $baPayload 'platforms')
+        Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' (Join-Path $baPayload 'assets/branding')
         Set-Content -LiteralPath (Join-Path $baPayload 'qt.conf') -Encoding ascii -Value @('[Paths]', 'Plugins=.')
         Copy-RequiredFile 'docs/licenses/WiX-OSMF-EULA.txt' $baPayload
         foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $baPayload }

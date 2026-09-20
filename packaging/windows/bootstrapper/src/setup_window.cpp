@@ -11,6 +11,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPixmap>
 #include <QProcess>
 #include <QProgressBar>
 #include <QPushButton>
@@ -23,21 +24,24 @@
 namespace {
 class WolfmarkSymbol final : public QWidget {
 public:
-    explicit WolfmarkSymbol(QWidget* parent = nullptr) : QWidget(parent) {
-        setFixedSize(44, 44);
-        setAccessibleName(QStringLiteral("Wolfmark crescent"));
+    explicit WolfmarkSymbol(int size = 44, QWidget* parent = nullptr) : QWidget(parent) {
+        setFixedSize(size, size);
+        setAccessibleName(QStringLiteral("Wolfmark paw"));
+        source_.load(QApplication::applicationDirPath() +
+                     QStringLiteral("/assets/branding/wolfmark-symbol.png"));
     }
 
 protected:
     void paintEvent(QPaintEvent*) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(224, 224, 224));
-        painter.drawEllipse(QRectF(5, 5, 34, 34));
-        painter.setBrush(QColor(12, 12, 12));
-        painter.drawEllipse(QRectF(16, 1, 31, 31));
+        if (!source_.isNull()) {
+            painter.drawPixmap(rect(), source_);
+        }
     }
+
+private:
+    QPixmap source_;
 };
 
 QPushButton* makeButton(const QString& text, bool primary = false) {
@@ -61,7 +65,7 @@ QFrame* separator() {
 SetupWindow::SetupWindow(BurnController* controller) : controller_(controller) {
     setObjectName(QStringLiteral("setupWindow"));
     setWindowTitle(QStringLiteral("Wolfmark Setup"));
-    setFixedSize(660, 480);
+    setFixedSize(820, 560);
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     setAccessibleName(QStringLiteral("Wolfmark Setup"));
 
@@ -76,9 +80,34 @@ SetupWindow::SetupWindow(BurnController* controller) : controller_(controller) {
         pages_->addWidget(page);
     }
 
-    auto* root = new QVBoxLayout(this);
+    auto* root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
-    root->addWidget(pages_);
+    root->setSpacing(0);
+    auto* brand_panel = new QWidget;
+    brand_panel->setObjectName(QStringLiteral("brandPanel"));
+    brand_panel->setAttribute(Qt::WA_StyledBackground);
+    brand_panel->setFixedWidth(205);
+    auto* brand_layout = new QVBoxLayout(brand_panel);
+    brand_layout->setContentsMargins(26, 38, 26, 28);
+    brand_layout->setSpacing(12);
+    auto* brand_symbol = new WolfmarkSymbol(88);
+    brand_layout->addWidget(brand_symbol, 0, Qt::AlignHCenter);
+    auto* brand_name = new QLabel(QStringLiteral("Wolfmark"));
+    brand_name->setObjectName(QStringLiteral("brandName"));
+    brand_name->setAlignment(Qt::AlignHCenter);
+    brand_layout->addWidget(brand_name);
+    auto* brand_detail = new QLabel(QStringLiteral("Viewer-first.\nFree and open source."));
+    brand_detail->setObjectName(QStringLiteral("brandDetail"));
+    brand_detail->setAlignment(Qt::AlignHCenter);
+    brand_layout->addWidget(brand_detail);
+    brand_layout->addStretch();
+    auto* brand_footer = new QLabel(QStringLiteral("WOLFMARK SETUP"));
+    brand_footer->setObjectName(QStringLiteral("eyebrow"));
+    brand_footer->setAlignment(Qt::AlignHCenter);
+    brand_layout->addWidget(brand_footer);
+    root->addWidget(brand_panel);
+    pages_->setObjectName(QStringLiteral("setupPages"));
+    root->addWidget(pages_, 1);
     applyStyle();
 }
 
@@ -86,8 +115,7 @@ QWidget* SetupWindow::createIdentityHeader(const QString& eyebrow, const QString
     auto* container = new QWidget;
     auto* row = new QHBoxLayout(container);
     row->setContentsMargins(0, 0, 0, 0);
-    row->setSpacing(16);
-    row->addWidget(new WolfmarkSymbol);
+    row->setSpacing(0);
     auto* copy = new QVBoxLayout;
     copy->setSpacing(4);
     auto* eyebrowLabel = new QLabel(eyebrow);
@@ -536,29 +564,36 @@ QString SetupWindow::actionProgressDetail(InstallerAction action) const {
 
 void SetupWindow::applyStyle() {
     qApp->setStyleSheet(QStringLiteral(R"(
-        QWidget#setupWindow { background: #0c0c0c; color: #ededed; font-family: "Segoe UI"; font-size: 10pt; }
-        QLabel#eyebrow { color: #8c8c8c; font-size: 8pt; font-weight: 600; letter-spacing: 2px; }
-        QLabel#pageTitle { color: #f2f2f2; font-size: 22pt; font-weight: 600; }
-        QLabel#pageDetail { color: #adadad; font-size: 10pt; }
-        QLabel#sectionLabel { color: #c7c7c7; font-weight: 600; }
-        QLabel#metadata { color: #a8a8a8; padding: 4px 0; }
-        QLabel#assurance, QLabel#errorDetails { background: #151515; border: 1px solid #303030; border-radius: 7px; padding: 14px; color: #bdbdbd; }
-        QFrame#separator { background: #292929; border: none; }
-        QLineEdit { background: #151515; border: 1px solid #383838; border-radius: 6px; padding: 9px 11px; color: #dedede; selection-background-color: #595959; selection-color: #ffffff; }
-        QPushButton { background: #1c1c1c; border: 1px solid #3a3a3a; border-radius: 6px; color: #dddddd; padding: 8px 16px; }
-        QPushButton:hover { background: #292929; border-color: #5b5b5b; }
-        QPushButton:pressed { background: #121212; border-color: #747474; }
-        QPushButton:focus { border: 2px solid #b8b8b8; padding: 7px 15px; }
-        QPushButton[primary="true"] { background: #e2e2e2; color: #111111; border-color: #e2e2e2; font-weight: 600; }
-        QPushButton[primary="true"]:hover { background: #ffffff; border-color: #ffffff; }
-        QPushButton[danger="true"]:hover { background: #3a2020; border-color: #8e5555; }
-        QCheckBox { spacing: 9px; color: #d1d1d1; }
-        QCheckBox::indicator { width: 17px; height: 17px; border: 1px solid #555555; border-radius: 4px; background: #151515; }
-        QCheckBox::indicator:hover { border-color: #8a8a8a; }
-        QCheckBox::indicator:checked { background: #d8d8d8; border-color: #d8d8d8; image: none; }
+        QWidget#setupWindow { background: #101010; color: #e9e7e6; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; }
+        QWidget#brandPanel { background: #171717; border-right: 1px solid #343434; }
+        QStackedWidget#setupPages { background: #101010; }
+        QLabel#brandName { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 23pt; font-weight: 600; }
+        QLabel#brandDetail { color: #9c9895; font-size: 9pt; }
+        QLabel#eyebrow { color: #a09c99; font-size: 8pt; font-weight: 600; letter-spacing: 2px; }
+        QLabel#pageTitle { color: #f2efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 24pt; font-weight: 600; }
+        QLabel#pageDetail { color: #aaa6a3; font-size: 10pt; }
+        QLabel#sectionLabel { color: #d0cdca; font-weight: 600; }
+        QLabel#metadata { color: #9c9895; padding: 5px 0; }
+        QLabel#assurance, QLabel#errorDetails { background: #1b1b1b; border: 1px solid #3b3b3b; border-radius: 9px; padding: 15px; color: #c5c1be; }
+        QFrame#separator { background: #343434; border: none; }
+        QLineEdit { background: #1b1b1b; border: 1px solid #414141; border-radius: 7px; padding: 9px 11px; color: #e9e7e6; selection-background-color: #69313c; selection-color: #ffffff; }
+        QLineEdit:focus { border-color: #d62d4e; }
+        QPushButton { background: #202020; border: 1px solid #414141; border-radius: 7px; color: #d8d4d1; padding: 8px 16px; }
+        QPushButton:hover { background: #2b2b2b; border-color: #5c5c5c; }
+        QPushButton:pressed { background: #342326; border-color: #b8213f; }
+        QPushButton:focus { border: 2px solid #d62d4e; padding: 7px 15px; }
+        QPushButton[primary="true"] { background: #d62d4e; color: #ffffff; border-color: #d62d4e; font-weight: 600; }
+        QPushButton[primary="true"]:hover { background: #ea3d5f; border-color: #ea3d5f; }
+        QPushButton[primary="true"]:pressed { background: #b8213f; border-color: #b8213f; }
+        QPushButton[danger="true"] { color: #e8909c; }
+        QPushButton[danger="true"]:hover { background: #422127; border-color: #d45a64; }
+        QCheckBox { spacing: 9px; color: #d0cdca; }
+        QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #5b5b5b; border-radius: 5px; background: #1a1a1a; }
+        QCheckBox::indicator:hover { border-color: #d62d4e; }
+        QCheckBox::indicator:checked { background: #d62d4e; border-color: #ea3d5f; }
         QCheckBox:focus { outline: none; color: #ffffff; }
-        QProgressBar { background: #181818; border: 1px solid #343434; border-radius: 5px; min-height: 10px; max-height: 10px; }
-        QProgressBar::chunk { background: #d3d3d3; border-radius: 4px; }
+        QProgressBar { background: #1b1b1b; border: 1px solid #3c3c3c; border-radius: 5px; min-height: 11px; max-height: 11px; }
+        QProgressBar::chunk { background: #d62d4e; border-radius: 4px; }
         QMessageBox { background: #101010; }
     )"));
 }

@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QIcon>
 #include <QMetaObject>
 #include <QTimer>
 
@@ -51,6 +52,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     QApplication application(wideArgumentCount, argumentPointers.data());
     QApplication::setApplicationName(QStringLiteral("Wolfmark Setup"));
     QApplication::setOrganizationName(QStringLiteral("Wolfmark"));
+    QApplication::setWindowIcon(QIcon(
+        QCoreApplication::applicationDirPath() +
+        QStringLiteral("/assets/branding/wolfmark-symbol.png")));
 
     const QStringList arguments = application.arguments();
     QString smokeState = argumentValue(arguments, QStringLiteral("--ui-smoke="));
