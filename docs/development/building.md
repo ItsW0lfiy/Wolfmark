@@ -21,8 +21,8 @@ Cargo aliases provide the normal Moonmark workflow:
 | --- | --- |
 | `cargo app` | Build Moonmark in Release mode and launch it. Arguments may follow `--`, as with `cargo app -- README.md`. |
 | `cargo build-app` | Build the Release application without launching. |
-| `cargo setup` | Verify MSVC and prepare the project-local Qt and Inno Setup tools only when missing. |
-| `cargo package-app` | Build the final installer, portable ZIP, and `SHA256SUMS.txt`. |
+| `cargo setup` | Verify MSVC and prepare the pinned project-local Qt and WiX 7 tools/packages only when missing. |
+| `cargo package-app` | Build the setup EXE, MSI, portable ZIP, and `SHA256SUMS.txt`. |
 | `cargo clean-app` | Remove normal generated output under `out/`. |
 | `cargo deep-clean` | Also remove project-local downloaded/bootstrap toolchains and caches. |
 
@@ -36,9 +36,9 @@ Tested on Windows x64 with:
 - a C++20-capable MSVC compiler
 - Qt 6.11.2 Core, Gui, Widgets, and Network development files
 - Windows SDK resource compiler for the executable icon
-- PowerShell 7 for the optional bootstrap/package scripts
+- PowerShell 7 and a .NET SDK 8+ for project-local WiX restore/release packaging
 
-No .NET SDK/runtime, C#, Avalonia, Node.js, browser engine, CMake, or qmake invocation is part of the normal build. The discovered Qt SDK's qmake executable is queried only as an optional SDK-location fallback.
+No .NET runtime, C#, Avalonia, Node.js, browser engine, CMake, or qmake invocation is part of the shipped application or ordinary `cargo build`/`cargo run` path. The .NET SDK is used only at build time to restore the pinned WiX CLI/native API packages for `cargo setup` and installer packaging. The discovered Qt SDK's qmake executable is queried only as an optional SDK-location fallback.
 
 ## Cargo workflow
 
@@ -62,13 +62,15 @@ The Cargo aliases delegate to small PowerShell scripts; normal development does 
 
 ```powershell
 pwsh -File scripts/bootstrap_qt.ps1
-pwsh -File scripts/bootstrap_inno.ps1
+pwsh -File scripts/bootstrap_wix.ps1
 pwsh -File scripts/package_windows.ps1
+pwsh -File scripts/capture_wix_installer_ui.ps1
+pwsh -File scripts/test_windows_installer.ps1
 pwsh -File scripts/clean.ps1
 pwsh -File scripts/clean.ps1 -Deep
 ```
 
-The Qt bootstrap downloads the tested Qt 6.11.2 MSVC2022 x64 archive to ignored project-local storage and verifies Qt's published SHA-1. The Inno bootstrap verifies its pinned SHA-256 and Authenticode signer. Neither tool is installed globally.
+The Qt bootstrap downloads the tested Qt 6.11.2 MSVC2022 x64 archive to ignored project-local storage and verifies Qt's published SHA-1. The WiX bootstrap restores exact locked WiX 7.0.0 packages into ignored project-local storage and records explicit WiX 7 EULA acceptance on each build invocation. Neither tool is installed globally.
 
 See [Windows packaging](../distribution/packaging.md) for prerequisites, staging, app-local runtime policy, artifact paths, installer lifecycle validation, unattended switches, and checksums.
 

@@ -1,31 +1,33 @@
-# Windows installer decision — dev.7
+# Windows installer — dev.7
 
-Inno Setup was explicitly approved for Moonmark dev.7 after the following comparison. Moonmark uses Inno Setup 7.1.0 to compile a conventional offline setup executable from the same staged payload used by the portable ZIP. Inno is a build-time tool only; users do not install an Inno runtime.
+Moonmark dev.7 uses **WiX Toolset 7.0.0** to produce a genuine per-machine x64 MSI and a WiX Burn setup bundle. WiX was explicitly approved for this milestone. The setup user interface is a small native C++20/Qt Widgets bootstrapper application; it contains no C#, CLR, browser engine, or managed client runtime.
 
-## Shortlist
+The generated artifacts are:
 
-| Engine | Output and unattended use | Upgrade, uninstall, shell integration | Build/tooling and license | Moonmark fit |
-| --- | --- | --- | --- | --- |
-| **Inno Setup** | Traditional single `.exe`; documented `/SILENT` and `/VERYSILENT` modes with `/SUPPRESSMSGBOXES` and `/NORESTART` | Built-in uninstall, shortcuts, Program Files installs, registry entries, version-aware replacement, and optional installer tasks | Native compiler plus an `.iss` installer DSL. Its license permits use for any purpose, including commercial applications; the project separately requests commercial users purchase a license. No client runtime is installed. | **Recommended.** Smallest maintainable route to Moonmark's conventional installer and future WinGet validation. |
-| **NSIS** | Traditional `.exe`; `/S` silent mode | Fully capable through its script language, but upgrades, registry ownership, and uninstall details are more manual | Native compiler and `.nsi` DSL; primarily zlib/libpng licensed, with separately licensed compression modules | Viable runner-up, but Moonmark would own more low-level installation logic for no current benefit. |
-| **WiX Toolset** | Native `.msi`/bundle output and strong enterprise unattended behavior | Excellent Windows Installer upgrade/uninstall semantics and component ownership | Current WiX is normally built as a .NET tool/MSBuild SDK and requires a .NET SDK. Current documentation also describes an Open Source Maintenance Fee for revenue-generating use. | Not recommended under Moonmark's current runtime/no-required-paid-component policy without another explicit decision. |
-| **MSIX** | Native `.msix`; deployment is largely Windows-managed | Strong clean install/update/uninstall and declarative file associations | Windows tooling; every directly deployed package must be signed and the certificate trusted on the client | Poor fit for an unsigned first GitHub prerelease. It also introduces package identity/container and signing decisions beyond this milestone. |
+- `Moonmark-Setup-win-x64.exe` — the normal user-facing Burn bundle;
+- `Moonmark-win-x64.msi` — the genuine Windows Installer package for administration and deployment;
+- `Moonmark-portable-win-x64.zip` — the same application payload with portable mode enabled;
+- `SHA256SUMS.txt` — hashes of all three distributables.
 
-## Decision
+The MSI owns Program Files deployment, Installed Apps metadata, Start Menu and optional Desktop shortcuts, Open With registration, repair, modify, major upgrades, and uninstall. The stable MSI UpgradeCode is `{48D9AFC3-ECEB-4DB2-BC50-C176246E388A}`. The Burn bundle uses stable UpgradeCode `{B33F6F20-A568-4F07-9732-32ABD5DE69AE}`. Product/package codes are generated per build as required by major-upgrade servicing.
 
-Moonmark uses **Inno Setup** for its first Windows installer. It produces the expected offline setup EXE, installs the validated portable payload under Program Files, registers Moonmark without changing protected Windows defaults, supports optional Desktop/file-association tasks, and has normal uninstall/upgrade and unattended behavior suitable for later WinGet validation.
+The custom bootstrapper offers install, update, maintenance, modify, repair, uninstall confirmation, progress, completion, and explicit error states. It delegates all package state changes and rollback to Burn/MSI. Its graphite/silver Qt UI is accessible by keyboard and deliberately contains no blue Moonmark-controlled states. The bootstrapper is out-of-process from the Burn engine, following WiX 7's supported native BA model.
 
-The implementation is [Moonmark.iss](../../packaging/windows/Moonmark.iss), invoked by `scripts/package_windows.ps1`. `scripts/bootstrap_inno.ps1` can download the official signed 7.1.0 compiler into ignored project-local `out/cache/inno`; it checks the pinned SHA-256 and Authenticode signer before extracting the compiler under `out/toolchains/inno`. A compatible explicitly supplied compiler remains supported through `-InnoCompiler` or `MOONMARK_INNO_ISCC`.
+## Build-time tooling and terms
 
-The decision does not authorize code-signing claims, single-instance IPC, or an application-architecture change. Moonmark's setup executable remains unsigned for this development prerelease. Dev.7's separately approved update-delivery path downloads this complete installer only after user action and verifies it against the release checksum manifest.
+`cargo setup` restores the pinned WiX CLI to ignored project-local `out/toolchains/wix` and its native bootstrapper API packages to `out/cache/nuget`. The .NET SDK/NuGet are build-time prerequisites for restoring WiX packages; neither .NET nor NuGet is shipped to or required by Moonmark users. `cargo package-app` records WiX 7 EULA acceptance explicitly with `-acceptEula wix7` and builds the BA with `/p:AcceptEula=wix7`; it does not create a global/user-profile acceptance marker.
 
-Local lifecycle validation covers clean current-user installation of the same payload, an older local dev.7 build upgraded in place through the stable AppId, same-version reinstall, installed launch, shell registration, shortcuts, silent uninstall, registration cleanup, and preservation of user documents. A physical elevated Program Files install and the Explorer/Installed Apps visual surfaces remain manual Windows checks before publication.
+WiX source is distributed under the Microsoft Reciprocal License. WiX 7 is also governed by the Open Source Maintenance Fee EULA. At the time of the dev.7 audit, the fee threshold described by WiX is USD 10,000 annual revenue attributable to projects using WiX. Moonmark currently falls below that threshold; this is not a permanent assumption. The project must re-check current terms before every public release and whenever funding/revenue or WiX terms materially change. No commercial terms are accepted on a contributor's behalf by this documentation.
 
-## Sources checked
+Authoritative references:
 
-- [Inno Setup features](https://jrsoftware.org/isinfo.php), [license](https://github.com/jrsoftware/issrc/blob/main/license.txt), and [command-line parameters](https://jrsoftware.org/ishelp/topic_setupcmdline.htm)
-- [NSIS license](https://nsis.sourceforge.io/License) and [silent install behavior](https://nsis.sourceforge.io/Docs/Chapter3.html#3.2.1)
-- [WiX usage and .NET SDK requirement](https://docs.firegiant.com/wix/using-wix/) and [current licensing/maintenance-fee statement](https://docs.firegiant.com/wix/)
-- [Microsoft's Windows packaging comparison](https://learn.microsoft.com/windows/apps/package-and-deploy/packaging/) and [MSIX signing requirement](https://learn.microsoft.com/windows/msix/package/signing-package-overview)
+- https://github.com/wixtoolset/wix/releases/tag/v7.0.0
+- https://docs.firegiant.com/wix/whatsnew/oopbas/
+- https://docs.firegiant.com/wix/osmf/
+- https://github.com/wixtoolset/wix/blob/develop/LICENSE.TXT
 
-Licensing findings are an engineering audit, not legal advice.
+## Lifecycle and validation
+
+`scripts/test_windows_installer.ps1` always performs a non-invasive artifact/checksum/MSI-table/portable smoke audit. `-ExecuteLifecycle` additionally builds an older compatible MSI and exercises its upgrade through the current Setup EXE, same-version setup, bundle repair/uninstall, direct-MSI install/repair/modify/uninstall, Installed Apps uniqueness, launch, and user-document preservation under `out/tests`. The lifecycle requires an elevated PowerShell session and refuses to replace an existing Moonmark installation unless the caller also supplies the explicit `-AllowExistingMoonmarkReplacement` switch.
+
+The bundle remains unsigned for this development prerelease. Windows may display an Unknown publisher or reputation warning. Authenticode signing, WinGet publication, and dev.8 updater hardening remain separate work.

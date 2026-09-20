@@ -14,6 +14,8 @@ Dev.7 adds `semver` plus the RustCrypto `sha2` stack (`digest`, `block-buffer`, 
 
 The app-local Microsoft Visual C++ runtime is redistributed under Microsoft's Visual Studio redistribution terms. Windows system DLLs are supplied by the operating system and are not packaged as Moonmark dependencies.
 
+Dev.7's Windows installer uses WiX Toolset 7.0.0. The custom bootstrapper is native C++20/Qt Widgets and statically links WiX's native bootstrapper support library; no CLR is included or required on client systems. WiX source uses the Microsoft Reciprocal License and WiX 7 is governed by the Open Source Maintenance Fee EULA. At this audit date Moonmark is below the published USD 10,000 attributable annual project-revenue threshold. This must be rechecked before public release and whenever terms or funding materially change.
+
 ## Sources and release gate
 
 - GNU license compatibility: https://www.gnu.org/licenses/license-compatibility.html
@@ -21,5 +23,7 @@ The app-local Microsoft Visual C++ runtime is redistributed under Microsoft's Vi
 - Qt 6 licensing: https://doc.qt.io/qt-6/licensing.html
 - Qt open-source obligations: https://www.qt.io/development/open-source-lgpl-obligations
 - SPDX identifiers: https://spdx.org/licenses/
+- WiX source license: https://github.com/wixtoolset/wix/blob/develop/LICENSE.TXT
+- WiX 7 OSMF terms: https://docs.firegiant.com/wix/osmf/
 
 Before each public release, regenerate the dependency inventory from the locked graph, inspect changes, include all required third-party notices, and verify the exact Qt deployment against its SBOM. A crate's manifest declaration is evidence for review, not a substitute for reading the applicable license text.

@@ -8,3 +8,8 @@ This development package is not approved for public distribution. Before release
 
 Qt licensing information: https://www.qt.io/licensing/
 Qt 6.11.2 source: https://download.qt.io/official_releases/qt/6.11/6.11.2/single/
+
+Moonmark's Windows installer is produced with WiX Toolset 7.0.0 and includes WiX Burn/bootstrapper support code. WiX Toolset source is Copyright (c) .NET Foundation and contributors and is available under the Microsoft Reciprocal License. WiX 7 use is additionally governed by the Open Source Maintenance Fee EULA; see the current terms before redistribution.
+
+WiX source and license: https://github.com/wixtoolset/wix
+WiX 7 OSMF terms: https://docs.firegiant.com/wix/osmf/

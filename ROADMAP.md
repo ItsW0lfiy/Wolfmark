@@ -54,7 +54,8 @@ Turn the native development checkout into reproducible Windows release artifacts
 Planned work includes:
 
 - accept `.md`, `.markdown`, and `.txt` shell/command-line arguments with spaces and Unicode
-- use the explicitly approved Inno Setup installer engine
+- use the explicitly approved WiX Toolset 7.0.0 engine with a native Qt bootstrapper
+- ship both the normal Burn setup executable and a genuine MSI
 - install under Program Files
 - register Moonmark in Installed Apps / uninstall
 - Start Menu shortcut

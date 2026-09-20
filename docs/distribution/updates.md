@@ -7,6 +7,7 @@ Update checks use the public GitHub Releases API at `https://api.github.com/repo
 Rust owns release interpretation and checksum verification. Drafts and malformed versions are ignored; prereleases follow the setting; SemVer decides whether a newer version exists. A usable release must provide the exact platform assets:
 
 - `Moonmark-Setup-win-x64.exe`
+- `Moonmark-win-x64.msi` (separate administrative artifact; the in-app handoff continues to select the setup EXE)
 - `Moonmark-portable-win-x64.zip`
 - `SHA256SUMS.txt`
 

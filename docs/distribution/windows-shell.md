@@ -15,10 +15,10 @@ Arguments beginning with `-` are treated as switches, not file names. Missing an
 
 ## Installer registration
 
-The Inno installer registers the installed executable, never a build-tree path. The open command preserves quoting:
+The WiX MSI registers the installed executable, never a build-tree path. The open command preserves quoting:
 
 ```text
-"{app}\Moonmark.exe" "%1"
+"[INSTALLFOLDER]Moonmark.exe" "%1"
 ```
 
 Registration should make Moonmark a capable Open With application for:
@@ -36,6 +36,6 @@ The implemented conventional registration model is:
 - uninstall flags that remove only Moonmark-owned registration;
 - an Explorer association-change notification after install/uninstall.
 
-The `fileassoc` installer task is offered and checked once; the user may opt out. It registers availability but does not overwrite Windows `UserChoice` or silently claim the current default. On modern Windows, the user remains authoritative through Open With / Default Apps. Portable archives perform no registration.
+The native setup UI offers Open With registration and the user may opt out or later change it through maintenance. It registers availability but does not overwrite Windows `UserChoice` or silently claim the current default. On modern Windows, the user remains authoritative through Open With / Default Apps. Portable archives perform no registration.
 
 Dev.7 deliberately retains a multiple-process policy: an Explorer invocation may create a new Moonmark process. No single-instance mutex, named pipe, or shell-routing IPC is part of this milestone.
