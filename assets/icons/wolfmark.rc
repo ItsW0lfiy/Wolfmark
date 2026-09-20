@@ -1,4 +1,4 @@
-#include "moonmark_version.h"
+#include "wolfmark_version.h"
 
 #define VS_FFI_FILEFLAGSMASK 0x0000003FL
 #define VS_FF_PRERELEASE 0x00000002L
@@ -6,11 +6,11 @@
 #define VFT_APP 0x00000001L
 #define VFT2_UNKNOWN 0x00000000L
 
-1 ICON "moonmark.ico"
+1 ICON "wolfmark.ico"
 
 1 VERSIONINFO
-FILEVERSION MOONMARK_VERSION_COMMAS
-PRODUCTVERSION MOONMARK_VERSION_COMMAS
+FILEVERSION WOLFMARK_VERSION_COMMAS
+PRODUCTVERSION WOLFMARK_VERSION_COMMAS
 FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 FILEFLAGS VS_FF_PRERELEASE
 FILEOS VOS_NT_WINDOWS32
@@ -22,12 +22,12 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName", "ItsW0lfiy\0"
-            VALUE "FileDescription", "Moonmark Markdown Viewer\0"
-            VALUE "FileVersion", MOONMARK_VERSION_STRING "\0"
-            VALUE "InternalName", "moonmark\0"
-            VALUE "OriginalFilename", "Moonmark.exe\0"
-            VALUE "ProductName", "Moonmark\0"
-            VALUE "ProductVersion", MOONMARK_VERSION_STRING "\0"
+            VALUE "FileDescription", "Wolfmark Markdown Viewer\0"
+            VALUE "FileVersion", WOLFMARK_VERSION_STRING "\0"
+            VALUE "InternalName", "wolfmark\0"
+            VALUE "OriginalFilename", "Wolfmark.exe\0"
+            VALUE "ProductName", "Wolfmark\0"
+            VALUE "ProductVersion", WOLFMARK_VERSION_STRING "\0"
         END
     END
     BLOCK "VarFileInfo"
