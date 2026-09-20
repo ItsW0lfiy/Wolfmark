@@ -1,251 +1,175 @@
 [CmdletBinding()]
 param(
-    [string]$SetupPath,
-    [string]$InnoCompiler
+    [string]$ReleaseDirectory,
+    [switch]$ExecuteLifecycle,
+    [switch]$AllowExistingMoonmarkReplacement
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$testRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/tests/installer'))
-$logRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/logs/installer-lifecycle'))
 $outRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out'))
-$outPrefix = $outRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-if (-not $testRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase) -or
-    -not $logRoot.StartsWith($outPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to use installer test paths outside out: $testRoot, $logRoot"
-}
 
-function Get-MoonmarkVersion {
-    $metadata = (& cargo metadata --format-version 1 --no-deps | ConvertFrom-Json)
+function Get-Version {
+    $metadata = (& cargo metadata --format-version 1 --no-deps) | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { throw 'cargo metadata failed.' }
-    $manifestPath = [IO.Path]::GetFullPath((Join-Path $projectRoot 'Cargo.toml'))
-    return ($metadata.packages | Where-Object {
-        [IO.Path]::GetFullPath($_.manifest_path) -eq $manifestPath
-    } | Select-Object -First 1).version
+    return ($metadata.packages | Where-Object name -eq 'moonmark' | Select-Object -First 1).version
 }
 
-function Find-InnoCompiler {
-    $candidates = @($InnoCompiler, $env:MOONMARK_INNO_ISCC)
-    $candidates += Get-ChildItem -LiteralPath (Join-Path $projectRoot 'out/toolchains/inno') `
-        -Filter ISCC.exe -File -Recurse -ErrorAction SilentlyContinue |
-        Sort-Object FullName -Descending | Select-Object -ExpandProperty FullName
-    $selected = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
-        Select-Object -First 1
-    if (-not $selected) { throw 'Inno Setup compiler not found. Run scripts/bootstrap_inno.ps1.' }
-    return [IO.Path]::GetFullPath($selected)
+function Invoke-Msi([string[]]$Arguments, [string]$LogPath) {
+    $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList ($Arguments + @('/qn', '/norestart', '/L*v', $LogPath)) -Wait -PassThru
+    if ($process.ExitCode -notin 0, 3010) { throw "Windows Installer failed with exit code $($process.ExitCode). See $LogPath" }
 }
 
-function Invoke-Installer([string]$Path, [string]$InstallRoot, [string]$LogPath) {
-    $arguments = @(
-        '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
-        "/DIR=$InstallRoot", '/TASKS=desktopicon,fileassoc', "/LOG=$LogPath"
-    )
-    $process = Start-Process -FilePath $Path -ArgumentList $arguments `
-        -Wait -PassThru -WindowStyle Hidden
-    if ($process.ExitCode -ne 0) {
-        throw "Installer failed with exit code $($process.ExitCode). See $LogPath"
+function Invoke-Setup([string]$SetupPath, [string[]]$Arguments, [string]$LogPath) {
+    $process = Start-Process -FilePath $SetupPath -ArgumentList ($Arguments + @('/quiet', '/norestart', '/log', $LogPath)) -Wait -PassThru
+    if ($process.ExitCode -notin 0, 3010) { throw "Moonmark Setup failed with exit code $($process.ExitCode). See $LogPath" }
+}
+
+function Get-OlderInstallerVersion([string]$Version) {
+    if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)-dev\.(\d+)$' -or [int]$Matches[4] -lt 2) {
+        throw "Lifecycle upgrade simulation requires a dev version after dev.1; got '$Version'."
+    }
+    $olderDev = [int]$Matches[4] - 1
+    [pscustomobject]@{
+        Display = "$($Matches[1]).$($Matches[2]).$($Matches[3])-dev.$olderDev"
+        Msi = "$($Matches[1]).$($Matches[2]).$(([int]$Matches[3] * 1000) + $olderDev)"
     }
 }
 
-function Invoke-Uninstaller([string]$Path, [string]$LogPath) {
-    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$LogPath")
-    $process = Start-Process -FilePath $Path -ArgumentList $arguments `
-        -Wait -PassThru -WindowStyle Hidden
-    if ($process.ExitCode -ne 0) {
-        throw "Uninstaller failed with exit code $($process.ExitCode). See $LogPath"
-    }
-}
-
-function Wait-Until([scriptblock]$Condition) {
-    $deadline = [DateTime]::UtcNow.AddSeconds(15)
-    do {
-        if (& $Condition) { return $true }
-        Start-Sleep -Milliseconds 100
-    } while ([DateTime]::UtcNow -lt $deadline)
-    return $false
-}
-
-function Get-MoonmarkUninstallEntries {
-    $path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{42E4C993-27F8-45C4-BF30-7360F9349DCA}_is1'
-    if (-not (Test-Path $path)) { return @() }
-    return @(Get-ItemProperty $path)
-}
-
-function Get-UserChoice([string]$Extension) {
-    $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$Extension\UserChoice"
-    if (-not (Test-Path $path)) { return $null }
-    return (Get-ItemProperty -Path $path -Name ProgId -ErrorAction SilentlyContinue).ProgId
-}
-
-function Assert-RegistryValue([string]$Path, [string]$Name, [object]$Expected) {
-    if (-not (Test-Path $Path)) { throw "Expected registry key is missing: $Path" }
-    $actual = (Get-Item -Path $Path).GetValue($Name, $null)
-    if ($actual -ne $Expected) {
-        throw "Registry value mismatch at $Path [$Name]. Expected '$Expected', got '$actual'."
-    }
+function Get-MoonmarkEntries {
+    Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+        Get-ItemProperty | Where-Object DisplayName -eq 'Moonmark'
 }
 
 Push-Location $projectRoot
-$installRoot = Join-Path $testRoot 'installed/Moonmark'
-$documentsRoot = Join-Path $testRoot 'documents/Deep Folder/More Documents'
-$startMenuShortcut = Join-Path $env:APPDATA 'Microsoft/Windows/Start Menu/Programs/Moonmark/Moonmark.lnk'
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Moonmark.lnk'
-$uninstaller = Join-Path $installRoot 'unins000.exe'
 try {
-    if (Get-MoonmarkUninstallEntries) {
-        throw 'A current-user Moonmark installation already exists; refusing to overwrite it during tests.'
-    }
-    if ((Test-Path -LiteralPath $startMenuShortcut) -or
-        (Test-Path -LiteralPath $desktopShortcut)) {
-        throw 'A Moonmark shortcut already exists; refusing to overwrite it during tests.'
-    }
-    if (Test-Path -LiteralPath $testRoot) {
-        Remove-Item -Recurse -Force -LiteralPath $testRoot
-    }
-    if (Test-Path -LiteralPath $logRoot) {
-        Remove-Item -Recurse -Force -LiteralPath $logRoot
-    }
-    New-Item -ItemType Directory -Force -Path $documentsRoot | Out-Null
-    New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
-
-    $version = Get-MoonmarkVersion
-    if (-not $SetupPath) {
-        $SetupPath = Join-Path $projectRoot "out/release/$version/Moonmark-Setup-win-x64.exe"
-    }
-    $SetupPath = (Resolve-Path -LiteralPath $SetupPath).Path
-    $compiler = Find-InnoCompiler
-    $sourceDir = [IO.Path]::GetFullPath((Join-Path $projectRoot "out/package/staging/$version/Moonmark"))
-    $olderOutput = Join-Path $testRoot 'older'
-    New-Item -ItemType Directory -Force -Path $olderOutput | Out-Null
-    & $compiler '/Qp' '/DMyAppVersion=0.1.0-dev.7-preupgrade' '/DMyNumericVersion=0.1.0.6' `
-        "/DSourceDir=$sourceDir" "/DOutputDir=$olderOutput" "/DProjectRoot=$projectRoot" `
-        (Join-Path $projectRoot 'packaging/windows/Moonmark.iss')
-    if ($LASTEXITCODE -ne 0) { throw 'Older installer fixture compilation failed.' }
-    $olderSetup = Join-Path $olderOutput 'Moonmark-Setup-win-x64.exe'
-
-    $documents = @(
-        (Join-Path $documentsRoot 'README.md'),
-        (Join-Path $documentsRoot 'My Document.markdown'),
-        (Join-Path $documentsRoot '日本語 document.txt')
-    )
-    Set-Content -LiteralPath $documents[0] -Value '# Installer Markdown test' -Encoding utf8NoBOM
-    Set-Content -LiteralPath $documents[1] -Value '# Installer spaced-path test' -Encoding utf8NoBOM
-    Set-Content -LiteralPath $documents[2] -Value 'Installer Unicode path test' -Encoding utf8NoBOM
-
-    $choiceBefore = @{}
-    foreach ($extension in '.md', '.markdown', '.txt') {
-        $choiceBefore[$extension] = Get-UserChoice $extension
+    $version = Get-Version
+    if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $outRoot "release/$version" }
+    $ReleaseDirectory = [IO.Path]::GetFullPath($ReleaseDirectory)
+    $msi = Join-Path $ReleaseDirectory 'Moonmark-win-x64.msi'
+    $setup = Join-Path $ReleaseDirectory 'Moonmark-Setup-win-x64.exe'
+    $zip = Join-Path $ReleaseDirectory 'Moonmark-portable-win-x64.zip'
+    $checksums = Join-Path $ReleaseDirectory 'SHA256SUMS.txt'
+    foreach ($path in $msi, $setup, $zip, $checksums) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Release artifact is missing: $path" }
     }
 
-    Invoke-Installer $olderSetup $installRoot (Join-Path $logRoot 'install-older.log')
-    $entries = Get-MoonmarkUninstallEntries
-    if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne '0.1.0-dev.7-preupgrade') {
-        $found = @($entries | ForEach-Object { "$($_.PSChildName):$($_.DisplayVersion)" }) -join ', '
-        throw "Older installer did not create exactly one expected Installed Apps entry. Found $($entries.Count): $found"
+    $manifest = Get-Content -LiteralPath $checksums
+    foreach ($artifact in $setup, $msi, $zip) {
+        $name = [IO.Path]::GetFileName($artifact)
+        $expected = ($manifest | Where-Object { $_ -like "*`*$name" } | Select-Object -First 1) -replace '\s+\*.*$', ''
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()
+        if (-not $expected -or $expected -ne $actual) { throw "SHA-256 validation failed for $name." }
     }
 
-    Invoke-Installer $SetupPath $installRoot (Join-Path $logRoot 'upgrade.log')
-    Invoke-Installer $SetupPath $installRoot (Join-Path $logRoot 'reinstall.log')
-    $entries = Get-MoonmarkUninstallEntries
-    if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne $version) {
-        throw 'Upgrade/reinstall did not preserve one current Installed Apps entry.'
-    }
-
-    foreach ($relative in @(
-        'Moonmark.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll',
-        'platforms/qwindows.dll', 'qt.conf', 'LICENSE', 'THIRD_PARTY_NOTICES.txt',
-        'assets/icons/moonmark-markdown.ico', 'assets/icons/moonmark-text.ico',
-        'licenses/Qt-LGPL-3.0-only.txt', 'licenses/Qt-GPL-3.0-only.txt'
+    $wix = Join-Path $outRoot 'toolchains/wix/wix.exe'
+    if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) { throw 'WiX was not found. Run cargo setup.' }
+    $auditRoot = Join-Path $outRoot 'tests/wix-installer-audit'
+    if (Test-Path -LiteralPath $auditRoot) { Remove-Item -Recurse -Force -LiteralPath $auditRoot }
+    New-Item -ItemType Directory -Force $auditRoot | Out-Null
+    $decompiled = Join-Path $auditRoot 'Moonmark.decompiled.wxs'
+    & $wix msi decompile -acceptEula wix7 -intermediateFolder (Join-Path $auditRoot 'obj') -o $decompiled $msi
+    if ($LASTEXITCODE -ne 0) { throw 'MSI decompilation audit failed.' }
+    $source = Get-Content -Raw -LiteralPath $decompiled
+    foreach ($required in @(
+        'UpgradeCode="{48D9AFC3-ECEB-4DB2-BC50-C176246E388A}"',
+        'StandardDirectory Id="ProgramFiles64Folder"',
+        'MoonmarkStartMenuShortcut', 'MoonmarkDesktopShortcut',
+        'Moonmark.MarkdownDocument', 'Moonmark.TextDocument',
+        'Software\RegisteredApplications', 'MOONMARK_FILE_ASSOC = 1',
+        'MOONMARK_DESKTOP_SHORTCUT = 1', '&quot;%1&quot;'
     )) {
-        if (-not (Test-Path -LiteralPath (Join-Path $installRoot $relative) -PathType Leaf)) {
-            throw "Installed payload is missing $relative"
-        }
-    }
-    if (-not (Test-Path -LiteralPath $startMenuShortcut -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $desktopShortcut -PathType Leaf)) {
-        throw 'Expected Start Menu or optional Desktop shortcut is missing.'
-    }
-    $shell = New-Object -ComObject WScript.Shell
-    foreach ($shortcutPath in $startMenuShortcut, $desktopShortcut) {
-        $shortcut = $shell.CreateShortcut($shortcutPath)
-        if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne [IO.Path]::GetFullPath((Join-Path $installRoot 'Moonmark.exe'))) {
-            throw "Shortcut target is incorrect: $shortcutPath"
-        }
+        if (-not $source.Contains($required)) { throw "MSI audit did not find required authoring: $required" }
     }
 
-    Assert-RegistryValue 'HKCU:\Software\RegisteredApplications' 'Moonmark' 'Software\ItsW0lfiy\Moonmark\Capabilities'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.md' 'Moonmark.MarkdownDocument'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.markdown' 'Moonmark.MarkdownDocument'
-    Assert-RegistryValue 'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities\FileAssociations' '.txt' 'Moonmark.TextDocument'
-    $expectedCommand = '"' + (Join-Path $installRoot 'Moonmark.exe') + '" "%1"'
-    $expectedMarkdownIcon = Join-Path $installRoot 'assets/icons/moonmark-markdown.ico'
-    $expectedTextIcon = Join-Path $installRoot 'assets/icons/moonmark-text.ico'
-    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.MarkdownDocument\shell\open\command' '' $expectedCommand
-    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.MarkdownDocument\DefaultIcon' '' $expectedMarkdownIcon
-    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.TextDocument\shell\open\command' '' $expectedCommand
-    Assert-RegistryValue 'HKCU:\Software\Classes\Moonmark.TextDocument\DefaultIcon' '' $expectedTextIcon
-    if (Test-Path 'HKCU:\Software\Classes\Moonmark.Document') {
-        throw 'Upgrade left the obsolete shared Moonmark.Document ProgID.'
-    }
-    foreach ($extension in '.md', '.markdown') {
-        Assert-RegistryValue "HKCU:\Software\Classes\$extension\OpenWithProgids" 'Moonmark.MarkdownDocument' ''
-        if ((Get-UserChoice $extension) -ne $choiceBefore[$extension]) {
-            throw "Installer changed the protected Windows default for $extension."
-        }
-    }
-    Assert-RegistryValue 'HKCU:\Software\Classes\.txt\OpenWithProgids' 'Moonmark.TextDocument' ''
-    if ((Get-UserChoice '.txt') -ne $choiceBefore['.txt']) {
-        throw 'Installer changed the protected Windows default for .txt.'
+    $extractRoot = Join-Path $auditRoot 'portable'
+    Expand-Archive -LiteralPath $zip -DestinationPath $extractRoot
+    $portableRoot = Join-Path $extractRoot 'Moonmark'
+    if (-not (Test-Path -LiteralPath (Join-Path $portableRoot 'portable.flag'))) { throw 'Portable archive is missing portable.flag.' }
+    $savedPath = $env:PATH
+    try {
+        $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+        $smoke = Start-Process -FilePath (Join-Path $portableRoot 'Moonmark.exe') -ArgumentList '--smoke-icon' -WorkingDirectory $portableRoot -Wait -PassThru -WindowStyle Hidden
+        if ($smoke.ExitCode -ne 0) { throw "Portable smoke failed with exit code $($smoke.ExitCode)." }
+    } finally { $env:PATH = $savedPath }
+
+    if (-not $ExecuteLifecycle) {
+        Write-Host 'WIX_INSTALLER_AUDIT artifacts=ok checksums=ok msi_tables=ok portable=ok lifecycle=not-requested'
+        return
     }
 
-    $launchArguments = '--smoke-startup-arguments ' + (($documents | ForEach-Object { '"' + $_ + '"' }) -join ' ')
-    $launch = Start-Process -FilePath (Join-Path $installRoot 'Moonmark.exe') `
-        -ArgumentList $launchArguments `
-        -WorkingDirectory $testRoot -Wait -PassThru -WindowStyle Hidden
-    if ($launch.ExitCode -ne 0) {
-        throw "Installed Moonmark shell-argument smoke failed with exit code $($launch.ExitCode)."
+    $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Lifecycle validation requires an elevated PowerShell session because Moonmark is a per-machine Program Files installation.'
+    }
+    $existing = @(Get-MoonmarkEntries)
+    if ($existing.Count -and -not $AllowExistingMoonmarkReplacement) {
+        $details = ($existing | ForEach-Object { "$($_.DisplayVersion): $($_.UninstallString)" }) -join '; '
+        throw "An existing Moonmark installation is present. Refusing to replace it without -AllowExistingMoonmarkReplacement. Found: $details"
     }
 
-    Invoke-Uninstaller $uninstaller (Join-Path $logRoot 'uninstall.log')
-    $uninstallComplete = Wait-Until {
-        -not (Test-Path -LiteralPath $installRoot) -and
-        -not (Test-Path -LiteralPath $startMenuShortcut) -and
-        -not (Test-Path -LiteralPath $desktopShortcut) -and
-        -not (Get-MoonmarkUninstallEntries)
+    $lifecycleRoot = Join-Path $outRoot 'tests/wix-installer-lifecycle'
+    $installRoot = Join-Path $lifecycleRoot 'install'
+    $logs = Join-Path $lifecycleRoot 'logs'
+    $olderBuild = Join-Path $lifecycleRoot 'older'
+    New-Item -ItemType Directory -Force $installRoot, $logs, $olderBuild | Out-Null
+    $userDocument = Join-Path $lifecycleRoot 'User document.md'
+    Set-Content -LiteralPath $userDocument -Value '# User-owned document' -Encoding utf8NoBOM
+    $olderVersion = Get-OlderInstallerVersion $version
+    $payloadRoot = Join-Path $outRoot "package/staging/$version/Moonmark"
+    if (-not (Test-Path -LiteralPath (Join-Path $payloadRoot 'Moonmark.exe') -PathType Leaf)) {
+        throw 'The staged application payload is missing. Run cargo package-app before lifecycle validation.'
     }
-    if (-not $uninstallComplete) {
-        $residue = @()
-        if (Test-Path -LiteralPath $installRoot) {
-            $remainingFiles = @(Get-ChildItem -LiteralPath $installRoot -Recurse -Force |
-                ForEach-Object { $_.FullName.Substring($installRoot.Length).TrimStart('\') })
-            $residue += "installation directory [$($remainingFiles -join ', ')]"
-        }
-        if (Test-Path -LiteralPath $startMenuShortcut) { $residue += 'Start Menu shortcut' }
-        if (Test-Path -LiteralPath $desktopShortcut) { $residue += 'Desktop shortcut' }
-        if (Get-MoonmarkUninstallEntries) { $residue += 'Installed Apps entry' }
-        throw "Uninstall residue after 15 seconds: $($residue -join ', ')."
+    $olderMsi = Join-Path $olderBuild 'Moonmark-older-win-x64.msi'
+    & $wix build -acceptEula wix7 -arch x64 -pdbtype none -bindpath "Payload=$payloadRoot" `
+        -d "MsiVersion=$($olderVersion.Msi)" -d "DisplayVersion=$($olderVersion.Display)" `
+        -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $olderBuild 'obj') `
+        'packaging/windows/wix/Moonmark.wxs' -o $olderMsi
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $olderMsi -PathType Leaf)) {
+        throw 'Older MSI generation for upgrade simulation failed.'
     }
-    foreach ($path in @(
-        'HKCU:\Software\ItsW0lfiy\Moonmark\Capabilities',
-        'HKCU:\Software\Classes\Moonmark.MarkdownDocument',
-        'HKCU:\Software\Classes\Moonmark.TextDocument',
-        'HKCU:\Software\Classes\Applications\Moonmark.exe'
-    )) {
-        if (Test-Path $path) { throw "Uninstall left Moonmark shell registration: $path" }
-    }
-    foreach ($document in $documents) {
-        if (-not (Test-Path -LiteralPath $document -PathType Leaf)) {
-            throw "Uninstall removed user-owned test document: $document"
-        }
-    }
+    try {
+        Invoke-Msi @('/i', $olderMsi, "INSTALLFOLDER=$installRoot", 'MOONMARK_FILE_ASSOC=1', 'MOONMARK_DESKTOP_SHORTCUT=1') (Join-Path $logs 'older-install.log')
+        $registeredVersion = (Get-ItemProperty 'HKLM:\Software\ItsW0lfiy\Moonmark\Installer').Version
+        if ($registeredVersion -ne $olderVersion.Display) { throw "Older MSI registered '$registeredVersion' instead of '$($olderVersion.Display)'." }
 
-    Write-Host 'INSTALLER_TEST clean=ok upgrade=ok reinstall=ok installed_launch=ok shell_registry=ok shortcuts=ok uninstall=ok user_documents=preserved'
+        Invoke-Setup $setup @() (Join-Path $logs 'bundle-upgrade.log')
+        $registeredVersion = (Get-ItemProperty 'HKLM:\Software\ItsW0lfiy\Moonmark\Installer').Version
+        if ($registeredVersion -ne $version) { throw "Bundle upgrade registered '$registeredVersion' instead of '$version'." }
+        $entries = @(Get-MoonmarkEntries)
+        if ($entries.Count -ne 1) { throw "Bundle upgrade left $($entries.Count) visible Moonmark Installed Apps entries instead of one." }
+        Invoke-Setup $setup @() (Join-Path $logs 'bundle-same-version.log')
+        Invoke-Setup $setup @('/repair') (Join-Path $logs 'bundle-repair.log')
+
+        if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Moonmark.exe'))) { throw 'Bundle upgrade did not deploy Moonmark.exe.' }
+        $launch = Start-Process -FilePath (Join-Path $installRoot 'Moonmark.exe') -ArgumentList @('--smoke-startup-arguments', $userDocument) -Wait -PassThru -WindowStyle Hidden
+        if ($launch.ExitCode -ne 0) { throw "Installed launch smoke failed with exit code $($launch.ExitCode)." }
+
+        Invoke-Setup $setup @('/uninstall') (Join-Path $logs 'bundle-uninstall.log')
+        if (Test-Path -LiteralPath $installRoot) { throw 'Bundle uninstall left the isolated install directory.' }
+        if (@(Get-MoonmarkEntries).Count -ne 0) { throw 'Bundle uninstall left a visible Moonmark Installed Apps entry.' }
+
+        Invoke-Msi @('/i', $msi, "INSTALLFOLDER=$installRoot", 'MOONMARK_FILE_ASSOC=1', 'MOONMARK_DESKTOP_SHORTCUT=1') (Join-Path $logs 'msi-install.log')
+        if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Moonmark.exe'))) { throw 'Direct MSI install did not deploy Moonmark.exe.' }
+
+        Remove-Item -Force -LiteralPath (Join-Path $installRoot 'Moonmark.exe')
+        Invoke-Msi @('/fa', $msi) (Join-Path $logs 'msi-repair.log')
+        if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Moonmark.exe'))) { throw 'Direct MSI repair did not restore Moonmark.exe.' }
+
+        Invoke-Msi @('/i', $msi, "INSTALLFOLDER=$installRoot", 'MOONMARK_FILE_ASSOC=0', 'MOONMARK_DESKTOP_SHORTCUT=0') (Join-Path $logs 'msi-modify.log')
+        Invoke-Msi @('/x', $msi) (Join-Path $logs 'msi-uninstall.log')
+        if (Test-Path -LiteralPath $installRoot) { throw 'Direct MSI uninstall left the isolated install directory.' }
+        if (-not (Test-Path -LiteralPath $userDocument)) { throw 'Uninstall removed a user-owned document.' }
+        Write-Host 'WIX_INSTALLER_LIFECYCLE older_install=ok bundle_upgrade=ok same_version=ok bundle_repair=ok bundle_uninstall=ok msi_install=ok msi_repair=ok msi_modify=ok msi_uninstall=ok installed_apps=unique user_document=preserved'
+    } finally {
+        if (Test-Path -LiteralPath (Join-Path $installRoot 'Moonmark.exe')) {
+            try { Invoke-Setup $setup @('/uninstall') (Join-Path $logs 'cleanup-bundle-uninstall.log') } catch { Write-Warning $_ }
+            if (Test-Path -LiteralPath (Join-Path $installRoot 'Moonmark.exe')) {
+                try { Invoke-Msi @('/x', $msi) (Join-Path $logs 'cleanup-msi-uninstall.log') } catch { Write-Warning $_ }
+                try { Invoke-Msi @('/x', $olderMsi) (Join-Path $logs 'cleanup-older-msi-uninstall.log') } catch { Write-Warning $_ }
+            }
+        }
+    }
 } finally {
-    if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
-        try { Invoke-Uninstaller $uninstaller (Join-Path $logRoot 'cleanup-uninstall.log') } catch { Write-Warning $_ }
-    }
-    if (Test-Path -LiteralPath $testRoot) {
-        Remove-Item -Recurse -Force -LiteralPath $testRoot
-    }
     Pop-Location
 }
