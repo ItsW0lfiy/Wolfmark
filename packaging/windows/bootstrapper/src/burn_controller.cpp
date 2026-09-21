@@ -100,8 +100,8 @@ STDMETHODIMP BurnController::OnDetectRelatedBundle(
     BOOL,
     BOOL* cancelFlag) {
     if (relationType == BOOTSTRAPPER_RELATION_UPGRADE || relationType == BOOTSTRAPPER_RELATION_DETECT) {
-        state_.installed = true;
-        detectedVersion_ = QString::fromWCharArray(version);
+        relatedBundlePresent_ = true;
+        noteRelatedVersion(version);
     }
     *cancelFlag |= CheckCanceled();
     return S_OK;
@@ -115,10 +115,8 @@ STDMETHODIMP BurnController::OnDetectRelatedMsiPackage(
     LPCWSTR version,
     BOOTSTRAPPER_RELATED_OPERATION,
     BOOL* cancelFlag) {
-    state_.installed = true;
-    if (detectedVersion_.isEmpty()) {
-        detectedVersion_ = QString::fromWCharArray(version);
-    }
+    relatedMsiPresent_ = true;
+    noteRelatedVersion(version);
     *cancelFlag |= CheckCanceled();
     return S_OK;
 }
@@ -131,7 +129,7 @@ STDMETHODIMP BurnController::OnDetectPackageComplete(
     if (QString::fromWCharArray(packageId) == QStringLiteral("WolfmarkMsi") &&
         packageState != BOOTSTRAPPER_PACKAGE_STATE_ABSENT &&
         packageState != BOOTSTRAPPER_PACKAGE_STATE_UNKNOWN) {
-        state_.installed = true;
+        currentPackagePresent_ = true;
     }
     return S_OK;
 }
@@ -140,6 +138,23 @@ STDMETHODIMP BurnController::OnDetectComplete(HRESULT status, BOOL) {
     if (FAILED(status)) {
         postError(QStringLiteral("Wolfmark setup could not inspect this computer."), status);
         return S_OK;
+    }
+    currentBundleInstalled_ = engineNumeric(L"WixBundleInstalled") != 0;
+    state_.installed = currentBundleInstalled_;
+    if (currentBundleInstalled_) {
+        state_.presence = InstallerPresence::Current;
+    } else if (currentPackagePresent_ || relatedBundlePresent_ || relatedMsiPresent_) {
+        if (detectedVersion_.isEmpty() && currentPackagePresent_) {
+            detectedVersion_ = targetBundleVersion_;
+        }
+        const int comparison = QVersionNumber::compare(
+            QVersionNumber::fromString(detectedVersion_),
+            QVersionNumber::fromString(targetBundleVersion_));
+        state_.presence = comparison < 0
+            ? InstallerPresence::RelatedOlder
+            : comparison > 0 ? InstallerPresence::RelatedNewer : InstallerPresence::RelatedSame;
+    } else {
+        state_.presence = InstallerPresence::None;
     }
     if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_FULL ||
         commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
@@ -216,10 +231,6 @@ bool BurnController::postToUi(std::function<void()> callback) {
 }
 
 void BurnController::presentDetectedState() {
-    const bool updateAvailable = !detectedVersion_.isEmpty() && !targetBundleVersion_.isEmpty() &&
-        QVersionNumber::compare(
-            QVersionNumber::fromString(detectedVersion_),
-            QVersionNumber::fromString(targetBundleVersion_)) < 0;
     state_.installedVersion = readRegistryString(L"Version");
     if (state_.installedVersion.isEmpty()) {
         state_.installedVersion = detectedVersion_;
@@ -234,12 +245,23 @@ void BurnController::presentDetectedState() {
             }
             return;
         }
+        if (state_.presence == InstallerPresence::RelatedNewer) {
+            postError(QStringLiteral("A newer version of Wolfmark is already installed."), HRESULT_FROM_WIN32(ERROR_PRODUCT_VERSION));
+            return;
+        }
+        if ((commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL ||
+             commandAction_ == BOOTSTRAPPER_ACTION_REPAIR) &&
+            !currentBundleInstalled_) {
+            postError(QStringLiteral("This Wolfmark setup is not the registered installer."), HRESULT_FROM_WIN32(ERROR_UNKNOWN_PRODUCT));
+            return;
+        }
         InstallerAction action = InstallerAction::Install;
         if (commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL) {
             action = InstallerAction::Uninstall;
         } else if (commandAction_ == BOOTSTRAPPER_ACTION_REPAIR) {
             action = InstallerAction::Repair;
-        } else if (state_.installed) {
+        } else if (currentBundleInstalled_ || state_.presence == InstallerPresence::RelatedOlder ||
+                   state_.presence == InstallerPresence::RelatedSame) {
             action = InstallerAction::Update;
         }
         begin(action, state_.options);
@@ -252,12 +274,17 @@ void BurnController::presentDetectedState() {
         quit(ERROR_INSTALL_FAILURE);
         return;
     }
-    if (commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL) {
+    if (state_.presence == InstallerPresence::RelatedNewer) {
+        window_->showFailure(
+            QStringLiteral("A newer version of Wolfmark is already installed."),
+            QStringLiteral("Uninstall the newer version before installing this development build."));
+    } else if (commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL && currentBundleInstalled_) {
         window_->showMaintenance(state_);
-    } else if (state_.installed && updateAvailable) {
+    } else if (currentBundleInstalled_) {
+        window_->showMaintenance(state_);
+    } else if (state_.presence == InstallerPresence::RelatedOlder ||
+               state_.presence == InstallerPresence::RelatedSame) {
         window_->showUpdate(state_);
-    } else if (state_.installed) {
-        window_->showMaintenance(state_);
     } else {
         state_.activeAction = InstallerAction::Install;
         window_->showInstall(state_);
@@ -402,6 +429,24 @@ QString BurnController::engineString(const wchar_t* name) const {
     std::vector<wchar_t> value(length);
     status = m_pEngine->GetVariableString(name, value.data(), &length);
     return SUCCEEDED(status) ? QString::fromWCharArray(value.data()) : QString();
+}
+
+LONGLONG BurnController::engineNumeric(const wchar_t* name, LONGLONG fallback) const {
+    if (!m_pEngine) {
+        return fallback;
+    }
+    LONGLONG value = fallback;
+    return SUCCEEDED(m_pEngine->GetVariableNumeric(name, &value)) ? value : fallback;
+}
+
+void BurnController::noteRelatedVersion(LPCWSTR version) {
+    const QString candidate = QString::fromWCharArray(version);
+    if (detectedVersion_.isEmpty() ||
+        QVersionNumber::compare(
+            QVersionNumber::fromString(candidate),
+            QVersionNumber::fromString(detectedVersion_)) > 0) {
+        detectedVersion_ = candidate;
+    }
 }
 
 void BurnController::loadInstalledOptions() {

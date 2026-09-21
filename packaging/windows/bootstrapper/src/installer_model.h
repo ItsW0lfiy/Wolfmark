@@ -11,6 +11,14 @@ enum class InstallerAction {
     Uninstall,
 };
 
+enum class InstallerPresence {
+    None,
+    Current,
+    RelatedOlder,
+    RelatedSame,
+    RelatedNewer,
+};
+
 struct InstallerOptions {
     QString installFolder;
     bool fileAssociations = true;
@@ -22,6 +30,7 @@ struct InstallerState {
     QString targetVersion;
     InstallerOptions options;
     InstallerAction activeAction = InstallerAction::None;
+    InstallerPresence presence = InstallerPresence::None;
     bool installed = false;
     bool applying = false;
 };

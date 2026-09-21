@@ -41,6 +41,8 @@ public:
 
 private:
     QString engineString(const wchar_t* name) const;
+    LONGLONG engineNumeric(const wchar_t* name, LONGLONG fallback = 0) const;
+    void noteRelatedVersion(LPCWSTR version);
     void loadInstalledOptions();
     HRESULT startUiThread();
     void stopUiThread();
@@ -55,6 +57,10 @@ private:
     InstallerState state_;
     QString detectedVersion_;
     QString targetBundleVersion_;
+    bool currentBundleInstalled_ = false;
+    bool currentPackagePresent_ = false;
+    bool relatedBundlePresent_ = false;
+    bool relatedMsiPresent_ = false;
     BOOTSTRAPPER_ACTION commandAction_ = BOOTSTRAPPER_ACTION_UNKNOWN;
     BOOTSTRAPPER_SCOPE commandScope_ = BOOTSTRAPPER_SCOPE_PER_MACHINE;
     BOOTSTRAPPER_DISPLAY commandDisplay_ = BOOTSTRAPPER_DISPLAY_FULL;

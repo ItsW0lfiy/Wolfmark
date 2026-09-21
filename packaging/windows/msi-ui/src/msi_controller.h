@@ -29,6 +29,8 @@ public:
 
 private:
     static QString property(MSIHANDLE install, const wchar_t* name);
+    static QString productInfo(const QString& productCode, const wchar_t* name);
+    InstallerPresence detectPresence(MSIHANDLE install, QString* relatedVersion) const;
     static QString registryString(const wchar_t* name);
     static bool registryFlag(const wchar_t* name, bool fallback);
     static QString recordString(MSIHANDLE record, UINT field);

@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QIcon>
 #include <QMetaObject>
+#include <QVersionNumber>
 
 #include <array>
 #include <vector>
@@ -27,9 +28,14 @@ UINT MsiController::initialize(
         return ERROR_SUCCESS;
     }
 
-    state_.installed = !property(install, L"Installed").isEmpty();
+    QString relatedVersion;
+    state_.presence = detectPresence(install, &relatedVersion);
+    state_.installed = state_.presence == InstallerPresence::Current;
     state_.targetVersion = property(install, L"WOLFMARK_DISPLAY_VERSION");
     state_.installedVersion = registryString(L"Version");
+    if (state_.installedVersion.isEmpty()) {
+        state_.installedVersion = relatedVersion;
+    }
     state_.options.installFolder = property(install, L"INSTALLFOLDER");
     if (state_.options.installFolder.isEmpty()) {
         state_.options.installFolder = registryString(L"InstallDir");
@@ -40,7 +46,11 @@ UINT MsiController::initialize(
     }
     state_.options.fileAssociations = registryFlag(L"FileAssociations", true);
     state_.options.desktopShortcut = registryFlag(L"DesktopShortcut", false);
-    state_.activeAction = state_.installed ? InstallerAction::None : InstallerAction::Install;
+    state_.activeAction = state_.presence == InstallerPresence::None
+        ? InstallerAction::Install
+        : state_.presence == InstallerPresence::Current
+            ? InstallerAction::None
+            : InstallerAction::Update;
 
     startUiThread(resourceRoot);
     std::unique_lock lock(mutex_);
@@ -76,8 +86,15 @@ void MsiController::startUiThread(const QString& resourceRoot) {
             QDir(resourceRoot).filePath(QStringLiteral("wolfmark-symbol.png"))));
 
         SetupWindow window(this, resourceRoot);
-        if (state_.installed) {
+        if (state_.presence == InstallerPresence::Current) {
             window.showMaintenance(state_);
+        } else if (state_.presence == InstallerPresence::RelatedOlder ||
+                   state_.presence == InstallerPresence::RelatedSame) {
+            window.showUpdate(state_);
+        } else if (state_.presence == InstallerPresence::RelatedNewer) {
+            window.showFailure(
+                QStringLiteral("A newer version of Wolfmark is already installed."),
+                QStringLiteral("Uninstall the newer version before installing this development build."));
         } else {
             window.showInstall(state_);
         }
@@ -332,6 +349,72 @@ QString MsiController::property(MSIHANDLE install, const wchar_t* name) {
     ++length;
     result = MsiGetPropertyW(install, name, value.data(), &length);
     return result == ERROR_SUCCESS ? QString::fromWCharArray(value.data()) : QString();
+}
+
+QString MsiController::productInfo(const QString& productCode, const wchar_t* name) {
+    const std::wstring nativeProductCode = productCode.toStdWString();
+    DWORD length = 0;
+    UINT result = MsiGetProductInfoW(nativeProductCode.c_str(), name, nullptr, &length);
+    if (result != ERROR_MORE_DATA || length == 0) {
+        return {};
+    }
+    std::vector<wchar_t> value(static_cast<std::size_t>(length) + 1);
+    ++length;
+    result = MsiGetProductInfoW(nativeProductCode.c_str(), name, value.data(), &length);
+    return result == ERROR_SUCCESS ? QString::fromWCharArray(value.data()) : QString();
+}
+
+InstallerPresence MsiController::detectPresence(MSIHANDLE install, QString* relatedVersion) const {
+    const QString currentProductCode = property(install, L"ProductCode");
+    if (!property(install, L"Installed").isEmpty() ||
+        (!currentProductCode.isEmpty() &&
+         MsiQueryProductStateW(currentProductCode.toStdWString().c_str()) == INSTALLSTATE_DEFAULT)) {
+        if (relatedVersion) {
+            *relatedVersion = property(install, L"ProductVersion");
+        }
+        return InstallerPresence::Current;
+    }
+
+    const QString upgradeCode = property(install, L"UpgradeCode");
+    QString newestRelatedVersion;
+    if (!upgradeCode.isEmpty()) {
+        const std::wstring nativeUpgradeCode = upgradeCode.toStdWString();
+        for (DWORD index = 0;; ++index) {
+            std::array<wchar_t, 39> productCode{};
+            const UINT result = MsiEnumRelatedProductsW(
+                nativeUpgradeCode.c_str(), 0, index, productCode.data());
+            if (result == ERROR_NO_MORE_ITEMS) {
+                break;
+            }
+            if (result != ERROR_SUCCESS) {
+                break;
+            }
+            const QString candidateCode = QString::fromWCharArray(productCode.data());
+            if (candidateCode.compare(currentProductCode, Qt::CaseInsensitive) == 0 ||
+                MsiQueryProductStateW(productCode.data()) != INSTALLSTATE_DEFAULT) {
+                continue;
+            }
+            const QString candidateVersion = productInfo(candidateCode, INSTALLPROPERTY_VERSIONSTRING);
+            if (newestRelatedVersion.isEmpty() ||
+                QVersionNumber::compare(
+                    QVersionNumber::fromString(candidateVersion),
+                    QVersionNumber::fromString(newestRelatedVersion)) > 0) {
+                newestRelatedVersion = candidateVersion;
+            }
+        }
+    }
+    if (newestRelatedVersion.isEmpty()) {
+        return InstallerPresence::None;
+    }
+    if (relatedVersion) {
+        *relatedVersion = newestRelatedVersion;
+    }
+    const int comparison = QVersionNumber::compare(
+        QVersionNumber::fromString(newestRelatedVersion),
+        QVersionNumber::fromString(property(install, L"ProductVersion")));
+    return comparison < 0
+        ? InstallerPresence::RelatedOlder
+        : comparison > 0 ? InstallerPresence::RelatedNewer : InstallerPresence::RelatedSame;
 }
 
 QString MsiController::registryString(const wchar_t* name) {
