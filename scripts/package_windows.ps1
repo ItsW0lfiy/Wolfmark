@@ -170,11 +170,15 @@ try {
         $wixRoot = Assert-UnderOut (Join-Path $outRoot 'package/wix')
         $baBuild = Join-Path $wixRoot 'bootstrapper-build'
         $baPayload = Join-Path $wixRoot 'bootstrapper-payload'
+        $msiUiBuild = Join-Path $wixRoot 'msi-ui-build'
+        $msiUiPayload = Join-Path $wixRoot 'msi-ui-payload'
         $nugetPackages = Assert-UnderOut (Join-Path $outRoot 'cache/nuget')
         $baApi = Join-Path $nugetPackages 'wixtoolset.bootstrapperapplicationapi/7.0.0'
         if (-not (Test-Path -LiteralPath $baApi -PathType Container)) { throw 'WiX bootstrapper API packages are missing. Run: cargo setup' }
         if (Test-Path -LiteralPath $baBuild) { Remove-Item -Recurse -Force -LiteralPath $baBuild }
         if (Test-Path -LiteralPath $baPayload) { Remove-Item -Recurse -Force -LiteralPath $baPayload }
+        if (Test-Path -LiteralPath $msiUiBuild) { Remove-Item -Recurse -Force -LiteralPath $msiUiBuild }
+        if (Test-Path -LiteralPath $msiUiPayload) { Remove-Item -Recurse -Force -LiteralPath $msiUiPayload }
         $generated = Join-Path $baBuild 'generated'
         New-Item -ItemType Directory -Force $generated, (Join-Path $baPayload 'platforms'), (Join-Path $baPayload 'assets/branding') | Out-Null
         Set-Content -LiteralPath (Join-Path $generated 'wolfmark_setup_version.h') -Encoding ascii -Value @(
@@ -196,12 +200,30 @@ try {
         Copy-RequiredFile 'docs/licenses/WiX-OSMF-EULA.txt' $baPayload
         foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $baPayload }
 
+        New-Item -ItemType Directory -Force (Join-Path $msiUiBuild 'bin'), $msiUiPayload | Out-Null
+        Invoke-MsBuild $msbuild @(
+            'packaging\windows\msi-ui\WolfmarkMsiUi.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
+            "/p:QtRoot=$QtRoot", "/p:WolfmarkOutputDir=$(Join-Path $msiUiBuild 'bin')",
+            "/p:WolfmarkIntermediateDir=$(Join-Path $msiUiBuild 'host-obj')", '/m:1', '/nr:false', '/v:minimal'
+        )
+        Invoke-MsBuild $msbuild @(
+            'packaging\windows\msi-ui\WolfmarkMsiEmbeddedUI.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
+            "/p:WolfmarkOutputDir=$(Join-Path $msiUiBuild 'bin')",
+            "/p:WolfmarkIntermediateDir=$(Join-Path $msiUiBuild 'stub-obj')", '/m:1', '/nr:false', '/v:minimal'
+        )
+        Copy-RequiredFile (Join-Path $msiUiBuild 'bin/WolfmarkMsiUi.dll') $msiUiPayload
+        Copy-RequiredFile (Join-Path $msiUiBuild 'bin/WolfmarkMsiEmbeddedUI.dll') $msiUiPayload
+        foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $msiUiPayload }
+        Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $msiUiPayload 'qwindows.dll')
+        Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' $msiUiPayload
+        foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $msiUiPayload }
+
         $msiBuild = Join-Path $wixRoot 'msi'
         $bundleBuild = Join-Path $wixRoot 'bundle'
         New-Item -ItemType Directory -Force $msiBuild, $bundleBuild | Out-Null
         $builtMsi = Join-Path $msiBuild 'Wolfmark-win-x64.msi'
         $builtSetup = Join-Path $bundleBuild 'Wolfmark-Setup-win-x64.exe'
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
+        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -bindpath "EmbeddedUI=$msiUiPayload" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtMsi -PathType Leaf)) { throw 'Wolfmark MSI compilation failed.' }
         & $wix build -acceptEula wix7 -arch x64 -bindpath "Bootstrapper=$baPayload" -d "BundleVersion=$($windowsVersion.Bundle)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -d "MsiPath=$builtMsi" -d "BootstrapperExe=$bootstrapperExe" -intermediatefolder (Join-Path $bundleBuild 'obj') 'packaging/windows/wix/Bundle.wxs' -o $builtSetup
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtSetup -PathType Leaf)) { throw 'Wolfmark setup bundle compilation failed.' }

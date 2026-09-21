@@ -77,7 +77,9 @@ try {
         'WolfmarkStartMenuShortcut', 'WolfmarkDesktopShortcut',
         'Wolfmark.MarkdownDocument', 'Wolfmark.TextDocument',
         'Software\RegisteredApplications', 'WOLFMARK_FILE_ASSOC = 1',
-        'WOLFMARK_DESKTOP_SHORTCUT = 1', '&quot;%1&quot;'
+        'WOLFMARK_DESKTOP_SHORTCUT = 1', '&quot;%1&quot;',
+        'EmbeddedUI Id="WolfmarkEmbeddedUI"', 'WolfmarkMsiEmbeddedUI.dll',
+        'WolfmarkMsiUi.dll', 'qwindows.dll'
     )) {
         if (-not $source.Contains($required)) { throw "MSI audit did not find required authoring: $required" }
     }
@@ -121,7 +123,8 @@ try {
         throw 'The staged application payload is missing. Run cargo package-app before lifecycle validation.'
     }
     $olderMsi = Join-Path $olderBuild 'Wolfmark-older-win-x64.msi'
-    & $wix build -acceptEula wix7 -arch x64 -pdbtype none -bindpath "Payload=$payloadRoot" `
+    $embeddedUiRoot = Join-Path $outRoot 'package/wix/msi-ui-payload'
+    & $wix build -acceptEula wix7 -arch x64 -pdbtype none -bindpath "Payload=$payloadRoot" -bindpath "EmbeddedUI=$embeddedUiRoot" `
         -d "MsiVersion=$($olderVersion.Msi)" -d "DisplayVersion=$($olderVersion.Display)" `
         -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $olderBuild 'obj') `
         'packaging/windows/wix/Wolfmark.wxs' -o $olderMsi

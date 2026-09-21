@@ -27,12 +27,32 @@
     </Property>
     <Property Id="WOLFMARK_FILE_ASSOC" Value="1" Secure="yes" />
     <Property Id="WOLFMARK_DESKTOP_SHORTCUT" Value="0" Secure="yes" />
+    <Property Id="WOLFMARK_DISPLAY_VERSION" Value="$(DisplayVersion)" />
     <Property Id="ARPPRODUCTICON" Value="WolfmarkProductIcon" />
     <Property Id="ARPHELPLINK" Value="https://github.com/ItsW0lfiy/Moonmark/issues" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/ItsW0lfiy/Moonmark" />
     <Property Id="ARPCOMMENTS" Value="Native Markdown and text document viewer" />
 
     <Icon Id="WolfmarkProductIcon" SourceFile="$(ProjectRoot)\assets\icons\wolfmark.ico" />
+
+    <UI>
+      <EmbeddedUI
+          Id="WolfmarkEmbeddedUI"
+          Name="WolfmarkMsiEmbeddedUI.dll"
+          SourceFile="!(bindpath.EmbeddedUI)\WolfmarkMsiEmbeddedUI.dll">
+        <EmbeddedUIResource Id="WolfmarkMsiUi" Name="WolfmarkMsiUi.dll" SourceFile="!(bindpath.EmbeddedUI)\WolfmarkMsiUi.dll" />
+        <EmbeddedUIResource Id="WolfmarkQtCore" Name="Qt6Core.dll" SourceFile="!(bindpath.EmbeddedUI)\Qt6Core.dll" />
+        <EmbeddedUIResource Id="WolfmarkQtGui" Name="Qt6Gui.dll" SourceFile="!(bindpath.EmbeddedUI)\Qt6Gui.dll" />
+        <EmbeddedUIResource Id="WolfmarkQtWidgets" Name="Qt6Widgets.dll" SourceFile="!(bindpath.EmbeddedUI)\Qt6Widgets.dll" />
+        <EmbeddedUIResource Id="WolfmarkQtWindows" Name="qwindows.dll" SourceFile="!(bindpath.EmbeddedUI)\qwindows.dll" />
+        <EmbeddedUIResource Id="WolfmarkMsiSymbol" Name="wolfmark-symbol.png" SourceFile="!(bindpath.EmbeddedUI)\wolfmark-symbol.png" />
+        <EmbeddedUIResource Id="WolfmarkMsiVcp" Name="msvcp140.dll" SourceFile="!(bindpath.EmbeddedUI)\msvcp140.dll" />
+        <EmbeddedUIResource Id="WolfmarkMsiVcp1" Name="msvcp140_1.dll" SourceFile="!(bindpath.EmbeddedUI)\msvcp140_1.dll" />
+        <EmbeddedUIResource Id="WolfmarkMsiVcp2" Name="msvcp140_2.dll" SourceFile="!(bindpath.EmbeddedUI)\msvcp140_2.dll" />
+        <EmbeddedUIResource Id="WolfmarkMsiVcr" Name="vcruntime140.dll" SourceFile="!(bindpath.EmbeddedUI)\vcruntime140.dll" />
+        <EmbeddedUIResource Id="WolfmarkMsiVcr1" Name="vcruntime140_1.dll" SourceFile="!(bindpath.EmbeddedUI)\vcruntime140_1.dll" />
+      </EmbeddedUI>
+    </UI>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Wolfmark">

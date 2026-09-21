@@ -1,0 +1,5 @@
+LIBRARY "WolfmarkMsiEmbeddedUI"
+EXPORTS
+    InitializeEmbeddedUI
+    EmbeddedUIHandler
+    ShutdownEmbeddedUI

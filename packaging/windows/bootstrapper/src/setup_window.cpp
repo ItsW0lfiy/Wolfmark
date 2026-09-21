@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -22,11 +23,10 @@
 namespace {
 class WolfmarkSymbol final : public QWidget {
 public:
-    explicit WolfmarkSymbol(int size = 44, QWidget* parent = nullptr) : QWidget(parent) {
+    explicit WolfmarkSymbol(const QString& sourcePath, int size = 44, QWidget* parent = nullptr) : QWidget(parent) {
         setFixedSize(size, size);
         setAccessibleName(QStringLiteral("Wolfmark paw"));
-        source_.load(QApplication::applicationDirPath() +
-                     QStringLiteral("/assets/branding/wolfmark-symbol.png"));
+        source_.load(sourcePath);
     }
 
 protected:
@@ -60,7 +60,7 @@ QFrame* separator() {
 }
 }  // namespace
 
-SetupWindow::SetupWindow(InstallerHost* host) : host_(host) {
+SetupWindow::SetupWindow(InstallerHost* host, const QString& resourceRoot) : host_(host) {
     setObjectName(QStringLiteral("setupWindow"));
     setWindowTitle(QStringLiteral("Wolfmark Setup"));
     setFixedSize(820, 560);
@@ -88,7 +88,15 @@ SetupWindow::SetupWindow(InstallerHost* host) : host_(host) {
     auto* brand_layout = new QVBoxLayout(brand_panel);
     brand_layout->setContentsMargins(26, 38, 26, 28);
     brand_layout->setSpacing(12);
-    auto* brand_symbol = new WolfmarkSymbol(88);
+    const QString assetsRoot = resourceRoot.isEmpty()
+        ? QApplication::applicationDirPath()
+        : resourceRoot;
+    QString symbolPath = assetsRoot + QStringLiteral("/assets/branding/wolfmark-symbol.png");
+    const QString flatSymbolPath = assetsRoot + QStringLiteral("/wolfmark-symbol.png");
+    if (!QFileInfo::exists(symbolPath) && QFileInfo::exists(flatSymbolPath)) {
+        symbolPath = flatSymbolPath;
+    }
+    auto* brand_symbol = new WolfmarkSymbol(symbolPath, 88);
     brand_layout->addWidget(brand_symbol, 0, Qt::AlignHCenter);
     auto* brand_name = new QLabel(QStringLiteral("Wolfmark"));
     brand_name->setObjectName(QStringLiteral("brandName"));

@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <QWidget>
+#include <QString>
 
 #include "installer_host.h"
 
@@ -15,7 +16,7 @@ class QStackedWidget;
 
 class SetupWindow final : public QWidget {
 public:
-    explicit SetupWindow(InstallerHost* host);
+    explicit SetupWindow(InstallerHost* host, const QString& resourceRoot = QString());
 
     void showInstall(const InstallerState& state);
     void showUpdate(const InstallerState& state);
