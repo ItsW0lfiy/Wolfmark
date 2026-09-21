@@ -131,7 +131,7 @@ try {
     $visualStudio = Find-VisualStudio
     $redist = Find-VcRedistDirectory $visualStudio
     New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
-    foreach ($name in 'Wolfmark-Setup-win-x64.exe', 'Wolfmark-Setup-win-x64.wixpdb', 'Wolfmark-win-x64.msi', 'Wolfmark-win-x64.wixpdb', 'Wolfmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
+    foreach ($name in 'Wolfmark-Setup-win-x64.exe', 'Wolfmark-Setup-win-x64.wixpdb', 'Wolfmark-win-x64.msi', 'Wolfmark-win-x64.wixpdb', 'Wolfmark-portable-win-x64.zip', 'Moonmark-Setup-win-x64.exe', 'Moonmark-Setup-win-x64.wixpdb', 'Moonmark-win-x64.msi', 'Moonmark-win-x64.wixpdb', 'Moonmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
         $stale = Join-Path $OutputDirectory $name
         if (Test-Path -LiteralPath $stale) { Remove-Item -Force -LiteralPath $stale }
     }
