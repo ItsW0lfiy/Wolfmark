@@ -65,6 +65,6 @@ mod tests {
                 .iter()
                 .all(|colour| !colour.has_blue_bias())
         );
-        assert!(CRIMSON.0 > CRIMSON.1 && CRIMSON.1 > CRIMSON.2);
+        assert!(CRIMSON.0 > CRIMSON.1 && CRIMSON.0 > CRIMSON.2);
     }
 }
