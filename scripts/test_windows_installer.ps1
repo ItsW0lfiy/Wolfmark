@@ -72,7 +72,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'MSI decompilation audit failed.' }
     $source = Get-Content -Raw -LiteralPath $decompiled
     foreach ($required in @(
-        'UpgradeCode="{48D9AFC3-ECEB-4DB2-BC50-C176246E388A}"',
+        'UpgradeCode="{24F5627C-0519-4BC3-9C73-4DEBD580BA11}"',
         'StandardDirectory Id="ProgramFiles64Folder"',
         'WolfmarkStartMenuShortcut', 'WolfmarkDesktopShortcut',
         'Wolfmark.MarkdownDocument', 'Wolfmark.TextDocument',
