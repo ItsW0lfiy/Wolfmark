@@ -1,7 +1,9 @@
 #include "burn_controller.h"
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
+#include <QIcon>
 #include <QMetaObject>
 #include <QVersionNumber>
 
@@ -48,10 +50,6 @@ QString hresultText(HRESULT status) {
 
 BurnController::BurnController() = default;
 
-void BurnController::setWindow(SetupWindow* window) {
-    window_ = window;
-}
-
 STDMETHODIMP BurnController::OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_COMMAND* command) {
     const HRESULT status = CBootstrapperApplicationBase::OnCreate(engine, command);
     if (SUCCEEDED(status)) {
@@ -71,7 +69,24 @@ STDMETHODIMP BurnController::OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_
 }
 
 STDMETHODIMP BurnController::OnStartup() {
-    return m_pEngine->Detect(window_ ? window_->nativeHandle() : nullptr);
+    if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_FULL ||
+        commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
+        const HRESULT status = startUiThread();
+        if (FAILED(status)) {
+            return status;
+        }
+    }
+    return m_pEngine->Detect(uiWindowHandle_);
+}
+
+STDMETHODIMP BurnController::OnShutdown(BOOTSTRAPPER_SHUTDOWN_ACTION* action) {
+    stopUiThread();
+    return CBootstrapperApplicationBase::OnShutdown(action);
+}
+
+STDMETHODIMP BurnController::OnDestroy(BOOL reload) {
+    stopUiThread();
+    return CBootstrapperApplicationBase::OnDestroy(reload);
 }
 
 STDMETHODIMP BurnController::OnDetectRelatedBundle(
@@ -124,15 +139,75 @@ STDMETHODIMP BurnController::OnDetectComplete(HRESULT status, BOOL) {
         postError(QStringLiteral("Wolfmark setup could not inspect this computer."), status);
         return S_OK;
     }
-    QMetaObject::invokeMethod(qApp, [this] { presentDetectedState(); }, Qt::QueuedConnection);
+    if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_FULL ||
+        commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
+        postToUi([this] { presentDetectedState(); });
+    } else {
+        presentDetectedState();
+    }
     return S_OK;
 }
 
-void BurnController::presentDetectedState() {
-    if (!window_) {
-        quit(ERROR_INSTALL_FAILURE);
-        return;
+HRESULT BurnController::startUiThread() {
+    uiThread_ = std::thread([this] {
+        int argumentCount = 1;
+        char applicationName[] = "WolfmarkSetup";
+        char* arguments[] = {applicationName, nullptr};
+        QApplication application(argumentCount, arguments);
+        QApplication::setApplicationName(QStringLiteral("Wolfmark Setup"));
+        QApplication::setOrganizationName(QStringLiteral("Wolfmark"));
+        QApplication::setWindowIcon(QIcon(
+            QCoreApplication::applicationDirPath() +
+            QStringLiteral("/assets/branding/wolfmark-symbol.png")));
+
+        SetupWindow window(this);
+        {
+            std::lock_guard lock(uiMutex_);
+            uiApplication_ = &application;
+            window_ = &window;
+            uiWindowHandle_ = window.nativeHandle();
+            uiInitialized_ = true;
+        }
+        uiReady_.notify_one();
+        application.exec();
+        {
+            std::lock_guard lock(uiMutex_);
+            window_ = nullptr;
+            uiApplication_ = nullptr;
+            uiWindowHandle_ = nullptr;
+        }
+    });
+
+    std::unique_lock lock(uiMutex_);
+    uiReady_.wait(lock, [this] { return uiInitialized_; });
+    return uiApplication_ && uiWindowHandle_ ? S_OK : E_FAIL;
+}
+
+void BurnController::stopUiThread() {
+    QCoreApplication* application = nullptr;
+    {
+        std::lock_guard lock(uiMutex_);
+        application = uiApplication_;
     }
+    if (application) {
+        QMetaObject::invokeMethod(application, &QCoreApplication::quit, Qt::QueuedConnection);
+    }
+    if (uiThread_.joinable() && uiThread_.get_id() != std::this_thread::get_id()) {
+        uiThread_.join();
+    }
+}
+
+bool BurnController::postToUi(std::function<void()> callback) {
+    QCoreApplication* application = nullptr;
+    {
+        std::lock_guard lock(uiMutex_);
+        application = uiApplication_;
+    }
+    return application && QMetaObject::invokeMethod(
+        application, std::move(callback), Qt::QueuedConnection);
+}
+
+void BurnController::presentDetectedState() {
     const bool updateAvailable = !detectedVersion_.isEmpty() && !targetBundleVersion_.isEmpty() &&
         QVersionNumber::compare(
             QVersionNumber::fromString(detectedVersion_),
@@ -154,6 +229,10 @@ void BurnController::presentDetectedState() {
         if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
             window_->show();
         }
+        return;
+    }
+    if (!window_) {
+        quit(ERROR_INSTALL_FAILURE);
         return;
     }
     if (commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL) {
@@ -198,22 +277,22 @@ STDMETHODIMP BurnController::OnPlanComplete(HRESULT status) {
         postError(QStringLiteral("Wolfmark setup could not prepare the requested change."), status);
         return S_OK;
     }
-    QMetaObject::invokeMethod(qApp, [this] {
+    postToUi([this] {
         const HRESULT applyStatus = m_pEngine->Apply(window_ ? window_->nativeHandle() : nullptr);
         if (FAILED(applyStatus)) {
             state_.applying = false;
             postError(QStringLiteral("Wolfmark setup could not start the requested change."), applyStatus);
         }
-    }, Qt::QueuedConnection);
+    });
     return S_OK;
 }
 
 STDMETHODIMP BurnController::OnProgress(DWORD, DWORD overallProgress, BOOL* cancelFlag) {
     *cancelFlag |= CheckCanceled();
     if (window_) {
-        QMetaObject::invokeMethod(qApp, [this, overallProgress] {
+        postToUi([this, overallProgress] {
             window_->setProgress(static_cast<int>(overallProgress), QString());
-        }, Qt::QueuedConnection);
+        });
     }
     return S_OK;
 }
@@ -235,7 +314,7 @@ STDMETHODIMP BurnController::OnExecutePackageBegin(
         case InstallerAction::Modify: detail = QStringLiteral("Applying Windows integration options..."); break;
         default: detail = QStringLiteral("Installing application files..."); break;
         }
-        QMetaObject::invokeMethod(qApp, [this, detail] { window_->setProgress(10, detail); }, Qt::QueuedConnection);
+        postToUi([this, detail] { window_->setProgress(10, detail); });
     }
     return S_OK;
 }
@@ -253,9 +332,9 @@ STDMETHODIMP BurnController::OnApplyComplete(
     }
     if (SUCCEEDED(status)) {
         if (window_) {
-            QMetaObject::invokeMethod(qApp, [this] {
+            postToUi([this] {
                 window_->showComplete(state_.activeAction, state_);
-            }, Qt::QueuedConnection);
+            });
         }
     } else if (status == HRESULT_FROM_WIN32(ERROR_INSTALL_USEREXIT)) {
         postError(QStringLiteral("Wolfmark setup was cancelled safely."), status);
@@ -306,10 +385,10 @@ void BurnController::postError(const QString& summary, HRESULT status) {
         return;
     }
     const QString details = hresultText(status) + QStringLiteral("\nReview the Burn and MSI logs for diagnostic details.");
-    QMetaObject::invokeMethod(qApp, [this, summary, details] {
+    postToUi([this, summary, details] {
         window_->showFailure(summary, details);
         window_->show();
-    }, Qt::QueuedConnection);
+    });
 }
 
 BOOTSTRAPPER_ACTION BurnController::burnAction(InstallerAction action) {

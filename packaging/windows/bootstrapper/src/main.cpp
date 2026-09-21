@@ -7,10 +7,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
-#include <QMetaObject>
 #include <QTimer>
 
-#include <thread>
 #include <vector>
 
 #include "burn_controller.h"
@@ -49,19 +47,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     for (QByteArray& argument : encodedArguments) {
         argumentPointers.push_back(argument.data());
     }
-    QApplication application(wideArgumentCount, argumentPointers.data());
-    QApplication::setApplicationName(QStringLiteral("Wolfmark Setup"));
-    QApplication::setOrganizationName(QStringLiteral("Wolfmark"));
-    QApplication::setWindowIcon(QIcon(
-        QCoreApplication::applicationDirPath() +
-        QStringLiteral("/assets/branding/wolfmark-symbol.png")));
-
-    const QStringList arguments = application.arguments();
+    QStringList arguments;
+    arguments.reserve(wideArgumentCount);
+    for (const QByteArray& argument : encodedArguments) {
+        arguments.push_back(QString::fromUtf8(argument));
+    }
     QString smokeState = argumentValue(arguments, QStringLiteral("--ui-smoke="));
     if (smokeState.isEmpty()) {
         smokeState = qEnvironmentVariable("WOLFMARK_SETUP_SMOKE_STATE");
     }
     if (!smokeState.isEmpty()) {
+        QApplication application(wideArgumentCount, argumentPointers.data());
+        QApplication::setApplicationName(QStringLiteral("Wolfmark Setup"));
+        QApplication::setOrganizationName(QStringLiteral("Wolfmark"));
+        QApplication::setWindowIcon(QIcon(
+            QCoreApplication::applicationDirPath() +
+            QStringLiteral("/assets/branding/wolfmark-symbol.png")));
         SetupWindow window(nullptr);
         window.showSmokeState(smokeState);
         window.show();
@@ -84,22 +85,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
 
     auto* controller = new BurnController;
-    SetupWindow window(controller);
-    controller->setWindow(&window);
-    controller->AddRef();
-    std::thread engineThread([controller] {
-        const HRESULT result = BootstrapperApplicationRun(controller);
-        QMetaObject::invokeMethod(qApp, [result] {
-            if (FAILED(result)) {
-                qApp->exit(static_cast<int>(result));
-            }
-        }, Qt::QueuedConnection);
-        controller->Release();
-    });
-
-    const int result = application.exec();
-    controller->quit(result == 0 ? ERROR_SUCCESS : static_cast<DWORD>(result));
-    engineThread.join();
+    const HRESULT status = BootstrapperApplicationRun(controller);
     controller->Release();
-    return result;
+    return FAILED(status) ? static_cast<int>(status) : ERROR_SUCCESS;
 }
