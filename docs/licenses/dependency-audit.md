@@ -14,7 +14,7 @@ Dev.7 adds `semver` plus the RustCrypto `sha2` stack (`digest`, `block-buffer`, 
 
 The app-local Microsoft Visual C++ runtime is redistributed under Microsoft's Visual Studio redistribution terms. Windows system DLLs are supplied by the operating system and are not packaged as Wolfmark dependencies.
 
-Dev.7's Windows installer uses WiX Toolset 7.0.0. The custom bootstrapper is native C++20/Qt Widgets and statically links WiX's native bootstrapper support library; no CLR is included or required on client systems. WiX source uses the Microsoft Reciprocal License and WiX 7 is governed by the Open Source Maintenance Fee EULA. At this audit date Wolfmark is below the published USD 10,000 attributable annual project-revenue threshold. This must be rechecked before public release and whenever terms or funding materially change.
+Dev.7's Windows installer uses WiX Toolset 7.0.0. The custom Burn bootstrapper and MSI Embedded UI are native C++20/Qt Widgets. The Embedded UI resource payload reuses the same dynamically linked Qt Core/Gui/Widgets and app-local MSVC runtime licensing model as the setup/application payload; its system-only loader imports only `KERNEL32.dll`. No CLR, JVM, Node.js, WebView2, Chromium, or Qt WebEngine dependency is included or required on client systems. WiX source uses the Microsoft Reciprocal License and WiX 7 is governed by the Open Source Maintenance Fee EULA. At this audit date Wolfmark is below the published USD 10,000 attributable annual project-revenue threshold. This must be rechecked before public release and whenever terms or funding materially change.
 
 ## Sources and release gate
 
