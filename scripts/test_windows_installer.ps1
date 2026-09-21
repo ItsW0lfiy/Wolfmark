@@ -207,7 +207,8 @@ try {
     foreach ($required in @(
         "ProviderKey=`"$($identity.bundleProviderKey)`"",
         "PrimaryUpgradeCode=`"$($identity.bundleUpgradeCode)`"",
-        "ProductCode=`"$($identity.msiProductCode)`""
+        "ProductCode=`"$($identity.msiProductCode)`"",
+        'Variable Id="WolfmarkBundleVersion"'
     )) {
         if (-not $bundleManifest.Contains($required)) { throw "Bundle audit did not find required identity: $required" }
     }

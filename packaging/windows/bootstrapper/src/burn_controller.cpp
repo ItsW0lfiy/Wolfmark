@@ -58,7 +58,7 @@ STDMETHODIMP BurnController::OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_
         commandScope_ = command->commandLineScope == BOOTSTRAPPER_SCOPE_DEFAULT
             ? BOOTSTRAPPER_SCOPE_PER_MACHINE
             : command->commandLineScope;
-        targetBundleVersion_ = engineString(L"WixBundleVersion");
+        targetBundleVersion_ = engineString(L"WolfmarkBundleVersion");
         state_.targetVersion = engineString(L"WolfmarkDisplayVersion");
         if (state_.targetVersion.isEmpty()) {
             state_.targetVersion = targetBundleVersion_;

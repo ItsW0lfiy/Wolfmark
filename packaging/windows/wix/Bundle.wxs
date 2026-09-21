@@ -15,6 +15,7 @@
 
     <Variable Name="WolfmarkInstallFolder" Type="string" Value="[ProgramFiles64Folder]Wolfmark" />
     <Variable Name="WolfmarkDisplayVersion" Type="string" Value="$(DisplayVersion)" />
+    <Variable Name="WolfmarkBundleVersion" Type="string" Value="$(BundleVersion)" />
     <Variable Name="WolfmarkFileAssociations" Type="numeric" Value="1" />
     <Variable Name="WolfmarkDesktopShortcut" Type="numeric" Value="0" />
 
