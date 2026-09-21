@@ -2,7 +2,8 @@
 param(
     [string]$ReleaseDirectory,
     [switch]$ExecuteLifecycle,
-    [switch]$AllowExistingWolfmarkReplacement
+    [switch]$AllowExistingWolfmarkReplacement,
+    [switch]$InteractiveLaunchSmoke
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,6 +40,46 @@ function Get-OlderInstallerVersion([string]$Version) {
 function Get-WolfmarkEntries {
     Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
         Get-ItemProperty | Where-Object DisplayName -eq 'Wolfmark'
+}
+
+function Wait-VisibleWindow([string]$ProcessName, [int]$TimeoutSeconds = 15) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $window = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -eq 'Wolfmark Setup' } |
+            Select-Object -First 1
+        if ($window) { return $window }
+        Start-Sleep -Milliseconds 200
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Timed out waiting for the packaged $ProcessName Wolfmark Setup window."
+}
+
+function Invoke-InteractiveLaunchSmoke([string]$SetupPath, [string]$MsiPath) {
+    $bundle = $null
+    $bundleUi = $null
+    try {
+        $bundle = Start-Process -FilePath $SetupPath -PassThru
+        $bundleUi = Wait-VisibleWindow 'WolfmarkSetup'
+        if (-not $bundleUi.CloseMainWindow()) { throw 'The Burn setup window rejected a normal close request.' }
+        if (-not $bundleUi.WaitForExit(15000)) { throw 'The Burn setup UI did not exit after cancellation.' }
+        if ($bundle -and -not $bundle.HasExited -and -not $bundle.WaitForExit(15000)) {
+            throw 'The Burn engine remained alive after its setup UI closed.'
+        }
+    } finally {
+        if ($bundleUi -and -not $bundleUi.HasExited) { Stop-Process -Id $bundleUi.Id -Force }
+        if ($bundle -and -not $bundle.HasExited) { Stop-Process -Id $bundle.Id -Force }
+    }
+
+    $msiClient = $null
+    try {
+        $msiClient = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList @('/i', "`"$MsiPath`"") -PassThru
+        $msiUi = Wait-VisibleWindow 'msiexec'
+        if (-not $msiUi.CloseMainWindow()) { throw 'The MSI Embedded UI rejected a normal close request.' }
+        if (-not $msiUi.WaitForExit(15000)) { throw 'The MSI Embedded UI did not exit after cancellation.' }
+    } finally {
+        if ($msiClient -and -not $msiClient.HasExited) { Stop-Process -Id $msiClient.Id -Force }
+    }
+    Write-Host 'WIX_INTERACTIVE_LAUNCH_SMOKE burn_visible=ok burn_cancel_cleanup=ok msi_embedded_ui_visible=ok msi_cancel_cleanup=ok'
 }
 
 Push-Location $projectRoot
@@ -94,6 +135,10 @@ try {
         $smoke = Start-Process -FilePath (Join-Path $portableRoot 'Wolfmark.exe') -ArgumentList '--smoke-icon' -WorkingDirectory $portableRoot -Wait -PassThru -WindowStyle Hidden
         if ($smoke.ExitCode -ne 0) { throw "Portable smoke failed with exit code $($smoke.ExitCode)." }
     } finally { $env:PATH = $savedPath }
+
+    if ($InteractiveLaunchSmoke) {
+        Invoke-InteractiveLaunchSmoke $setup $msi
+    }
 
     if (-not $ExecuteLifecycle) {
         Write-Host 'WIX_INSTALLER_AUDIT artifacts=ok checksums=ok msi_tables=ok portable=ok lifecycle=not-requested'
