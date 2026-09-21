@@ -1,0 +1,7 @@
+{
+  "displayVersion": "0.1.0-dev.7",
+  "msiProductCode": "{FF340EB2-370A-474F-A6B8-4E78AFAE8952}",
+  "msiUpgradeCode": "{24F5627C-0519-4BC3-9C73-4DEBD580BA11}",
+  "bundleUpgradeCode": "{84457DCA-5666-4684-92DF-9E7677C285FD}",
+  "bundleProviderKey": "ItsW0lfiy.Wolfmark.Windows.x64"
+}

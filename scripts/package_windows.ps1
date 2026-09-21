@@ -43,6 +43,18 @@ function Get-WindowsVersions([string]$Version) {
     }
 }
 
+function Get-InstallerIdentity([string]$Version) {
+    $identityPath = Join-Path $projectRoot 'packaging/windows/identity.json'
+    $identity = Get-Content -Raw -LiteralPath $identityPath | ConvertFrom-Json
+    if ($identity.displayVersion -ne $Version) {
+        throw "Installer identity is for '$($identity.displayVersion)', not the current Wolfmark version '$Version'."
+    }
+    foreach ($name in 'msiProductCode', 'msiUpgradeCode', 'bundleUpgradeCode', 'bundleProviderKey') {
+        if (-not $identity.$name) { throw "Installer identity is missing '$name'." }
+    }
+    return $identity
+}
+
 function Find-Wix {
     $candidates = @($WixExecutable, $env:WOLFMARK_WIX)
     $candidates += Join-Path $outRoot 'toolchains/wix/wix.exe'
@@ -119,6 +131,7 @@ Push-Location $projectRoot
 try {
     $version = Get-WolfmarkVersion
     $windowsVersion = Get-WindowsVersions $version
+    $installerIdentity = Get-InstallerIdentity $version
     if (-not $QtRoot) { $QtRoot = if ($env:WOLFMARK_QT_DIR) { $env:WOLFMARK_QT_DIR } else { Join-Path $outRoot 'toolchains/qt' } }
     $QtRoot = [IO.Path]::GetFullPath($QtRoot)
     if (-not $OutputDirectory) { $OutputDirectory = Join-Path $outRoot "release/$version" }
@@ -223,9 +236,9 @@ try {
         New-Item -ItemType Directory -Force $msiBuild, $bundleBuild | Out-Null
         $builtMsi = Join-Path $msiBuild 'Wolfmark-win-x64.msi'
         $builtSetup = Join-Path $bundleBuild 'Wolfmark-Setup-win-x64.exe'
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -bindpath "EmbeddedUI=$msiUiPayload" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
+        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -bindpath "EmbeddedUI=$msiUiPayload" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "MsiProductCode=$($installerIdentity.msiProductCode)" -d "MsiUpgradeCode=$($installerIdentity.msiUpgradeCode)" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtMsi -PathType Leaf)) { throw 'Wolfmark MSI compilation failed.' }
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Bootstrapper=$baPayload" -d "BundleVersion=$($windowsVersion.Bundle)" -d "DisplayVersion=$version" -d "ProjectRoot=$projectRoot" -d "MsiPath=$builtMsi" -d "BootstrapperExe=$bootstrapperExe" -intermediatefolder (Join-Path $bundleBuild 'obj') 'packaging/windows/wix/Bundle.wxs' -o $builtSetup
+        & $wix build -acceptEula wix7 -arch x64 -bindpath "Bootstrapper=$baPayload" -d "BundleVersion=$($windowsVersion.Bundle)" -d "DisplayVersion=$version" -d "BundleUpgradeCode=$($installerIdentity.bundleUpgradeCode)" -d "BundleProviderKey=$($installerIdentity.bundleProviderKey)" -d "ProjectRoot=$projectRoot" -d "MsiPath=$builtMsi" -d "BootstrapperExe=$bootstrapperExe" -intermediatefolder (Join-Path $bundleBuild 'obj') 'packaging/windows/wix/Bundle.wxs' -o $builtSetup
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtSetup -PathType Leaf)) { throw 'Wolfmark setup bundle compilation failed.' }
         Copy-Item -LiteralPath $builtMsi -Destination $msiPath
         Copy-Item -LiteralPath $builtSetup -Destination $setupPath

@@ -4,8 +4,8 @@
       Name="Wolfmark"
       Manufacturer="ItsW0lfiy"
       Version="$(MsiVersion)"
-      UpgradeCode="{24F5627C-0519-4BC3-9C73-4DEBD580BA11}"
-      ProductCode="*"
+      UpgradeCode="$(MsiUpgradeCode)"
+      ProductCode="$(MsiProductCode)"
       Scope="perMachine"
       InstallerVersion="500"
       Compressed="yes">

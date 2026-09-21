@@ -16,6 +16,26 @@ function Get-Version {
     return ($metadata.packages | Where-Object name -eq 'wolfmark' | Select-Object -First 1).version
 }
 
+function Get-MsiProperty([string]$MsiPath, [string]$Name) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.GetType().InvokeMember(
+        'OpenDatabase', 'InvokeMethod', $null, $installer, @([IO.Path]::GetFullPath($MsiPath), 0))
+    $query = "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$Name'"
+    $view = $database.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $database, @($query))
+    $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null
+    $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+    if (-not $record) { return $null }
+    return $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, 1)
+}
+
+function Get-MsiPackageCode([string]$MsiPath) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.GetType().InvokeMember(
+        'OpenDatabase', 'InvokeMethod', $null, $installer, @([IO.Path]::GetFullPath($MsiPath), 0))
+    $summary = $database.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $database, 0)
+    return $summary.GetType().InvokeMember('Property', 'GetProperty', $null, $summary, 9)
+}
+
 function Invoke-Msi([string[]]$Arguments, [string]$LogPath) {
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList ($Arguments + @('/qn', '/norestart', '/L*v', $LogPath)) -Wait -PassThru
     if ($process.ExitCode -notin 0, 3010) { throw "Windows Installer failed with exit code $($process.ExitCode). See $LogPath" }
@@ -130,6 +150,10 @@ function Invoke-QuietLayoutSmoke([string]$SetupPath, [string]$AuditRoot) {
 Push-Location $projectRoot
 try {
     $version = Get-Version
+    $identity = Get-Content -Raw -LiteralPath 'packaging/windows/identity.json' | ConvertFrom-Json
+    if ($identity.displayVersion -ne $version) {
+        throw "Installer identity is for '$($identity.displayVersion)', not '$version'."
+    }
     if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $outRoot "release/$version" }
     $ReleaseDirectory = [IO.Path]::GetFullPath($ReleaseDirectory)
     $msi = Join-Path $ReleaseDirectory 'Wolfmark-win-x64.msi'
@@ -158,7 +182,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'MSI decompilation audit failed.' }
     $source = Get-Content -Raw -LiteralPath $decompiled
     foreach ($required in @(
-        'UpgradeCode="{24F5627C-0519-4BC3-9C73-4DEBD580BA11}"',
+        "ProductCode=`"$($identity.msiProductCode)`"",
+        "UpgradeCode=`"$($identity.msiUpgradeCode)`"",
         'StandardDirectory Id="ProgramFiles64Folder"',
         'WolfmarkStartMenuShortcut', 'WolfmarkDesktopShortcut',
         'Wolfmark.MarkdownDocument', 'Wolfmark.TextDocument',
@@ -169,6 +194,45 @@ try {
     )) {
         if (-not $source.Contains($required)) { throw "MSI audit did not find required authoring: $required" }
     }
+    if ((Get-MsiProperty $msi 'ProductCode') -ne $identity.msiProductCode) {
+        throw 'The release MSI ProductCode does not match the versioned identity manifest.'
+    }
+
+    $bundleAudit = Join-Path $auditRoot 'bundle'
+    New-Item -ItemType Directory -Force (Join-Path $bundleAudit 'obj'), (Join-Path $bundleAudit 'payload'), (Join-Path $bundleAudit 'ba') | Out-Null
+    & $wix burn extract -acceptEula wix7 -intermediateFolder (Join-Path $bundleAudit 'obj') `
+        -o (Join-Path $bundleAudit 'payload') -oba (Join-Path $bundleAudit 'ba') $setup
+    if ($LASTEXITCODE -ne 0) { throw 'Bundle identity extraction failed.' }
+    $bundleManifest = Get-Content -Raw -LiteralPath (Join-Path $bundleAudit 'ba/manifest.xml')
+    foreach ($required in @(
+        "ProviderKey=`"$($identity.bundleProviderKey)`"",
+        "PrimaryUpgradeCode=`"$($identity.bundleUpgradeCode)`"",
+        "ProductCode=`"$($identity.msiProductCode)`""
+    )) {
+        if (-not $bundleManifest.Contains($required)) { throw "Bundle audit did not find required identity: $required" }
+    }
+
+    $identityProbeMsi = Join-Path $auditRoot 'Wolfmark-identity-rebuild.msi'
+    $identityProbeObj = Join-Path $auditRoot 'identity-rebuild-obj'
+    $payloadRoot = Join-Path $outRoot "package/staging/$version/Wolfmark"
+    $embeddedUiRoot = Join-Path $outRoot 'package/wix/msi-ui-payload'
+    $msiVersion = Get-MsiProperty $msi 'ProductVersion'
+    & $wix build -acceptEula wix7 -arch x64 -pdbtype none -bindpath "Payload=$payloadRoot" -bindpath "EmbeddedUI=$embeddedUiRoot" `
+        -d "MsiVersion=$msiVersion" -d "DisplayVersion=$version" `
+        -d "MsiProductCode=$($identity.msiProductCode)" -d "MsiUpgradeCode=$($identity.msiUpgradeCode)" `
+        -d "ProjectRoot=$projectRoot" -intermediatefolder $identityProbeObj `
+        'packaging/windows/wix/Wolfmark.wxs' -o $identityProbeMsi
+    if ($LASTEXITCODE -ne 0) { throw 'Same-version identity rebuild failed.' }
+    if ((Get-MsiProperty $identityProbeMsi 'ProductCode') -ne (Get-MsiProperty $msi 'ProductCode')) {
+        throw 'A same-version rebuild changed the MSI ProductCode.'
+    }
+    if ((Get-MsiPackageCode $identityProbeMsi) -eq (Get-MsiPackageCode $msi)) {
+        throw 'A same-version rebuilt MSI reused the PackageCode.'
+    }
+    Write-Host (
+        'WIX_INSTALLER_IDENTITY product_code={0} package_code={1} upgrade_code={2} bundle_upgrade_code={3} provider_key={4} same_version_rebuild=stable' -f
+        (Get-MsiProperty $msi 'ProductCode'), (Get-MsiPackageCode $msi),
+        (Get-MsiProperty $msi 'UpgradeCode'), $identity.bundleUpgradeCode, $identity.bundleProviderKey)
 
     $extractRoot = Join-Path $auditRoot 'portable'
     Expand-Archive -LiteralPath $zip -DestinationPath $extractRoot
@@ -218,6 +282,7 @@ try {
     $embeddedUiRoot = Join-Path $outRoot 'package/wix/msi-ui-payload'
     & $wix build -acceptEula wix7 -arch x64 -pdbtype none -bindpath "Payload=$payloadRoot" -bindpath "EmbeddedUI=$embeddedUiRoot" `
         -d "MsiVersion=$($olderVersion.Msi)" -d "DisplayVersion=$($olderVersion.Display)" `
+        -d "MsiProductCode={1A2A7C5B-F554-4132-983B-90FE7E474686}" -d "MsiUpgradeCode=$($identity.msiUpgradeCode)" `
         -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $olderBuild 'obj') `
         'packaging/windows/wix/Wolfmark.wxs' -o $olderMsi
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $olderMsi -PathType Leaf)) {

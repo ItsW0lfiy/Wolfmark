@@ -11,9 +11,17 @@ The generated artifacts are:
 - `Wolfmark-portable-win-x64.zip` — the same application payload with portable mode enabled;
 - `SHA256SUMS.txt` — hashes of all three distributables.
 
-The MSI owns Program Files deployment, Installed Apps metadata, Start Menu and optional Desktop shortcuts, Open With registration, repair, modify, major upgrades, and uninstall. The permanent Wolfmark MSI UpgradeCode is `{24F5627C-0519-4BC3-9C73-4DEBD580BA11}`. The Wolfmark Burn bundle uses permanent UpgradeCode `{84457DCA-5666-4684-92DF-9E7677C285FD}`. Product/package codes are generated per build as required by major-upgrade servicing.
+The MSI owns Program Files deployment, Installed Apps metadata, Start Menu and optional Desktop shortcuts, Open With registration, repair, modify, major upgrades, and uninstall. Installer identities are tracked in `packaging/windows/identity.json` and follow these rules:
 
-The unreleased Moonmark development installer used different identities and is intentionally not part of Wolfmark's upgrade family. Existing local Moonmark development installs are left untouched. If one interferes with manual testing, remove it through Windows Installed Apps (or its original setup executable) before testing Wolfmark; do not delete its Program Files or registry entries by hand.
+- MSI UpgradeCode `{24F5627C-0519-4BC3-9C73-4DEBD580BA11}` is permanent for the Wolfmark product family.
+- MSI ProductCode is stable for every rebuild of one published display version. It changes only when a later Wolfmark version is authored as a major upgrade. The `0.1.0-dev.7` ProductCode is `{FF340EB2-370A-474F-A6B8-4E78AFAE8952}`.
+- MSI PackageCode remains WiX-generated and changes whenever a new MSI package is built. Two nonidentical MSI files therefore do not share a PackageCode.
+- Burn UpgradeCode `{84457DCA-5666-4684-92DF-9E7677C285FD}` is permanent for the Wolfmark setup family.
+- Burn bundle registration Code identifies one built bundle and may change. The explicit provider key `ItsW0lfiy.Wolfmark.Windows.x64` persists across compatible setup upgrades.
+
+Burn maintenance is offered only when `WixBundleInstalled` confirms that the running bundle is itself registered. A related bundle or MSI is an update candidate, not proof that the current bundle owns maintenance. Direct MSI maintenance similarly checks the exact ProductCode first, then enumerates the UpgradeCode family to distinguish older, same-version, and newer related products. This prevents an unrelated setup from reporting a successful no-op uninstall.
+
+The unreleased Moonmark development installer used different identities and is intentionally not part of Wolfmark's upgrade family. Earlier unreleased Wolfmark dev.7 builds may also have random per-build ProductCodes. Current installers detect those products through the stable UpgradeCode and migrate them as related products. If a stale development install interferes with testing, enumerate its ProductCode first and remove it through Windows Installed Apps or `msiexec.exe /x {PRODUCT-CODE}`; do not delete Program Files or registry entries by hand. Existing local Moonmark development installs remain untouched.
 
 The custom bootstrapper offers install, update, maintenance, modify, repair, uninstall confirmation, progress, completion, and explicit error states. It delegates all package state changes and rollback to Burn/MSI. Its graphite/silver Qt UI is accessible by keyboard and deliberately contains no blue Wolfmark-controlled states. The bootstrapper is out-of-process from the Burn engine, following WiX 7's supported native BA model.
 

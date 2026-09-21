@@ -4,7 +4,8 @@
       Name="Wolfmark"
       Manufacturer="ItsW0lfiy"
       Version="$(BundleVersion)"
-      UpgradeCode="{84457DCA-5666-4684-92DF-9E7677C285FD}"
+      UpgradeCode="$(BundleUpgradeCode)"
+      ProviderKey="$(BundleProviderKey)"
       IconSourceFile="$(ProjectRoot)\assets\icons\wolfmark.ico"
       Compressed="yes">
 
