@@ -4,9 +4,8 @@
 
 #include <QWidget>
 
-#include "installer_model.h"
+#include "installer_host.h"
 
-class BurnController;
 class QCheckBox;
 class QLabel;
 class QLineEdit;
@@ -16,7 +15,7 @@ class QStackedWidget;
 
 class SetupWindow final : public QWidget {
 public:
-    explicit SetupWindow(BurnController* controller);
+    explicit SetupWindow(InstallerHost* host);
 
     void showInstall(const InstallerState& state);
     void showUpdate(const InstallerState& state);
@@ -47,7 +46,7 @@ private:
     QString actionTitle(InstallerAction action) const;
     QString actionProgressDetail(InstallerAction action) const;
 
-    BurnController* controller_ = nullptr;
+    InstallerHost* host_ = nullptr;
     InstallerState state_;
     InstallerAction confirmationAction_ = InstallerAction::None;
     QStackedWidget* pages_ = nullptr;

@@ -19,8 +19,6 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-#include "burn_controller.h"
-
 namespace {
 class WolfmarkSymbol final : public QWidget {
 public:
@@ -62,7 +60,7 @@ QFrame* separator() {
 }
 }  // namespace
 
-SetupWindow::SetupWindow(BurnController* controller) : controller_(controller) {
+SetupWindow::SetupWindow(InstallerHost* host) : host_(host) {
     setObjectName(QStringLiteral("setupWindow"));
     setWindowTitle(QStringLiteral("Wolfmark Setup"));
     setFixedSize(820, 560);
@@ -174,8 +172,8 @@ QWidget* SetupWindow::createInstallPage() {
     actions->addStretch(1);
     primaryButton_ = makeButton(QStringLiteral("Install Wolfmark"), true);
     connect(primaryButton_, &QPushButton::clicked, this, [this] {
-        if (controller_) {
-            controller_->begin(state_.activeAction, optionsFromControls());
+        if (host_) {
+            host_->begin(state_.activeAction, optionsFromControls());
         } else {
             showProgress(state_.activeAction == InstallerAction::Update ? InstallerAction::Update : InstallerAction::Install);
         }
@@ -242,8 +240,8 @@ QWidget* SetupWindow::createConfirmationPage() {
     confirmationButton_ = makeButton(QStringLiteral("Continue"), true);
     connect(cancel, &QPushButton::clicked, this, [this] { showMaintenance(state_); });
     connect(confirmationButton_, &QPushButton::clicked, this, [this] {
-        if (controller_) {
-            controller_->begin(confirmationAction_, state_.options);
+        if (host_) {
+            host_->begin(confirmationAction_, state_.options);
         } else {
             showProgress(confirmationAction_);
         }
@@ -275,8 +273,8 @@ QWidget* SetupWindow::createProgressPage() {
     layout->addStretch(1);
     auto* cancel = makeButton(QStringLiteral("Cancel"));
     connect(cancel, &QPushButton::clicked, this, [this] {
-        if (controller_) {
-            controller_->cancel();
+        if (host_) {
+            host_->cancel();
         }
     });
     auto* actions = new QHBoxLayout;
@@ -309,8 +307,8 @@ QWidget* SetupWindow::createCompletePage() {
         if (launchCheck_->isVisible() && launchCheck_->isChecked()) {
             QProcess::startDetached(state_.options.installFolder + QStringLiteral("/Wolfmark.exe"));
         }
-        if (controller_) {
-            controller_->quit();
+        if (host_) {
+            host_->quit(ERROR_SUCCESS);
         }
         QApplication::quit();
     });
@@ -339,8 +337,8 @@ QWidget* SetupWindow::createErrorPage() {
     layout->addStretch(1);
     auto* close = makeButton(QStringLiteral("Close"), true);
     connect(close, &QPushButton::clicked, this, [this] {
-        if (controller_) {
-            controller_->quit(ERROR_INSTALL_FAILURE);
+        if (host_) {
+            host_->quit(ERROR_INSTALL_FAILURE);
         }
         QApplication::quit();
     });
@@ -506,14 +504,14 @@ void SetupWindow::closeEvent(QCloseEvent* event) {
             event->ignore();
             return;
         }
-        if (controller_) {
-            controller_->cancel();
+        if (host_) {
+            host_->cancel();
         }
         event->ignore();
         return;
     }
-    if (controller_) {
-        controller_->quit(ERROR_INSTALL_USEREXIT);
+    if (host_) {
+        host_->quit(ERROR_INSTALL_USEREXIT);
     }
     event->accept();
 }

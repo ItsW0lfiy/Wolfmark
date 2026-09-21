@@ -13,18 +13,18 @@
 #include <mutex>
 #include <thread>
 
-#include "installer_model.h"
+#include "installer_host.h"
 
 class SetupWindow;
 class QCoreApplication;
 
-class BurnController final : public CBootstrapperApplicationBase {
+class BurnController final : public CBootstrapperApplicationBase, public InstallerHost {
 public:
     BurnController();
 
-    void begin(InstallerAction action, const InstallerOptions& options);
-    void cancel();
-    void quit(DWORD exitCode = ERROR_SUCCESS);
+    void begin(InstallerAction action, const InstallerOptions& options) override;
+    void cancel() override;
+    void quit(DWORD exitCode) override;
 
     STDMETHODIMP OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_COMMAND* command) override;
     STDMETHODIMP OnDestroy(BOOL reload) override;

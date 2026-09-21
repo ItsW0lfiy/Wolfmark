@@ -39,6 +39,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\burn_controller.h" />
+    <ClInclude Include="src\installer_host.h" />
     <ClInclude Include="src\installer_model.h" />
     <ClInclude Include="src\setup_window.h" />
   </ItemGroup>
