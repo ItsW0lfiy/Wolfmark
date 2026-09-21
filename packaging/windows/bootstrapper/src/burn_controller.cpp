@@ -80,11 +80,13 @@ STDMETHODIMP BurnController::OnStartup() {
 }
 
 STDMETHODIMP BurnController::OnShutdown(BOOTSTRAPPER_SHUTDOWN_ACTION* action) {
+    stopApplyThread();
     stopUiThread();
     return CBootstrapperApplicationBase::OnShutdown(action);
 }
 
 STDMETHODIMP BurnController::OnDestroy(BOOL reload) {
+    stopApplyThread();
     stopUiThread();
     return CBootstrapperApplicationBase::OnDestroy(reload);
 }
@@ -197,6 +199,12 @@ void BurnController::stopUiThread() {
     }
 }
 
+void BurnController::stopApplyThread() {
+    if (applyThread_.joinable() && applyThread_.get_id() != std::this_thread::get_id()) {
+        applyThread_.join();
+    }
+}
+
 bool BurnController::postToUi(std::function<void()> callback) {
     QCoreApplication* application = nullptr;
     {
@@ -217,6 +225,15 @@ void BurnController::presentDetectedState() {
         state_.installedVersion = detectedVersion_;
     }
     if (commandDisplay_ != BOOTSTRAPPER_DISPLAY_FULL) {
+        if (commandAction_ == BOOTSTRAPPER_ACTION_LAYOUT) {
+            state_.applying = true;
+            const HRESULT status = m_pEngine->Plan(BOOTSTRAPPER_ACTION_LAYOUT, commandScope_);
+            if (FAILED(status)) {
+                state_.applying = false;
+                postError(QStringLiteral("Wolfmark setup could not prepare the requested layout."), status);
+            }
+            return;
+        }
         InstallerAction action = InstallerAction::Install;
         if (commandAction_ == BOOTSTRAPPER_ACTION_UNINSTALL) {
             action = InstallerAction::Uninstall;
@@ -277,14 +294,31 @@ STDMETHODIMP BurnController::OnPlanComplete(HRESULT status) {
         postError(QStringLiteral("Wolfmark setup could not prepare the requested change."), status);
         return S_OK;
     }
-    postToUi([this] {
-        const HRESULT applyStatus = m_pEngine->Apply(window_ ? window_->nativeHandle() : nullptr);
-        if (FAILED(applyStatus)) {
+    if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_FULL ||
+        commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
+        if (!postToUi([this] { applyPlannedAction(); })) {
             state_.applying = false;
-            postError(QStringLiteral("Wolfmark setup could not start the requested change."), applyStatus);
+            quit(ERROR_INSTALL_FAILURE);
         }
-    });
+    } else {
+        applyThread_ = std::thread([this] { applyPlannedAction(); });
+    }
     return S_OK;
+}
+
+void BurnController::applyPlannedAction() {
+    HWND parent = GetDesktopWindow();
+    {
+        std::lock_guard lock(uiMutex_);
+        if (uiWindowHandle_) {
+            parent = uiWindowHandle_;
+        }
+    }
+    const HRESULT status = m_pEngine->Apply(parent);
+    if (FAILED(status)) {
+        state_.applying = false;
+        postError(QStringLiteral("Wolfmark setup could not start the requested change."), status);
+    }
 }
 
 STDMETHODIMP BurnController::OnProgress(DWORD, DWORD overallProgress, BOOL* cancelFlag) {

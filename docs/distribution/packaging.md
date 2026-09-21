@@ -48,7 +48,7 @@ To exercise the actual packaged interactive startup/cancel paths without install
 pwsh -File scripts/test_windows_installer.ps1 -InteractiveLaunchSmoke
 ```
 
-It verifies all artifact hashes, decompiles/audits the MSI authoring, and launches the portable smoke with a restricted path. The optional elevated lifecycle path is:
+It verifies all artifact hashes, decompiles/audits the MSI authoring, launches the portable smoke with a restricted path, and runs a quiet Burn layout to prove the headless detect/plan/apply path without installing anything. The optional elevated lifecycle path is:
 
 ```powershell
 pwsh -File scripts/test_windows_installer.ps1 -ExecuteLifecycle

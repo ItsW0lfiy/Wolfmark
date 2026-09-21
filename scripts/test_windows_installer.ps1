@@ -82,6 +82,51 @@ function Invoke-InteractiveLaunchSmoke([string]$SetupPath, [string]$MsiPath) {
     Write-Host 'WIX_INTERACTIVE_LAUNCH_SMOKE burn_visible=ok burn_cancel_cleanup=ok msi_embedded_ui_visible=ok msi_cancel_cleanup=ok'
 }
 
+function Invoke-QuietLayoutSmoke([string]$SetupPath, [string]$AuditRoot) {
+    $layoutRoot = Join-Path $AuditRoot 'quiet-layout'
+    $logPath = Join-Path $AuditRoot 'quiet-layout.log'
+    if (Test-Path -LiteralPath $layoutRoot) {
+        Remove-Item -Recurse -Force -LiteralPath $layoutRoot
+    }
+    New-Item -ItemType Directory -Force $layoutRoot | Out-Null
+    $existingUiProcesses = @(Get-Process -Name 'WolfmarkSetup' -ErrorAction SilentlyContinue).Id
+    $quotedLayoutRoot = [char]34 + $layoutRoot + [char]34
+    $quotedLogPath = [char]34 + $logPath + [char]34
+    $process = Start-Process -FilePath $SetupPath -ArgumentList @(
+        '/layout', $quotedLayoutRoot, '/quiet', '/norestart', '/log', $quotedLogPath
+    ) -PassThru
+    try {
+        $deadline = [DateTime]::UtcNow.AddSeconds(30)
+        while (-not $process.WaitForExit(100)) {
+            $visibleUi = Get-Process -Name 'WolfmarkSetup' -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.Id -notin $existingUiProcesses -and $_.MainWindowHandle -ne 0
+                } |
+                Select-Object -First 1
+            if ($visibleUi) {
+                throw 'Quiet Burn layout unexpectedly created a visible Wolfmark setup window.'
+            }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                throw 'Quiet Burn layout did not finish within 30 seconds.'
+            }
+        }
+        if ($process.ExitCode -notin 0, 3010) {
+            throw "Quiet Burn layout failed with exit code $($process.ExitCode). See $logPath"
+        }
+    } finally {
+        if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+    }
+    $laidOutBundle = Join-Path $layoutRoot ([IO.Path]::GetFileName($SetupPath))
+    if (-not (Test-Path -LiteralPath $laidOutBundle -PathType Leaf)) {
+        throw 'Quiet Burn layout completed without producing its bundle payload.'
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $laidOutBundle).Hash -ne
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $SetupPath).Hash) {
+        throw 'Quiet Burn layout produced bundle bytes that differ from the release artifact.'
+    }
+    Write-Host 'WIX_QUIET_LAYOUT_SMOKE apply=ok visible_ui=none'
+}
+
 Push-Location $projectRoot
 try {
     $version = Get-Version
@@ -135,6 +180,8 @@ try {
         $smoke = Start-Process -FilePath (Join-Path $portableRoot 'Wolfmark.exe') -ArgumentList '--smoke-icon' -WorkingDirectory $portableRoot -Wait -PassThru -WindowStyle Hidden
         if ($smoke.ExitCode -ne 0) { throw "Portable smoke failed with exit code $($smoke.ExitCode)." }
     } finally { $env:PATH = $savedPath }
+
+    Invoke-QuietLayoutSmoke $setup $auditRoot
 
     if ($InteractiveLaunchSmoke) {
         Invoke-InteractiveLaunchSmoke $setup $msi

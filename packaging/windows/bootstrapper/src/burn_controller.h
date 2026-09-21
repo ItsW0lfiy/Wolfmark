@@ -44,6 +44,8 @@ private:
     void loadInstalledOptions();
     HRESULT startUiThread();
     void stopUiThread();
+    void stopApplyThread();
+    void applyPlannedAction();
     bool postToUi(std::function<void()> callback);
     void presentDetectedState();
     void postError(const QString& summary, HRESULT status);
@@ -57,6 +59,7 @@ private:
     BOOTSTRAPPER_SCOPE commandScope_ = BOOTSTRAPPER_SCOPE_PER_MACHINE;
     BOOTSTRAPPER_DISPLAY commandDisplay_ = BOOTSTRAPPER_DISPLAY_FULL;
     std::thread uiThread_;
+    std::thread applyThread_;
     std::mutex uiMutex_;
     std::condition_variable uiReady_;
     QCoreApplication* uiApplication_ = nullptr;
