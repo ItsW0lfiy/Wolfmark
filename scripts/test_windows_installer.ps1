@@ -37,13 +37,18 @@ function Get-MsiPackageCode([string]$MsiPath) {
 }
 
 function Invoke-Msi([string[]]$Arguments, [string]$LogPath) {
+    $baseline = Get-InstallerProcessIds
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList ($Arguments + @('/qn', '/norestart', '/L*v', $LogPath)) -Wait -PassThru
+    Wait-NoNewInstallerProcesses $baseline "Windows Installer transaction for $LogPath"
     if ($process.ExitCode -notin 0, 3010) { throw "Windows Installer failed with exit code $($process.ExitCode). See $LogPath" }
 }
 
 function Invoke-Setup([string]$SetupPath, [string[]]$Arguments, [string]$LogPath) {
+    $baseline = Get-InstallerProcessIds
     $process = Start-Process -FilePath $SetupPath -ArgumentList ($Arguments + @('/quiet', '/norestart', '/log', $LogPath)) -Wait -PassThru
+    Wait-NoNewInstallerProcesses $baseline "Wolfmark Setup transaction for $LogPath"
     if ($process.ExitCode -notin 0, 3010) { throw "Wolfmark Setup failed with exit code $($process.ExitCode). See $LogPath" }
+    Assert-BurnMsiUiDisabled $LogPath
 }
 
 function Get-OlderInstallerVersion([string]$Version) {
@@ -60,6 +65,36 @@ function Get-OlderInstallerVersion([string]$Version) {
 function Get-WolfmarkEntries {
     Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
         Get-ItemProperty | Where-Object DisplayName -eq 'Wolfmark'
+}
+
+function Get-InstallerProcessIds {
+    return @(Get-Process -Name 'WolfmarkSetup', 'msiexec' -ErrorAction SilentlyContinue).Id
+}
+
+function Wait-NoNewInstallerProcesses([int[]]$Baseline, [string]$Context, [int]$TimeoutSeconds = 30) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $remaining = @(Get-InstallerProcessIds | Where-Object { $_ -notin $Baseline })
+        if (-not $remaining.Count) { return }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "$Context left installer process IDs running: $($remaining -join ', ')"
+}
+
+function Assert-BurnMsiUiDisabled([string]$BundleLogPath) {
+    $directory = Split-Path -Parent $BundleLogPath
+    $stem = [IO.Path]::GetFileNameWithoutExtension($BundleLogPath)
+    $packageLogs = @(Get-ChildItem -LiteralPath $directory -Filter "$stem*WolfmarkMsi*.log" -ErrorAction SilentlyContinue)
+    if (-not $packageLogs.Count) {
+        throw "Burn did not produce a WolfmarkMsi package log beside $BundleLogPath"
+    }
+    $content = ($packageLogs | ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
+    if ($content -notmatch 'MSIDISABLEEEUI') {
+        throw 'The Burn-chained MSI log did not record MSIDISABLEEEUI.'
+    }
+    if ($content -match 'WolfmarkMsiEmbeddedUI\.dll|WolfmarkMsiUi\.dll') {
+        throw 'The Burn-chained transaction initialized or referenced Wolfmark MSI Embedded UI binaries.'
+    }
 }
 
 function Wait-VisibleWindow([string]$ProcessName, [int]$TimeoutSeconds = 15) {
@@ -197,6 +232,23 @@ try {
     if ((Get-MsiProperty $msi 'ProductCode') -ne $identity.msiProductCode) {
         throw 'The release MSI ProductCode does not match the versioned identity manifest.'
     }
+    if ((Get-MsiProperty $msi 'MsiLogging') -ne 'voicewarmupx!') {
+        throw 'The release MSI does not enable verbose automatic Windows Installer diagnostics.'
+    }
+    if ((Get-MsiProperty $msi 'ARPHELPLINK') -ne 'https://github.com/ItsW0lfiy/Wolfmark/issues' -or
+        (Get-MsiProperty $msi 'ARPURLINFOABOUT') -ne 'https://github.com/ItsW0lfiy/Wolfmark') {
+        throw 'The release MSI still contains stale product support URLs.'
+    }
+    $msiControllerSource = Get-Content -Raw -LiteralPath 'packaging/windows/msi-ui/src/msi_controller.cpp'
+    foreach ($required in 'MsiFormatRecordW', 'MsiLogFileLocation', 'ProgramFiles64Folder') {
+        if (-not $msiControllerSource.Contains($required)) {
+            throw "MSI diagnostic/path regression: missing $required"
+        }
+    }
+    $burnControllerSource = Get-Content -Raw -LiteralPath 'packaging/windows/bootstrapper/src/burn_controller.cpp'
+    if (-not $burnControllerSource.Contains('OnExecuteFilesInUse')) {
+        throw 'Burn files-in-use handling is missing.'
+    }
 
     $bundleAudit = Join-Path $auditRoot 'bundle'
     New-Item -ItemType Directory -Force (Join-Path $bundleAudit 'obj'), (Join-Path $bundleAudit 'payload'), (Join-Path $bundleAudit 'ba') | Out-Null
@@ -208,6 +260,7 @@ try {
         "ProviderKey=`"$($identity.bundleProviderKey)`"",
         "PrimaryUpgradeCode=`"$($identity.bundleUpgradeCode)`"",
         "ProductCode=`"$($identity.msiProductCode)`"",
+        'MsiProperty Id="MSIDISABLEEEUI" Value="1"',
         'Variable Id="WolfmarkBundleVersion"'
     )) {
         if (-not $bundleManifest.Contains($required)) { throw "Bundle audit did not find required identity: $required" }
@@ -310,6 +363,12 @@ try {
         if (Test-Path -LiteralPath $installRoot) { throw 'Bundle uninstall left the isolated install directory.' }
         if (@(Get-WolfmarkEntries).Count -ne 0) { throw 'Bundle uninstall left a visible Wolfmark Installed Apps entry.' }
 
+        Invoke-Msi @('/i', $olderMsi, "INSTALLFOLDER=$installRoot", 'WOLFMARK_FILE_ASSOC=1', 'WOLFMARK_DESKTOP_SHORTCUT=1') (Join-Path $logs 'older-install-repeat.log')
+        Invoke-Setup $setup @() (Join-Path $logs 'bundle-upgrade-repeat.log')
+        Invoke-Setup $setup @('/uninstall') (Join-Path $logs 'bundle-uninstall-repeat.log')
+        if (Test-Path -LiteralPath $installRoot) { throw 'Repeated Bundle uninstall left the isolated install directory.' }
+        if (@(Get-WolfmarkEntries).Count -ne 0) { throw 'Repeated Bundle uninstall left a visible Wolfmark Installed Apps entry.' }
+
         Invoke-Msi @('/i', $msi, "INSTALLFOLDER=$installRoot", 'WOLFMARK_FILE_ASSOC=1', 'WOLFMARK_DESKTOP_SHORTCUT=1') (Join-Path $logs 'msi-install.log')
         if (-not (Test-Path -LiteralPath (Join-Path $installRoot 'Wolfmark.exe'))) { throw 'Direct MSI install did not deploy Wolfmark.exe.' }
 
@@ -321,7 +380,7 @@ try {
         Invoke-Msi @('/x', $msi) (Join-Path $logs 'msi-uninstall.log')
         if (Test-Path -LiteralPath $installRoot) { throw 'Direct MSI uninstall left the isolated install directory.' }
         if (-not (Test-Path -LiteralPath $userDocument)) { throw 'Uninstall removed a user-owned document.' }
-        Write-Host 'WIX_INSTALLER_LIFECYCLE older_install=ok bundle_upgrade=ok same_version=ok bundle_repair=ok bundle_uninstall=ok msi_install=ok msi_repair=ok msi_modify=ok msi_uninstall=ok installed_apps=unique user_document=preserved'
+        Write-Host 'WIX_INSTALLER_LIFECYCLE older_install=ok bundle_upgrade=ok same_version=ok bundle_repair=ok bundle_uninstall_cycles=2 msi_install=ok msi_repair=ok msi_modify=ok msi_uninstall=ok installed_apps=unique user_document=preserved orphan_processes=none'
     } finally {
         if (Test-Path -LiteralPath (Join-Path $installRoot 'Wolfmark.exe')) {
             try { Invoke-Setup $setup @('/uninstall') (Join-Path $logs 'cleanup-bundle-uninstall.log') } catch { Write-Warning $_ }
