@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QIcon>
 #include <QMetaObject>
+#include <QStringList>
+#include <QThread>
 #include <QVersionNumber>
 
 #include <array>
@@ -64,11 +66,16 @@ STDMETHODIMP BurnController::OnCreate(IBootstrapperEngine* engine, BOOTSTRAPPER_
             state_.targetVersion = targetBundleVersion_;
         }
         loadInstalledOptions();
+        logLifecycle(QStringLiteral("BA create: action=%1 display=%2 scope=%3")
+            .arg(static_cast<int>(commandAction_))
+            .arg(static_cast<int>(commandDisplay_))
+            .arg(static_cast<int>(commandScope_)));
     }
     return status;
 }
 
 STDMETHODIMP BurnController::OnStartup() {
+    logLifecycle(QStringLiteral("BA startup"));
     if (commandDisplay_ == BOOTSTRAPPER_DISPLAY_FULL ||
         commandDisplay_ == BOOTSTRAPPER_DISPLAY_PASSIVE) {
         const HRESULT status = startUiThread();
@@ -80,15 +87,30 @@ STDMETHODIMP BurnController::OnStartup() {
 }
 
 STDMETHODIMP BurnController::OnShutdown(BOOTSTRAPPER_SHUTDOWN_ACTION* action) {
+    logLifecycle(QStringLiteral("BA shutdown"));
     stopApplyThread();
     stopUiThread();
     return CBootstrapperApplicationBase::OnShutdown(action);
 }
 
 STDMETHODIMP BurnController::OnDestroy(BOOL reload) {
+    logLifecycle(QStringLiteral("BA destroy: reload=%1").arg(reload));
     stopApplyThread();
     stopUiThread();
     return CBootstrapperApplicationBase::OnDestroy(reload);
+}
+
+STDMETHODIMP BurnController::OnDetectBegin(
+    BOOL cached,
+    BOOTSTRAPPER_REGISTRATION_TYPE registrationType,
+    DWORD packageCount,
+    BOOL* cancelFlag) {
+    logLifecycle(QStringLiteral("Detect begin: cached=%1 registration=%2 packages=%3")
+        .arg(cached)
+        .arg(static_cast<int>(registrationType))
+        .arg(packageCount));
+    return CBootstrapperApplicationBase::OnDetectBegin(
+        cached, registrationType, packageCount, cancelFlag);
 }
 
 STDMETHODIMP BurnController::OnDetectRelatedBundle(
@@ -135,6 +157,7 @@ STDMETHODIMP BurnController::OnDetectPackageComplete(
 }
 
 STDMETHODIMP BurnController::OnDetectComplete(HRESULT status, BOOL) {
+    logLifecycle(QStringLiteral("Detect complete: %1").arg(hresultText(status)));
     if (FAILED(status)) {
         postError(QStringLiteral("Wolfmark setup could not inspect this computer."), status);
         return S_OK;
@@ -163,6 +186,12 @@ STDMETHODIMP BurnController::OnDetectComplete(HRESULT status, BOOL) {
         presentDetectedState();
     }
     return S_OK;
+}
+
+STDMETHODIMP BurnController::OnPlanBegin(DWORD packageCount, BOOL* cancelFlag) {
+    logLifecycle(QStringLiteral("Plan begin: packages=%1 action=%2")
+        .arg(packageCount).arg(static_cast<int>(state_.activeAction)));
+    return CBootstrapperApplicationBase::OnPlanBegin(packageCount, cancelFlag);
 }
 
 HRESULT BurnController::startUiThread() {
@@ -316,6 +345,7 @@ void BurnController::begin(InstallerAction action, const InstallerOptions& optio
 }
 
 STDMETHODIMP BurnController::OnPlanComplete(HRESULT status) {
+    logLifecycle(QStringLiteral("Plan complete: %1").arg(hresultText(status)));
     if (FAILED(status)) {
         state_.applying = false;
         postError(QStringLiteral("Wolfmark setup could not prepare the requested change."), status);
@@ -331,6 +361,11 @@ STDMETHODIMP BurnController::OnPlanComplete(HRESULT status) {
         applyThread_ = std::thread([this] { applyPlannedAction(); });
     }
     return S_OK;
+}
+
+STDMETHODIMP BurnController::OnApplyBegin(DWORD phaseCount, BOOL* cancelFlag) {
+    logLifecycle(QStringLiteral("Apply begin: phases=%1").arg(phaseCount));
+    return CBootstrapperApplicationBase::OnApplyBegin(phaseCount, cancelFlag);
 }
 
 void BurnController::applyPlannedAction() {
@@ -367,6 +402,11 @@ STDMETHODIMP BurnController::OnExecutePackageBegin(
     BOOL* cancelFlag) {
     CBootstrapperApplicationBase::OnExecutePackageBegin(
         packageId, execute, action, uiLevel, disableExternalUiHandler, cancelFlag);
+    logLifecycle(QStringLiteral("Execute package begin: %1 action=%2 ui=%3 external-ui-disabled=%4")
+        .arg(QString::fromWCharArray(packageId))
+        .arg(static_cast<int>(action))
+        .arg(static_cast<int>(uiLevel))
+        .arg(disableExternalUiHandler));
     if (window_) {
         QString detail;
         switch (state_.activeAction) {
@@ -380,12 +420,78 @@ STDMETHODIMP BurnController::OnExecutePackageBegin(
     return S_OK;
 }
 
+STDMETHODIMP BurnController::OnExecuteFilesInUse(
+    LPCWSTR packageId,
+    DWORD fileCount,
+    LPCWSTR* files,
+    int recommendation,
+    BOOTSTRAPPER_FILES_IN_USE_TYPE source,
+    int* result) {
+    QStringList fileList;
+    for (DWORD index = 0; index < fileCount; ++index) {
+        if (files[index] && *files[index]) {
+            fileList.append(QString::fromWCharArray(files[index]));
+        }
+    }
+    logLifecycle(QStringLiteral("Files in use: package=%1 source=%2 count=%3 recommendation=%4")
+        .arg(QString::fromWCharArray(packageId))
+        .arg(static_cast<int>(source))
+        .arg(fileCount)
+        .arg(recommendation));
+
+    if (commandDisplay_ != BOOTSTRAPPER_DISPLAY_FULL) {
+        *result = IDIGNORE;
+        logLifecycle(QStringLiteral("Files in use: noninteractive operation will continue and may require restart"));
+        return S_OK;
+    }
+
+    SetupWindow* window = nullptr;
+    {
+        std::lock_guard lock(uiMutex_);
+        window = window_;
+    }
+    if (!window) {
+        *result = IDCANCEL;
+        return S_OK;
+    }
+
+    int selection = IDCANCEL;
+    const bool restartManager = source == BOOTSTRAPPER_FILES_IN_USE_TYPE_MSI_RM;
+    const auto prompt = [window, fileList, restartManager, &selection] {
+        selection = window->promptFilesInUse(fileList, restartManager);
+    };
+    if (QThread::currentThread() == window->thread()) {
+        prompt();
+    } else if (!QMetaObject::invokeMethod(window, prompt, Qt::BlockingQueuedConnection)) {
+        selection = IDCANCEL;
+    }
+    *result = selection;
+    logLifecycle(QStringLiteral("Files in use response: %1").arg(selection));
+    return S_OK;
+}
+
+STDMETHODIMP BurnController::OnExecutePackageComplete(
+    LPCWSTR packageId,
+    HRESULT status,
+    BOOTSTRAPPER_APPLY_RESTART restart,
+    BOOTSTRAPPER_EXECUTEPACKAGECOMPLETE_ACTION recommendation,
+    BOOTSTRAPPER_EXECUTEPACKAGECOMPLETE_ACTION* action) {
+    logLifecycle(QStringLiteral("Execute package complete: %1 result=%2 restart=%3")
+        .arg(QString::fromWCharArray(packageId))
+        .arg(hresultText(status))
+        .arg(static_cast<int>(restart)));
+    return CBootstrapperApplicationBase::OnExecutePackageComplete(
+        packageId, status, restart, recommendation, action);
+}
+
 STDMETHODIMP BurnController::OnApplyComplete(
     HRESULT status,
     BOOTSTRAPPER_APPLY_RESTART restart,
     BOOTSTRAPPER_APPLYCOMPLETE_ACTION recommendation,
     BOOTSTRAPPER_APPLYCOMPLETE_ACTION* action) {
     CBootstrapperApplicationBase::OnApplyComplete(status, restart, recommendation, action);
+    logLifecycle(QStringLiteral("Apply complete: %1 restart=%2")
+        .arg(hresultText(status)).arg(static_cast<int>(restart)));
     state_.applying = false;
     if (commandDisplay_ != BOOTSTRAPPER_DISPLAY_FULL) {
         quit(SUCCEEDED(status) ? ERROR_SUCCESS : static_cast<DWORD>(status));
@@ -452,7 +558,12 @@ void BurnController::noteRelatedVersion(LPCWSTR version) {
 void BurnController::loadInstalledOptions() {
     state_.options.installFolder = readRegistryString(L"InstallDir");
     if (state_.options.installFolder.isEmpty()) {
-        state_.options.installFolder = QString::fromLocal8Bit(qgetenv("ProgramFiles")) + QStringLiteral("/Wolfmark");
+        QString programFiles = QString::fromLocal8Bit(qgetenv("ProgramW6432"));
+        if (programFiles.isEmpty()) {
+            programFiles = QString::fromLocal8Bit(qgetenv("ProgramFiles"));
+        }
+        state_.options.installFolder = QDir::toNativeSeparators(
+            QDir(programFiles).filePath(QStringLiteral("Wolfmark")));
     }
     state_.options.fileAssociations = readRegistryFlag(L"FileAssociations", true);
     state_.options.desktopShortcut = readRegistryFlag(L"DesktopShortcut", false);
@@ -463,11 +574,27 @@ void BurnController::postError(const QString& summary, HRESULT status) {
         quit(static_cast<DWORD>(status));
         return;
     }
-    const QString details = hresultText(status) + QStringLiteral("\nReview the Burn and MSI logs for diagnostic details.");
+    QString details = hresultText(status);
+    const QString bundleLog = engineString(L"WixBundleLog");
+    const QString packageLog = engineString(L"WixBundleLog_WolfmarkMsi");
+    if (!bundleLog.isEmpty()) {
+        details += QStringLiteral("\n\nBurn log:\n") + bundleLog;
+    }
+    if (!packageLog.isEmpty()) {
+        details += QStringLiteral("\n\nWindows Installer log:\n") + packageLog;
+    }
     postToUi([this, summary, details] {
         window_->showFailure(summary, details);
         window_->show();
     });
+}
+
+void BurnController::logLifecycle(const QString& message) const {
+    if (!m_pEngine) {
+        return;
+    }
+    const std::wstring native = (QStringLiteral("Wolfmark BA: ") + message).toStdWString();
+    m_pEngine->Log(BOOTSTRAPPER_LOG_LEVEL_STANDARD, native.c_str());
 }
 
 BOOTSTRAPPER_ACTION BurnController::burnAction(InstallerAction action) {

@@ -468,6 +468,34 @@ void SetupWindow::showFailure(const QString& summary, const QString& details) {
     pages_->setCurrentWidget(errorPage_);
 }
 
+int SetupWindow::promptFilesInUse(const QStringList& files, bool restartManager) {
+    QMessageBox dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Wolfmark Setup"));
+    dialog.setIcon(QMessageBox::Warning);
+    dialog.setText(QStringLiteral("Wolfmark files are currently in use."));
+    QString detail = restartManager
+        ? QStringLiteral("Close the listed applications automatically and continue, or continue and finish cleanup after a restart.")
+        : QStringLiteral("Close the listed applications, then retry. You can also continue and finish cleanup after a restart.");
+    if (!files.isEmpty()) {
+        detail += QStringLiteral("\n\nIn use:\n") + files.join(QLatin1Char('\n'));
+    }
+    dialog.setInformativeText(detail);
+    QPushButton* retry = dialog.addButton(
+        restartManager ? QStringLiteral("Close and continue") : QStringLiteral("Retry"),
+        QMessageBox::AcceptRole);
+    QPushButton* ignore = dialog.addButton(QStringLiteral("Continue; restart later"), QMessageBox::DestructiveRole);
+    dialog.addButton(QMessageBox::Cancel);
+    dialog.setDefaultButton(retry);
+    dialog.exec();
+    if (dialog.clickedButton() == retry) {
+        return restartManager ? IDOK : IDRETRY;
+    }
+    if (dialog.clickedButton() == ignore) {
+        return IDIGNORE;
+    }
+    return IDCANCEL;
+}
+
 void SetupWindow::showSmokeState(const QString& stateName) {
     InstallerState smoke;
     smoke.installed = true;

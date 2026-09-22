@@ -30,13 +30,18 @@ public:
     STDMETHODIMP OnDestroy(BOOL reload) override;
     STDMETHODIMP OnStartup() override;
     STDMETHODIMP OnShutdown(BOOTSTRAPPER_SHUTDOWN_ACTION* action) override;
+    STDMETHODIMP OnDetectBegin(BOOL, BOOTSTRAPPER_REGISTRATION_TYPE, DWORD, BOOL*) override;
     STDMETHODIMP OnDetectRelatedBundle(LPCWSTR, BOOTSTRAPPER_RELATION_TYPE, LPCWSTR, BOOL, LPCWSTR, BOOL, BOOL*) override;
     STDMETHODIMP OnDetectRelatedMsiPackage(LPCWSTR, LPCWSTR, LPCWSTR, BOOL, LPCWSTR, BOOTSTRAPPER_RELATED_OPERATION, BOOL*) override;
     STDMETHODIMP OnDetectPackageComplete(LPCWSTR, HRESULT, BOOTSTRAPPER_PACKAGE_STATE, BOOL) override;
     STDMETHODIMP OnDetectComplete(HRESULT, BOOL) override;
+    STDMETHODIMP OnPlanBegin(DWORD, BOOL*) override;
     STDMETHODIMP OnPlanComplete(HRESULT) override;
+    STDMETHODIMP OnApplyBegin(DWORD, BOOL*) override;
     STDMETHODIMP OnProgress(DWORD, DWORD, BOOL*) override;
     STDMETHODIMP OnExecutePackageBegin(LPCWSTR, BOOL, BOOTSTRAPPER_ACTION_STATE, INSTALLUILEVEL, BOOL, BOOL*) override;
+    STDMETHODIMP OnExecuteFilesInUse(LPCWSTR, DWORD, LPCWSTR*, int, BOOTSTRAPPER_FILES_IN_USE_TYPE, int*) override;
+    STDMETHODIMP OnExecutePackageComplete(LPCWSTR, HRESULT, BOOTSTRAPPER_APPLY_RESTART, BOOTSTRAPPER_EXECUTEPACKAGECOMPLETE_ACTION, BOOTSTRAPPER_EXECUTEPACKAGECOMPLETE_ACTION*) override;
     STDMETHODIMP OnApplyComplete(HRESULT, BOOTSTRAPPER_APPLY_RESTART, BOOTSTRAPPER_APPLYCOMPLETE_ACTION, BOOTSTRAPPER_APPLYCOMPLETE_ACTION*) override;
 
 private:
@@ -51,6 +56,7 @@ private:
     bool postToUi(std::function<void()> callback);
     void presentDetectedState();
     void postError(const QString& summary, HRESULT status);
+    void logLifecycle(const QString& message) const;
     static BOOTSTRAPPER_ACTION burnAction(InstallerAction action);
 
     SetupWindow* window_ = nullptr;

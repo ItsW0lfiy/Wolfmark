@@ -28,9 +28,10 @@
     <Property Id="WOLFMARK_FILE_ASSOC" Value="1" Secure="yes" />
     <Property Id="WOLFMARK_DESKTOP_SHORTCUT" Value="0" Secure="yes" />
     <Property Id="WOLFMARK_DISPLAY_VERSION" Value="$(DisplayVersion)" />
+    <Property Id="MsiLogging" Value="voicewarmupx!" />
     <Property Id="ARPPRODUCTICON" Value="WolfmarkProductIcon" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/ItsW0lfiy/Moonmark/issues" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ItsW0lfiy/Moonmark" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ItsW0lfiy/Wolfmark/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ItsW0lfiy/Wolfmark" />
     <Property Id="ARPCOMMENTS" Value="Native Markdown and text document viewer" />
 
     <Icon Id="WolfmarkProductIcon" SourceFile="$(ProjectRoot)\assets\icons\wolfmark.ico" />

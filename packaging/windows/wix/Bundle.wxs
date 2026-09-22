@@ -24,6 +24,7 @@
         <MsiProperty Name="INSTALLFOLDER" Value="[WolfmarkInstallFolder]" />
         <MsiProperty Name="WOLFMARK_FILE_ASSOC" Value="[WolfmarkFileAssociations]" />
         <MsiProperty Name="WOLFMARK_DESKTOP_SHORTCUT" Value="[WolfmarkDesktopShortcut]" />
+        <MsiProperty Name="MSIDISABLEEEUI" Value="1" />
       </MsiPackage>
     </Chain>
   </Bundle>

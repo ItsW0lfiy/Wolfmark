@@ -4,6 +4,7 @@
 
 #include <QWidget>
 #include <QString>
+#include <QStringList>
 
 #include "installer_host.h"
 
@@ -26,6 +27,7 @@ public:
     void setProgress(int percent, const QString& detail);
     void showComplete(InstallerAction action, const InstallerState& state);
     void showFailure(const QString& summary, const QString& details);
+    int promptFilesInUse(const QStringList& files, bool restartManager);
     void showSmokeState(const QString& stateName);
     HWND nativeHandle();
 

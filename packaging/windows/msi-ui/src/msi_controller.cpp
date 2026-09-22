@@ -4,6 +4,8 @@
 #include <QDir>
 #include <QIcon>
 #include <QMetaObject>
+#include <QStringList>
+#include <QThread>
 #include <QVersionNumber>
 
 #include <array>
@@ -32,6 +34,7 @@ UINT MsiController::initialize(
     state_.presence = detectPresence(install, &relatedVersion);
     state_.installed = state_.presence == InstallerPresence::Current;
     state_.targetVersion = property(install, L"WOLFMARK_DISPLAY_VERSION");
+    diagnosticLogPath_ = property(install, L"MsiLogFileLocation");
     state_.installedVersion = registryString(L"Version");
     if (state_.installedVersion.isEmpty()) {
         state_.installedVersion = relatedVersion;
@@ -41,8 +44,15 @@ UINT MsiController::initialize(
         state_.options.installFolder = registryString(L"InstallDir");
     }
     if (state_.options.installFolder.isEmpty()) {
-        state_.options.installFolder = QString::fromLocal8Bit(qgetenv("ProgramFiles")) +
-            QStringLiteral("/Wolfmark");
+        QString programFiles = property(install, L"ProgramFiles64Folder");
+        if (programFiles.isEmpty()) {
+            programFiles = QString::fromLocal8Bit(qgetenv("ProgramW6432"));
+        }
+        if (programFiles.isEmpty()) {
+            programFiles = QString::fromLocal8Bit(qgetenv("ProgramFiles"));
+        }
+        state_.options.installFolder = QDir::toNativeSeparators(
+            QDir(programFiles).filePath(QStringLiteral("Wolfmark")));
     }
     state_.options.fileAssociations = registryFlag(L"FileAssociations", true);
     state_.options.desktopShortcut = registryFlag(L"DesktopShortcut", false);
@@ -203,9 +213,19 @@ INT MsiController::handleMessage(UINT messageType, MSIHANDLE record) {
     case INSTALLMESSAGE_ERROR:
     case INSTALLMESSAGE_FATALEXIT: {
         const int code = MsiRecordGetInteger(record, 1);
+        QString message = formatRecord(record).trimmed();
+        if (message.isEmpty()) {
+            message = recordFields(record);
+        }
+        QString details = QStringLiteral("Windows Installer:\n%1").arg(message);
+        if (code != MSI_NULL_INTEGER) {
+            details += QStringLiteral("\n\nMSI record: %1").arg(code);
+        }
+        details = withDiagnosticLog(details);
+        lastFailureDetails_ = details;
         postFailure(
-            QStringLiteral("Windows Installer reported an error."),
-            QStringLiteral("MSI error %1. Review the Windows Installer log for full details.").arg(code));
+            QStringLiteral("Wolfmark could not complete the requested change."),
+            details);
         return IDOK;
     }
     case INSTALLMESSAGE_WARNING:
@@ -216,20 +236,16 @@ INT MsiController::handleMessage(UINT messageType, MSIHANDLE record) {
         });
         return IDOK;
     case INSTALLMESSAGE_FILESINUSE:
+        return promptFilesInUse(record, false);
     case INSTALLMESSAGE_RMFILESINUSE:
-        postToUi([this] {
-            if (window_) {
-                window_->setProgress(-1, QStringLiteral("Waiting for files currently in use..."));
-            }
-        });
-        return IDIGNORE;
+        return promptFilesInUse(record, true);
     case INSTALLMESSAGE_RESOLVESOURCE:
         postToUi([this] {
             if (window_) {
                 window_->setProgress(-1, QStringLiteral("Locating the Wolfmark installation source..."));
             }
         });
-        return IDOK;
+        return 0;
     case INSTALLMESSAGE_INSTALLEND: {
         const int value = MsiRecordGetInteger(record, 3);
         installResult_ = value == MSI_NULL_INTEGER ? ERROR_INSTALL_FAILURE : static_cast<UINT>(value);
@@ -276,6 +292,37 @@ void MsiController::postAction(MSIHANDLE record) {
     });
 }
 
+int MsiController::promptFilesInUse(MSIHANDLE record, bool restartManager) {
+    QStringList files;
+    const UINT count = record ? MsiRecordGetFieldCount(record) : 0;
+    for (UINT field = 1; field <= count; ++field) {
+        const QString value = recordString(record, field).trimmed();
+        if (!value.isEmpty()) {
+            files.append(value);
+        }
+    }
+
+    SetupWindow* window = nullptr;
+    {
+        std::lock_guard lock(mutex_);
+        window = window_;
+    }
+    if (!window) {
+        return IDIGNORE;
+    }
+
+    int result = IDIGNORE;
+    const auto prompt = [window, files, restartManager, &result] {
+        result = window->promptFilesInUse(files, restartManager);
+    };
+    if (QThread::currentThread() == window->thread()) {
+        prompt();
+    } else if (!QMetaObject::invokeMethod(window, prompt, Qt::BlockingQueuedConnection)) {
+        return IDIGNORE;
+    }
+    return result;
+}
+
 void MsiController::postFailure(const QString& summary, const QString& details) {
     postToUi([this, summary, details] {
         if (window_) {
@@ -298,7 +345,9 @@ void MsiController::postCompletion(UINT result) {
     } else {
         postFailure(
             QStringLiteral("Wolfmark setup could not complete."),
-            QStringLiteral("Windows Installer exited with code %1.").arg(result));
+            lastFailureDetails_.isEmpty()
+                ? withDiagnosticLog(QStringLiteral("Windows Installer exited with code %1.").arg(result))
+                : lastFailureDetails_);
     }
 }
 
@@ -306,8 +355,22 @@ DWORD MsiController::shutdown() {
     if (!installEnded_) {
         postFailure(
             QStringLiteral("Wolfmark setup ended unexpectedly."),
-            QStringLiteral("Windows Installer did not report a final result."));
+            withDiagnosticLog(QStringLiteral("Windows Installer did not report a final result.")));
     }
+
+    if (!postToUi([this] {
+            if (!window_) {
+                return;
+            }
+            window_->showNormal();
+            window_->show();
+            window_->raise();
+            window_->activateWindow();
+        })) {
+        stopUiThread();
+        return ERROR_SUCCESS;
+    }
+
     std::unique_lock lock(mutex_);
     stateChanged_.wait(lock, [this] { return uiFinished_; });
     lock.unlock();
@@ -349,6 +412,44 @@ QString MsiController::property(MSIHANDLE install, const wchar_t* name) {
     ++length;
     result = MsiGetPropertyW(install, name, value.data(), &length);
     return result == ERROR_SUCCESS ? QString::fromWCharArray(value.data()) : QString();
+}
+
+QString MsiController::formatRecord(MSIHANDLE record) {
+    if (!record) {
+        return {};
+    }
+    wchar_t probe[1]{};
+    DWORD length = 0;
+    UINT result = MsiFormatRecordW(0, record, probe, &length);
+    if (result != ERROR_MORE_DATA && result != ERROR_SUCCESS) {
+        return {};
+    }
+    std::vector<wchar_t> value(static_cast<std::size_t>(length) + 1);
+    DWORD capacity = static_cast<DWORD>(value.size());
+    result = MsiFormatRecordW(0, record, value.data(), &capacity);
+    return result == ERROR_SUCCESS ? QString::fromWCharArray(value.data()) : QString();
+}
+
+QString MsiController::recordFields(MSIHANDLE record) {
+    QStringList fields;
+    const UINT count = record ? MsiRecordGetFieldCount(record) : 0;
+    for (UINT field = 0; field <= count; ++field) {
+        const QString value = recordString(record, field).trimmed();
+        if (!value.isEmpty()) {
+            fields.append(QStringLiteral("[%1] %2").arg(field).arg(value));
+        }
+    }
+    return fields.isEmpty()
+        ? QStringLiteral("Windows Installer did not provide formatted error text.")
+        : fields.join(QLatin1Char('\n'));
+}
+
+QString MsiController::withDiagnosticLog(const QString& details) const {
+    if (diagnosticLogPath_.isEmpty()) {
+        return details + QStringLiteral(
+            "\n\nDiagnostic log:\nWindows Installer did not expose a log path for this session.");
+    }
+    return details + QStringLiteral("\n\nDiagnostic log:\n") + diagnosticLogPath_;
 }
 
 QString MsiController::productInfo(const QString& productCode, const wchar_t* name) {

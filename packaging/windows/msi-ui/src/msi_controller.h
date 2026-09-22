@@ -34,12 +34,16 @@ private:
     static QString registryString(const wchar_t* name);
     static bool registryFlag(const wchar_t* name, bool fallback);
     static QString recordString(MSIHANDLE record, UINT field);
+    static QString formatRecord(MSIHANDLE record);
+    static QString recordFields(MSIHANDLE record);
+    QString withDiagnosticLog(const QString& details) const;
     UINT applySelection(MSIHANDLE install);
     bool postToUi(std::function<void()> callback);
     void startUiThread(const QString& resourceRoot);
     void stopUiThread();
     void postProgress(MSIHANDLE record);
     void postAction(MSIHANDLE record);
+    int promptFilesInUse(MSIHANDLE record, bool restartManager);
     void postFailure(const QString& summary, const QString& details);
     void postCompletion(UINT result);
 
@@ -61,4 +65,6 @@ private:
     bool progressForward_ = true;
     bool installEnded_ = false;
     UINT installResult_ = ERROR_INSTALL_FAILURE;
+    QString diagnosticLogPath_;
+    QString lastFailureDetails_;
 };
