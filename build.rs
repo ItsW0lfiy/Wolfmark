@@ -42,6 +42,10 @@ fn main() {
         println!("cargo:rerun-if-changed={file}");
     }
     println!("cargo:rerun-if-env-changed=WOLFMARK_QT_DIR");
+    println!("cargo:rerun-if-env-changed=WOLFMARK_SOURCE_COMMIT");
+    println!("cargo:rerun-if-env-changed=WOLFMARK_BUILD_ID");
+    println!("cargo:rerun-if-env-changed=WOLFMARK_SOURCE_TIMESTAMP");
+    println!("cargo:rerun-if-env-changed=WOLFMARK_BUILD_CHANNEL");
     println!("cargo:rerun-if-env-changed=QTDIR");
     println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
 }
@@ -92,6 +96,35 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         "\"{}\"",
         std::env::var("CARGO_PKG_VERSION").expect("Cargo package version")
     );
+    let source_commit = build_value("WOLFMARK_SOURCE_COMMIT", || {
+        git_value(manifest, &["rev-parse", "HEAD"])
+    })
+    .unwrap_or_else(|| "unknown".into());
+    let build_id = build_value("WOLFMARK_BUILD_ID", || {
+        let short = git_value(manifest, &["rev-parse", "--short=12", "HEAD"])?;
+        let dirty = Command::new("git")
+            .args(["status", "--porcelain", "--untracked-files=all"])
+            .current_dir(manifest)
+            .output()
+            .ok()
+            .is_some_and(|output| output.status.success() && !output.stdout.is_empty());
+        Some(if dirty {
+            format!("{short}-dirty")
+        } else {
+            short
+        })
+    })
+    .unwrap_or_else(|| "unknown".into());
+    let source_timestamp = build_value("WOLFMARK_SOURCE_TIMESTAMP", || {
+        git_value(manifest, &["show", "-s", "--format=%ct", "HEAD"])
+    })
+    .unwrap_or_else(|| "unknown".into());
+    let build_channel =
+        std::env::var("WOLFMARK_BUILD_CHANNEL").unwrap_or_else(|_| "development".into());
+    let source_commit_define = quoted_define(&source_commit);
+    let build_id_define = quoted_define(&build_id);
+    let source_timestamp_define = quoted_define(&source_timestamp);
+    let build_channel_define = quoted_define(&build_channel);
     build
         .cpp(true)
         .std("c++20")
@@ -106,8 +139,35 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         .file(manifest.join("native/qt/windows_window_frame.cpp"))
         .include(manifest.join("native/qt"))
         .define("WOLFMARK_PRODUCT_VERSION", product_version.as_str())
+        .define("WOLFMARK_SOURCE_COMMIT", source_commit_define.as_str())
+        .define("WOLFMARK_BUILD_ID", build_id_define.as_str())
+        .define(
+            "WOLFMARK_SOURCE_TIMESTAMP",
+            source_timestamp_define.as_str(),
+        )
+        .define("WOLFMARK_BUILD_CHANNEL", build_channel_define.as_str())
         .warnings(true);
     build
+}
+
+fn build_value(environment: &str, fallback: impl FnOnce() -> Option<String>) -> Option<String> {
+    std::env::var(environment).ok().or_else(fallback)
+}
+
+fn git_value(manifest: &Path, arguments: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .args(arguments)
+        .current_dir(manifest)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn quoted_define(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {

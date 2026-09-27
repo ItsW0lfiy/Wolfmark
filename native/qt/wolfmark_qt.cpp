@@ -4014,7 +4014,14 @@ private:
         about_card_layout->addWidget(about_version);
         auto* about_license = new QLabel(QStringLiteral(
             "Free and open-source software · GPL-3.0-only\n"
-            "Rust + C++20 · Qt 6 Widgets · Comrak"));
+            "Rust + C++20 · Qt 6 Widgets · Comrak\n\n"
+            "Build %1 · %2\n"
+            "Source %3\n"
+            "Commit timestamp %4")
+            .arg(QStringLiteral(WOLFMARK_BUILD_ID),
+                 QStringLiteral(WOLFMARK_BUILD_CHANNEL),
+                 QStringLiteral(WOLFMARK_SOURCE_COMMIT),
+                 QStringLiteral(WOLFMARK_SOURCE_TIMESTAMP)));
         about_license->setObjectName(QStringLiteral("settingsHint"));
         about_license->setWordWrap(true);
         about_license->setTextInteractionFlags(Qt::TextSelectableByMouse |
