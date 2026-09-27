@@ -1,59 +1,78 @@
-# Windows installer — dev.7
+# Windows setup and maintenance
 
-Wolfmark dev.7 uses **WiX Toolset 7.0.0** to produce a genuine per-machine x64 MSI and a WiX Burn setup bundle. WiX was explicitly approved for this milestone. Both interactive entry points use the shared native C++20/Qt Widgets setup presentation; they contain no C#, CLR, browser engine, or managed client runtime.
+Wolfmark dev.7 uses NSIS 3.12 as a thin, elevated Windows bootstrap. NSIS extracts the signed-or-local package payload and native setup host, then delegates all product decisions and file ownership to the framework-independent Rust maintenance core in `installer/maintenance`. No MSI, WiX, Burn, CLR, browser engine, Node.js, or separately installed runtime is involved.
 
-The Burn UI follows the locked Wolfmark identity: an approved paw brand rail, charcoal/graphite surfaces, silver typography, restrained crimson primary/focus/progress states, and the same compact one-screen operational flow for install, update, maintenance, repair, uninstall, completion, and failure. The reference mockup informs the visual language, not a fictional wizard or feature set.
+## Artifacts
 
-The generated artifacts are:
+- `Wolfmark-Setup-win-x64.exe` — interactive and unattended install/maintenance controller.
+- `Wolfmark-portable-win-x64.zip` — portable payload with `portable.flag`; it changes no machine registration.
+- `SHA256SUMS.txt` — SHA-256 for those exact two artifacts.
 
-- `Wolfmark-Setup-win-x64.exe` — the normal user-facing Burn bundle;
-- `Wolfmark-win-x64.msi` — the genuine Windows Installer package for administration and deployment;
-- `Wolfmark-portable-win-x64.zip` — the same application payload with portable mode enabled;
-- `SHA256SUMS.txt` — hashes of all three distributables.
+The old unreleased `Wolfmark-win-x64.msi` is not part of the release contract. Setup recognizes the final dev.7 MSI ProductCode only to uninstall that development build through Windows Installer before the maintenance core assumes ownership.
 
-The MSI owns Program Files deployment, Installed Apps metadata, Start Menu and optional Desktop shortcuts, Open With registration, repair, modify, major upgrades, and uninstall. Installer identities are tracked in `packaging/windows/identity.json` and follow these rules:
+## Build identity and state
 
-- MSI UpgradeCode `{24F5627C-0519-4BC3-9C73-4DEBD580BA11}` is permanent for the Wolfmark product family.
-- MSI ProductCode is stable for every rebuild of one published display version. It changes only when a later Wolfmark version is authored as a major upgrade. The `0.1.0-dev.7` ProductCode is `{FF340EB2-370A-474F-A6B8-4E78AFAE8952}`.
-- MSI PackageCode remains WiX-generated and changes whenever a new MSI package is built. Two nonidentical MSI files therefore do not share a PackageCode.
-- Burn UpgradeCode `{84457DCA-5666-4684-92DF-9E7677C285FD}` is permanent for the Wolfmark setup family.
-- Burn bundle registration Code identifies one built bundle and may change. The explicit provider key `ItsW0lfiy.Wolfmark.Windows.x64` persists across compatible setup upgrades.
+Every package records the semantic version, full Git commit, the first 12 commit characters as BuildId, commit timestamp, x86-64 architecture, release channel, dirty flag, and source ancestry. Packaging refuses a dirty tree unless `-AllowDirty` is passed explicitly; such local artifacts use a `-dirty` BuildId and are not release candidates.
 
-Burn maintenance is offered only when `WixBundleInstalled` confirms that the running bundle is itself registered. A related bundle or MSI is an update candidate, not proof that the current bundle owns maintenance. Direct MSI maintenance similarly checks the exact ProductCode first, then enumerates the UpgradeCode family to distinguish older, same-version, and newer related products. This prevents an unrelated setup from reporting a successful no-op uninstall.
+The schema-versioned payload manifest lists every installer-owned application file with its relative path, size, and SHA-256. Machine state, the transaction journal, the exact current/previous payload cache, and diagnostic logs live under:
 
-The unreleased Moonmark development installer used different identities and is intentionally not part of Wolfmark's upgrade family. Earlier unreleased Wolfmark dev.7 builds may also have random per-build ProductCodes. Current installers detect those products through the stable UpgradeCode and migrate them as related products. If a stale development install interferes with testing, enumerate its ProductCode first and remove it through Windows Installed Apps or `msiexec.exe /x {PRODUCT-CODE}`; do not delete Program Files or registry entries by hand. Existing local Moonmark development installs remain untouched.
+```text
+%ProgramData%\Wolfmark\Installer\
+```
 
-The custom bootstrapper offers install, update, maintenance, modify, repair, uninstall confirmation, progress, completion, and explicit error states. It delegates all package state changes and rollback to Burn/MSI. Its graphite/silver Qt UI is accessible by keyboard and deliberately contains no blue Wolfmark-controlled states. The bootstrapper is out-of-process from the Burn engine, following WiX 7's supported native BA model.
+Status detection distinguishes absent, exact, damaged, older/newer, same-version ancestor relationships, diverged Git history, dirty candidates, partial/inconsistent state, and interrupted transactions. A pixel coordinate, package timestamp, or version string alone is never treated as product identity.
 
-Direct interactive MSI launch uses Windows Installer Embedded UI rather than a generic WixUI dialog set. `WolfmarkMsiEmbeddedUI.dll` is a system-only loader with the three standard Embedded UI exports. Windows Installer extracts it alongside `WolfmarkMsiUi.dll`, Qt Core/Gui/Widgets, `qwindows`, the app-local MSVC runtime, and the Wolfmark symbol. The loader resolves the Qt host from that private resource directory without changing global `PATH`; the host presents the same `SetupWindow` and maps its choices to `INSTALLFOLDER`, `WOLFMARK_FILE_ASSOC`, and `WOLFMARK_DESKTOP_SHORTCUT`. Real action/progress/error/completion records come from Windows Installer. `/qn` and policy-disabled Embedded UI remain non-interactive.
+## Operations
 
-Installer UI ownership is explicit. A direct interactive MSI owns its Qt Embedded UI. Burn owns every interactive screen for `Wolfmark-Setup-win-x64.exe` and passes `MSIDISABLEEEUI=1` to its chained MSI, so the two native hosts never contend for one transaction. Direct `/qn`, Burn `/quiet`, and a direct MSI launched with `MSIDISABLEEEUI=1` create no Wolfmark Qt installer window.
+- **Install** deploys the setup payload under 64-bit Program Files and registers only manifest-owned files.
+- **Update** is selected for a newer semantic version or a descendant commit at the same development version.
+- **Repair** hashes the installed manifest and restores only missing/corrupt files from the exact-build cache. It never downloads or upgrades.
+- **Reinstall this setup build** fully redeploys the build embedded in the running setup. It does not claim to find the latest release.
+- **Change options** updates Open With registration and the optional public Desktop shortcut without replacing application files.
+- **Uninstall** removes manifest-owned files, shortcuts, Open With/capability/ProgID registration, and Installed Apps registration. User documents and per-user settings are not installer-owned and remain untouched. Diagnostic logs intentionally survive uninstall.
 
-Direct-MSI Modify is an intentional reconfiguration of the current product. It sets `REINSTALL=ALL` and `REINSTALLMODE=amus` so Windows Installer reevaluates the transitive Open With and Desktop-shortcut conditions while verifying the installed payload. Repair uses the same Windows Installer reinstall path with the existing option values; uninstall uses `REMOVE=ALL`.
+The transaction journal advances through prepared, staged, backed-up, applied, integrated, validated, and committed phases. Failed deployment attempts restore the previous manifest-owned payload and registration from backup. An unfinished journal is surfaced as interrupted/rescue state on the next launch.
 
-Interactive files-in-use messages are not discarded. Restart Manager requests offer to close the listed applications and continue; classic FilesInUse requests ask the user to close them and retry. Both paths also offer cancellation or a deliberate continue-with-restart choice. Quiet operations remain non-interactive and may return a restart-required result.
+## Windows integration
 
-## Diagnostics
+The maintenance core owns one centralized integration contract:
 
-Burn writes its normal bundle log and per-package MSI log, records detect/plan/apply/package/shutdown lifecycle checkpoints, and shows both exact paths on a failure screen. An explicit `/log <path>` remains supported. The direct MSI enables Windows Installer's verbose automatic logging through the standard `MsiLogging` property; Windows Installer chooses the user-accessible temporary `MSI*.LOG` location and exposes it as `MsiLogFileLocation`. The Embedded UI formats error records with `MsiFormatRecordW`, preserves the numeric MSI record identifier as secondary information, and displays the exact diagnostic log path. These logs survive uninstall because they are not stored in the Program Files payload.
+- Installed Apps entry `Wolfmark`;
+- Start Menu shortcut;
+- optional public Desktop shortcut;
+- Registered Applications/capabilities;
+- `.md`, `.markdown`, and `.txt` Open With ProgIDs and icons;
+- quoted `"Wolfmark.exe" "%1"` open command.
 
-The direct-MSI log location is controlled by Windows Installer rather than relocated by the Embedded UI after initialization. For a deterministic path during support or automation, use `msiexec.exe /i Wolfmark-win-x64.msi /L*v <path>`.
+Wolfmark never writes protected `UserChoice` keys and does not seize the user's default application.
 
-## Build-time tooling and terms
+## Command line
 
-`cargo setup` restores the pinned WiX CLI to ignored project-local `out/toolchains/wix` and its native bootstrapper API packages to `out/cache/nuget`. The .NET SDK/NuGet are build-time prerequisites for restoring WiX packages; neither .NET nor NuGet is shipped to or required by Wolfmark users. `cargo package-app` records WiX 7 EULA acceptance explicitly with `-acceptEula wix7` and builds the BA with `/p:AcceptEula=wix7`; it does not create a global/user-profile acceptance marker.
+The setup executable supports these stable case-insensitive switches:
 
-WiX source is distributed under the Microsoft Reciprocal License. WiX 7 is also governed by the Open Source Maintenance Fee EULA. At the time of the dev.7 audit, the fee threshold described by WiX is USD 10,000 annual revenue attributable to projects using WiX. Wolfmark currently falls below that threshold; this is not a permanent assumption. The project must re-check current terms before every public release and whenever funding/revenue or WiX terms materially change. No commercial terms are accepted on a contributor's behalf by this documentation.
+```text
+Wolfmark-Setup-win-x64.exe /S
+Wolfmark-Setup-win-x64.exe /MAINTENANCE
+Wolfmark-Setup-win-x64.exe /UPDATE
+Wolfmark-Setup-win-x64.exe /REPAIR
+Wolfmark-Setup-win-x64.exe /REINSTALL
+Wolfmark-Setup-win-x64.exe /UNINSTALL
+Wolfmark-Setup-win-x64.exe /DIAGNOSE
+Wolfmark-Setup-win-x64.exe /S /REPAIR
+Wolfmark-Setup-win-x64.exe /S /UNINSTALL
+Wolfmark-Setup-win-x64.exe /S /D=C:\Program Files\Wolfmark
+```
 
-Authoritative references:
+NSIS requires `/D=<path>` to be the last argument. `/S` suppresses the Qt UI. Interactive operations use the approved native C++20/Qt Widgets setup presentation; unattended operations invoke the same Rust core without constructing a window. All operations require administrative rights because the install is per-machine.
 
-- https://github.com/wixtoolset/wix/releases/tag/v7.0.0
-- https://docs.firegiant.com/wix/whatsnew/oopbas/
-- https://docs.firegiant.com/wix/osmf/
-- https://github.com/wixtoolset/wix/blob/develop/LICENSE.TXT
+## Logging and diagnostics
 
-## Lifecycle and validation
+The core writes a unique operation log beneath `%ProgramData%\Wolfmark\Installer\Logs`. Logs contain operation identity, changed/no-change result, and the error returned by a failed operation; they do not contain Markdown document contents. `/DIAGNOSE` reports the parsed install state and integrity status. Logs survive uninstall for supportability.
 
-`scripts/test_windows_installer.ps1` always performs a non-invasive artifact/checksum/MSI-table/Embedded-UI-resource/UI-ownership/diagnostic/portable smoke audit and a quiet Burn layout that exercises the real headless detect/plan/apply path without creating a Qt window or installing Wolfmark. `-InteractiveLaunchSmoke` launches the actual packaged EXE and MSI, requires each custom top-level window to appear, cancels each normally, and checks process cleanup without installing anything. `-ExecuteLifecycle` additionally builds an older compatible MSI and exercises its upgrade through the current Setup EXE, same-version setup, bundle repair, two independent bundle uninstall cycles, direct-MSI install/repair/modify/uninstall, Installed Apps uniqueness, process cleanup, launch, and user-document preservation under `out/tests`. The lifecycle requires an elevated PowerShell session and refuses to replace an existing Wolfmark installation unless the caller also supplies the explicit `-AllowExistingWolfmarkReplacement` switch.
+## Release gate
 
-The bundle remains unsigned for this development prerelease. Windows may display an Unknown publisher or reputation warning. Authenticode signing, WinGet publication, and dev.8 updater hardening remain separate work.
+`scripts/test_windows_setup.ps1` always checks exact artifact names, absence of MSI output, hashes, payload-manifest bytes, private Qt setup runtime, portable extraction, and restricted-PATH smoke. Its `-ExecuteLifecycle` mode requires an elevated clean Windows environment and performs two real install/damage/repair/uninstall cycles. It refuses to replace an existing Wolfmark installation without `-AllowExistingWolfmarkReplacement`.
+
+The unsigned dev.7 setup may trigger Windows reputation warnings. Release readiness still requires physical elevated validation on a clean VM for UAC, interactive install/update/repair/reinstall/modify/uninstall, running-app handling, rollback, Explorer Open With, Installed Apps, DPI, accessibility, and WinGet-style silent invocation.
+
+NSIS is distributed under the zlib/libpng license. Wolfmark pins 3.12 and verifies its archive SHA-256 before use; see `docs/licenses/NSIS-zlib-license.txt`.

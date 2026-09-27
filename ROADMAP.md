@@ -20,7 +20,7 @@ Wolfmark is free and open source. Every official first-party feature must remain
 
 Wolfmark may offer an optional **Donate** or **Support Wolfmark** action. Donations are voluntary and may support development, but they must never unlock features, increase limits, remove restrictions, change update access, create another edition, or otherwise alter the application's functionality. A user who never donates receives the complete first-party Wolfmark application. No payment-provider dependency or donation UI is selected by this principle.
 
-Build and distribution dependencies remain subject to their own current terms. In particular, Wolfmark must re-evaluate WiX Toolset's licensing and Open Source Maintenance Fee terms if WiX's terms or Wolfmark's funding/revenue model materially changes. This is an engineering policy, not a guarantee that third-party terms will remain unchanged.
+Build and distribution dependencies remain subject to their current terms. Wolfmark's NSIS bootstrap uses the zlib/libpng license; Qt and every other bundled component remain part of the release-specific dependency audit.
 
 ---
 
@@ -54,8 +54,10 @@ Turn the native development checkout into reproducible Windows release artifacts
 Planned work includes:
 
 - accept `.md`, `.markdown`, and `.txt` shell/command-line arguments with spaces and Unicode
-- use the explicitly approved WiX Toolset 7.0.0 engine with a native Qt bootstrapper
-- ship both the normal Burn setup executable and a genuine MSI
+- use the explicitly approved NSIS 3.12 bootstrap with a native Qt setup host and framework-independent Rust maintenance core
+- ship one universal setup/maintenance executable rather than separate EXE/MSI lifecycles
+- identify builds by semantic version, full Git commit, commit timestamp, architecture, channel, and dirty state
+- use a schema-versioned payload manifest, exact current/previous caches, and a recoverable transaction journal
 - install under Program Files
 - register Wolfmark in Installed Apps / uninstall
 - Start Menu shortcut

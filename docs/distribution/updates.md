@@ -9,7 +9,6 @@ The repository currently retains its historical `/Moonmark` GitHub path. That UR
 Rust owns release interpretation and checksum verification. Drafts and malformed versions are ignored; prereleases follow the setting; SemVer decides whether a newer version exists. A usable release must provide the exact platform assets:
 
 - `Wolfmark-Setup-win-x64.exe`
-- `Wolfmark-win-x64.msi` (separate administrative artifact; the in-app handoff continues to select the setup EXE)
 - `Wolfmark-portable-win-x64.zip`
 - `SHA256SUMS.txt`
 

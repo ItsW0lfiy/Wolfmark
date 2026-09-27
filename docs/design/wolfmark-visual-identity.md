@@ -72,7 +72,7 @@ Push buttons, checkboxes, toggles, combo boxes, edits, sliders, scrollbars, menu
 
 ## Setup relationship
 
-The WiX 7 Burn bootstrapper remains a native C++20/Qt Widgets application. Setup, progress, completion, maintenance, repair, uninstall, and error states use the same paw, graphite layers, silver type, crimson actions, restrained borders, and rounded control geometry as Wolfmark itself.
+The NSIS bootstrap launches Wolfmark's native C++20/Qt Widgets setup host. Setup, progress, completion, maintenance, repair, reinstall, uninstall, and error states use the same paw, graphite layers, silver type, crimson actions, restrained borders, and rounded control geometry as Wolfmark itself.
 
 Ordinary installation stays compact. The four-step composition in the approved setup mockup is a visual reference, not a requirement to introduce an artificial wizard. Setup must never claim Wolfmark is premium, silently take Windows defaults, or expose features that do not exist.
 

@@ -17,7 +17,7 @@ cargo setup
 cargo app
 ```
 
-Build the setup EXE, MSI, portable ZIP, and checksums with:
+Build the setup EXE, portable ZIP, and checksums with:
 
 ```powershell
 cargo package-app
@@ -48,7 +48,7 @@ Mouse-wheel notches feed one continuous elapsed-time trajectory that accelerates
 
 ## Build and run
 
-Cargo compiles the C++ adapter and stages the required dynamic Qt libraries. Ordinary application builds do not invoke CMake, `dotnet`, NuGet, Node.js, or a browser toolchain. Release packaging uses the .NET SDK/NuGet only as build-time machinery to restore the pinned WiX 7 tool and native bootstrapper API; no managed runtime is part of Wolfmark or its distributables.
+Cargo compiles the C++ adapter and stages the required dynamic Qt libraries. Ordinary application builds do not invoke CMake, `dotnet`, NuGet, Node.js, or a browser toolchain. Release packaging uses the pinned project-local NSIS compiler as a thin bootstrap around Wolfmark's Rust maintenance core; no managed runtime is part of Wolfmark or its distributables.
 
 Generate repeatable stress inputs and run the headless Rust benchmark with:
 

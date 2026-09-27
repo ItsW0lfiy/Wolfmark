@@ -14,7 +14,7 @@ Dev.7 adds `semver` plus the RustCrypto `sha2` stack (`digest`, `block-buffer`, 
 
 The app-local Microsoft Visual C++ runtime is redistributed under Microsoft's Visual Studio redistribution terms. Windows system DLLs are supplied by the operating system and are not packaged as Wolfmark dependencies.
 
-Dev.7's Windows installer uses WiX Toolset 7.0.0. The custom Burn bootstrapper and MSI Embedded UI are native C++20/Qt Widgets. The Embedded UI resource payload reuses the same dynamically linked Qt Core/Gui/Widgets and app-local MSVC runtime licensing model as the setup/application payload; its system-only loader imports only `KERNEL32.dll`. No CLR, JVM, Node.js, WebView2, Chromium, or Qt WebEngine dependency is included or required on client systems. WiX source uses the Microsoft Reciprocal License and WiX 7 is governed by the Open Source Maintenance Fee EULA. At this audit date Wolfmark is below the published USD 10,000 attributable annual project-revenue threshold. This must be rechecked before public release and whenever terms or funding materially change.
+Dev.7's Windows installer uses NSIS 3.12 under the zlib/libpng license. NSIS is a thin extraction/elevation bootstrap around Wolfmark's Rust maintenance core and native C++20/Qt Widgets setup host. The private setup runtime reuses dynamically linked Qt Core/Gui/Widgets and the app-local MSVC runtime. No CLR, JVM, Node.js, WebView2, Chromium, or Qt WebEngine dependency is included or required on client systems.
 
 ## Sources and release gate
 
@@ -23,7 +23,7 @@ Dev.7's Windows installer uses WiX Toolset 7.0.0. The custom Burn bootstrapper a
 - Qt 6 licensing: https://doc.qt.io/qt-6/licensing.html
 - Qt open-source obligations: https://www.qt.io/development/open-source-lgpl-obligations
 - SPDX identifiers: https://spdx.org/licenses/
-- WiX source license: https://github.com/wixtoolset/wix/blob/develop/LICENSE.TXT
-- WiX 7 OSMF terms: https://docs.firegiant.com/wix/osmf/
+- NSIS license: https://nsis.sourceforge.io/License
+- NSIS release data and hashes: https://github.com/NSIS-Dev/release-data
 
 Before each public release, regenerate the dependency inventory from the locked graph, inspect changes, include all required third-party notices, and verify the exact Qt deployment against its SBOM. A crate's manifest declaration is evidence for review, not a substitute for reading the applicable license text.

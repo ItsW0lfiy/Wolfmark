@@ -1,67 +1,50 @@
 # Windows packaging
 
-Cargo is the normal Windows packaging entry point:
+From a normal checkout:
 
 ```powershell
 cargo setup
 cargo package-app
 ```
 
-`cargo setup` verifies MSVC/Windows SDK, prepares Qt, and restores the explicitly approved WiX Toolset 7.0.0 CLI plus locked native bootstrapper packages to ignored project-local `out/` directories. `cargo package-app` delegates to `scripts/package_windows.ps1`, builds Release, stages one app-local Wolfmark payload, smoke-tests it with only normal Windows system paths available, and creates:
+`cargo setup` verifies MSVC/Windows SDK, prepares project-local Qt, and downloads the pinned NSIS 3.12 portable compiler only when missing. The archive is verified against its locked SHA-256. `cargo package-app` builds the Rust application and maintenance core, stages one app-local payload, generates its canonical file manifest, builds the shared native Qt setup host, compiles the NSIS bootstrap, runs the packaged application smoke, creates the portable ZIP, and hashes the final bytes.
 
-- `Wolfmark-Setup-win-x64.exe`
-- `Wolfmark-win-x64.msi`
-- `Wolfmark-portable-win-x64.zip`
-- `SHA256SUMS.txt`
+Output is under `out/release/<version>/`:
 
-The exact output directory is `out/release/<version>/`. WiX symbol/intermediate files remain below `out/package/wix`; they are not release artifacts.
-
-The shared application payload contains `Wolfmark.exe`, dynamically linked Qt6 Core/Gui/Widgets/Network, `platforms/qwindows.dll`, app-local MSVC runtime DLLs, icons/branding, `qt.conf`, Wolfmark's license/third-party notice, and Qt license texts. The portable archive adds `portable.flag`; installed and portable editions do not use unrelated application builds.
-
-The normal setup EXE embeds a genuine per-machine x64 MSI. Its native C++20/Qt Widgets bootstrapper presents install, update, maintenance, modify, repair, uninstall, progress, completion, and error flows while Burn/MSI owns detection, elevation, transactions, rollback, and cached uninstall behavior. Direct interactive MSI launch uses the same presentation through a native Windows Installer Embedded UI; it does not fall back to a generic WiX wizard. The MSI installs under 64-bit Program Files, appears in Installed Apps, creates the Start Menu shortcut, optionally creates the Desktop shortcut, and conditionally registers `.md`, `.markdown`, and `.txt` Open With handlers without changing protected Windows `UserChoice` defaults.
-
-The Qt SDK, Rust/Cargo, MSVC/Windows SDK, PowerShell 7, .NET SDK, NuGet, and WiX are build-time requirements only. The .NET SDK exists solely to restore the WiX CLI/native API packages; Wolfmark's setup UI and shipped application are native. End users do not need Rust, Qt, WiX, .NET, Node.js, a browser runtime, or developer tools installed. Both installed and portable packages use app-local Qt and CRT files plus ordinary Windows system DLLs.
-
-## Quiet deployment and lifecycle checks
-
-Burn and MSI provide conventional unattended entry points:
-
-```powershell
-Wolfmark-Setup-win-x64.exe /quiet /norestart
-Wolfmark-Setup-win-x64.exe /uninstall /quiet /norestart
-
-msiexec.exe /i Wolfmark-win-x64.msi /qn /norestart
-msiexec.exe /x Wolfmark-win-x64.msi /qn /norestart
+```text
+Wolfmark-Setup-win-x64.exe
+Wolfmark-portable-win-x64.zip
+SHA256SUMS.txt
 ```
 
-The custom bootstrapper does not implement a background updater or silent application-owned install policy; these are ordinary administrator-invoked setup switches for deployment/testing. The unsigned development artifacts may trigger Windows reputation warnings.
+No MSI is produced. NSIS/setup intermediates remain under `out/package/nsis`; the canonical staged payload remains under `out/package/staging`.
 
-Run the non-invasive package audit with:
-
-```powershell
-pwsh -File scripts/test_windows_installer.ps1
-```
-
-To exercise the actual packaged interactive startup/cancel paths without installing:
+Official packaging requires a clean Git worktree. For local migration/debug builds only:
 
 ```powershell
-pwsh -File scripts/test_windows_installer.ps1 -InteractiveLaunchSmoke
+cargo package-app -- -AllowDirty
 ```
 
-It verifies all artifact hashes, decompiles/audits the MSI authoring, launches the portable smoke with a restricted path, and runs a quiet Burn layout to prove the headless detect/plan/apply path without installing anything. The optional elevated lifecycle path is:
+That output records `<12-char-commit>-dirty` and must not be published as an official artifact.
+
+The Qt SDK, Rust/Cargo, MSVC/Windows SDK, PowerShell 7, and NSIS are build-time requirements only. End users do not need them. Neither the installed nor portable application contains .NET/CLR, JVM, Node.js, Electron, WebView2, Chromium, or Qt WebEngine.
+
+Non-invasive artifact validation:
 
 ```powershell
-pwsh -File scripts/test_windows_installer.ps1 -ExecuteLifecycle
+pwsh -File scripts/test_windows_setup.ps1
 ```
 
-It builds an older compatible MSI and performs isolated old-MSI install, Setup-EXE upgrade, same-version setup, bundle repair/uninstall, direct-MSI install/repair/modify/uninstall, Installed Apps uniqueness, installed launch, and user-document preservation checks. The script refuses to replace an existing Wolfmark installation unless the operator explicitly supplies `-AllowExistingWolfmarkReplacement`. This safeguard matters on developer machines; clean-VM validation remains the preferred release gate.
-
-Installer state screenshots can be regenerated without installing anything:
+Elevated lifecycle validation on a clean VM:
 
 ```powershell
-pwsh -File scripts/capture_wix_installer_ui.ps1
+pwsh -File scripts/test_windows_setup.ps1 -ExecuteLifecycle
 ```
 
-The screenshots land under ignored `out/visual/wix-setup/` and cover install, upgrade, maintenance, repair, uninstall, progress, completion, and error states. They supplement rather than replace the actual packaged launch smoke or physical keyboard/accessibility, DPI, UAC, Explorer, upgrade, and rollback checks.
+Capture the shared installer UI states without installing:
 
-A true single executable would require a separate static Qt build and deliberate Qt licensing work; dev.7 intentionally keeps dynamic Qt. Exact sizes and hashes are emitted by every package run rather than copied into this document. Re-check WiX 7 OSMF terms and the release-specific Qt/license audit before publication.
+```powershell
+pwsh -File scripts/capture_nsis_installer_ui.ps1
+```
+
+Exact sizes and hashes are emitted by every package run; do not copy stale values into documentation.

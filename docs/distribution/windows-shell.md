@@ -15,7 +15,7 @@ Arguments beginning with `-` are treated as switches, not file names. Missing an
 
 ## Installer registration
 
-The WiX MSI registers the installed executable, never a build-tree path. The open command preserves quoting:
+The Rust maintenance core registers the installed executable, never a build-tree path. The open command preserves quoting:
 
 ```text
 "[INSTALLFOLDER]Wolfmark.exe" "%1"
