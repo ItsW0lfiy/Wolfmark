@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $qtRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/qt'))
-$wix = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/wix/wix.exe'))
+$nsis = [IO.Path]::GetFullPath((Join-Path $projectRoot 'out/toolchains/nsis/makensis.exe'))
 $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
 
 function Assert-MsvcToolchain {
@@ -85,9 +85,13 @@ try {
         }
     }
 
-    Invoke-Bootstrap 'bootstrap_wix.ps1'
-    if (-not (Test-Path -LiteralPath $wix -PathType Leaf)) {
-        throw "WiX bootstrap completed, but wix.exe is missing at $wix."
+    if (Test-Path -LiteralPath $nsis -PathType Leaf) {
+        Write-Host "Project-local NSIS is already available at $nsis"
+    } else {
+        Invoke-Bootstrap 'bootstrap_nsis.ps1'
+    }
+    if (-not (Test-Path -LiteralPath $nsis -PathType Leaf)) {
+        throw "NSIS bootstrap completed, but makensis.exe is missing at $nsis."
     }
 
     Write-Host 'Wolfmark development tooling is ready.'

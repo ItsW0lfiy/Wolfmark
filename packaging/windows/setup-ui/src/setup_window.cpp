@@ -205,16 +205,19 @@ QWidget* SetupWindow::createMaintenancePage() {
     maintenanceVersion_->setObjectName(QStringLiteral("metadata"));
     layout->addWidget(maintenanceVersion_);
     auto* repair = makeButton(QStringLiteral("Repair installation"));
+    auto* reinstall = makeButton(QStringLiteral("Reinstall this setup build"));
     auto* modify = makeButton(QStringLiteral("Change installation options"));
     auto* uninstall = makeButton(QStringLiteral("Uninstall Wolfmark"));
     uninstall->setProperty("danger", true);
     connect(repair, &QPushButton::clicked, this, [this] { showConfirmation(InstallerAction::Repair, state_); });
+    connect(reinstall, &QPushButton::clicked, this, [this] { showConfirmation(InstallerAction::Reinstall, state_); });
     connect(modify, &QPushButton::clicked, this, [this] {
         state_.activeAction = InstallerAction::Modify;
         showInstall(state_);
     });
     connect(uninstall, &QPushButton::clicked, this, [this] { showConfirmation(InstallerAction::Uninstall, state_); });
     layout->addWidget(repair);
+    layout->addWidget(reinstall);
     layout->addWidget(modify);
     layout->addWidget(uninstall);
     layout->addStretch(1);
@@ -396,7 +399,10 @@ void SetupWindow::showUpdate(const InstallerState& state) {
 
 void SetupWindow::showMaintenance(const InstallerState& state) {
     state_ = state;
-    maintenanceVersion_->setText(QStringLiteral("Installed version  %1").arg(state.installedVersion));
+    QString details = QStringLiteral("Installed version  %1\nBuild  %2")
+                          .arg(state.installedVersion, state.installedBuildId);
+    if (!state.statusDetail.isEmpty()) details += QStringLiteral("\n") + state.statusDetail;
+    maintenanceVersion_->setText(details);
     pages_->setCurrentWidget(maintenancePage_);
 }
 
@@ -404,12 +410,17 @@ void SetupWindow::showConfirmation(InstallerAction action, const InstallerState&
     state_ = state;
     confirmationAction_ = action;
     const bool repair = action == InstallerAction::Repair;
-    confirmationTitle_->setText(repair ? QStringLiteral("Repair Wolfmark") : QStringLiteral("Uninstall Wolfmark?"));
+    const bool reinstall = action == InstallerAction::Reinstall;
+    confirmationTitle_->setText(repair
+        ? QStringLiteral("Repair Wolfmark")
+        : reinstall ? QStringLiteral("Reinstall Wolfmark") : QStringLiteral("Uninstall Wolfmark?"));
     confirmationDetail_->setText(repair
-        ? QStringLiteral("Wolfmark will verify and restore its installed files.")
-        : QStringLiteral("Wolfmark itself will be removed."));
-    confirmationButton_->setText(repair ? QStringLiteral("Repair") : QStringLiteral("Uninstall"));
-    confirmationButton_->setProperty("danger", !repair);
+        ? QStringLiteral("Wolfmark will hash every installed file and restore only missing or corrupt files from the exact-build cache.")
+        : reinstall
+            ? QStringLiteral("Wolfmark will fully deploy the build contained in this setup file. This does not search for a newer release.")
+            : QStringLiteral("Wolfmark itself will be removed."));
+    confirmationButton_->setText(repair ? QStringLiteral("Repair") : reinstall ? QStringLiteral("Reinstall") : QStringLiteral("Uninstall"));
+    confirmationButton_->setProperty("danger", !repair && !reinstall);
     confirmationButton_->style()->unpolish(confirmationButton_);
     confirmationButton_->style()->polish(confirmationButton_);
     pages_->setCurrentWidget(confirmationPage_);
@@ -444,6 +455,10 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
         completeTitle_->setText(QStringLiteral("Wolfmark has been repaired"));
         completeDetail_->setText(QStringLiteral("Installed Wolfmark files were verified and restored."));
         break;
+    case InstallerAction::Reinstall:
+        completeTitle_->setText(QStringLiteral("Wolfmark has been reinstalled"));
+        completeDetail_->setText(QStringLiteral("This setup build was deployed and verified."));
+        break;
     case InstallerAction::Modify:
         completeTitle_->setText(QStringLiteral("Wolfmark options were updated"));
         completeDetail_->setText(QStringLiteral("Windows integration now matches your choices."));
@@ -457,7 +472,7 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
         completeDetail_->setText(QStringLiteral("Installation completed successfully."));
         break;
     }
-    launchCheck_->setVisible(action == InstallerAction::Install || action == InstallerAction::Update);
+    launchCheck_->setVisible(action == InstallerAction::Install || action == InstallerAction::Update || action == InstallerAction::Reinstall);
     pages_->setCurrentWidget(completePage_);
 }
 
@@ -581,7 +596,9 @@ QString SetupWindow::actionTitle(InstallerAction action) const {
     case InstallerAction::Update: return QStringLiteral("Updating Wolfmark");
     case InstallerAction::Modify: return QStringLiteral("Changing Wolfmark");
     case InstallerAction::Repair: return QStringLiteral("Repairing Wolfmark");
+    case InstallerAction::Reinstall: return QStringLiteral("Reinstalling Wolfmark");
     case InstallerAction::Uninstall: return QStringLiteral("Removing Wolfmark");
+    case InstallerAction::Diagnose: return QStringLiteral("Inspecting Wolfmark");
     default: return QStringLiteral("Installing Wolfmark");
     }
 }
@@ -591,7 +608,9 @@ QString SetupWindow::actionProgressDetail(InstallerAction action) const {
     case InstallerAction::Update: return QStringLiteral("Preparing the Wolfmark update...");
     case InstallerAction::Modify: return QStringLiteral("Applying installation options...");
     case InstallerAction::Repair: return QStringLiteral("Verifying installed files...");
+    case InstallerAction::Reinstall: return QStringLiteral("Deploying this setup build...");
     case InstallerAction::Uninstall: return QStringLiteral("Removing Wolfmark-owned files...");
+    case InstallerAction::Diagnose: return QStringLiteral("Checking installed files and setup state...");
     default: return QStringLiteral("Preparing Wolfmark...");
     }
 }

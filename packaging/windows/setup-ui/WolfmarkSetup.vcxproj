@@ -7,47 +7,63 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{14AD9EE2-B64C-4B91-82FC-DA71571EEEA4}</ProjectGuid>
+    <ProjectGuid>{94F3571E-AA25-45B2-8D75-147826422679}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>WolfmarkMsiEmbeddedUI</RootNamespace>
-    <ProjectName>WolfmarkMsiEmbeddedUI</ProjectName>
+    <RootNamespace>WolfmarkSetup</RootNamespace>
+    <ProjectName>WolfmarkSetup</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
+    <UseOfMfc>false</UseOfMfc>
+    <UseOfAtl>false</UseOfAtl>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(WolfmarkOutputDir)\</OutDir>
     <IntDir>$(WolfmarkIntermediateDir)\</IntDir>
-    <TargetName>WolfmarkMsiEmbeddedUI</TargetName>
+    <TargetName>WolfmarkSetup</TargetName>
+    <RestoreProjectStyle>None</RestoreProjectStyle>
   </PropertyGroup>
   <ItemGroup>
-    <ClCompile Include="src\embedded_ui_stub.cpp" />
+    <ClCompile Include="src\maintenance_controller.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\setup_window.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\WolfmarkMsiEmbeddedUI.def" />
+    <ClInclude Include="src\maintenance_controller.h" />
+    <ClInclude Include="src\installer_host.h" />
+    <ClInclude Include="src\installer_model.h" />
+    <ClInclude Include="src\setup_window.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="wolfmark_setup.rc" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>$(WolfmarkGeneratedDir);$(QtRoot)\include;$(QtRoot)\include\QtCore;$(QtRoot)\include\QtGui;$(QtRoot)\include\QtWidgets;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;QT_NO_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <ModuleDefinitionFile>src\WolfmarkMsiEmbeddedUI.def</ModuleDefinitionFile>
-      <AdditionalDependencies>kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(QtRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Qt6Widgets.lib;Qt6Gui.lib;Qt6Core.lib;version.lib;user32.lib;advapi32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(WolfmarkGeneratedDir);$(ProjectRoot)\assets\icons;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

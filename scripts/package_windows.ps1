@@ -2,8 +2,11 @@
 param(
     [string]$QtRoot,
     [string]$OutputDirectory,
-    [string]$WixExecutable,
-    [switch]$SkipInstaller
+    [string]$NsisExecutable,
+    [switch]$SkipInstaller,
+    [switch]$AllowDirty,
+    [ValidateSet('development', 'prerelease', 'stable')]
+    [string]$Channel = 'development'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,44 +33,42 @@ function Get-WolfmarkVersion {
     return $package.version
 }
 
-function Get-WindowsVersions([string]$Version) {
+function Get-WindowsVersion([string]$Version) {
     if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$') {
-        throw "Wolfmark version '$Version' cannot be represented as a Windows installer version."
+        throw "Wolfmark version '$Version' cannot be represented as a Windows file version."
     }
     $build = ([int]$Matches[3] * 1000) + $(if ($Matches[4]) { [int]$Matches[4] } else { 999 })
-    if ($build -gt 65535) { throw "Wolfmark version '$Version' exceeds Windows Installer version limits." }
     return [pscustomobject]@{
-        Msi = "$($Matches[1]).$($Matches[2]).$build"
-        Bundle = "$($Matches[1]).$($Matches[2]).$build.0"
+        Dotted = "$($Matches[1]).$($Matches[2]).$build.0"
         Resource = "$($Matches[1]),$($Matches[2]),$build,0"
     }
 }
 
-function Get-InstallerIdentity([string]$Version) {
-    $identityPath = Join-Path $projectRoot 'packaging/windows/identity.json'
-    $identity = Get-Content -Raw -LiteralPath $identityPath | ConvertFrom-Json
-    if ($identity.displayVersion -ne $Version) {
-        throw "Installer identity is for '$($identity.displayVersion)', not the current Wolfmark version '$Version'."
+function Get-BuildIdentity([string]$Version, [string]$BuildChannel) {
+    $commit = (& git rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') { throw 'Unable to resolve the source commit.' }
+    $dirtyLines = @(& git status --porcelain --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Git worktree state.' }
+    $dirty = $dirtyLines.Count -gt 0
+    if ($dirty -and -not $AllowDirty) {
+        throw 'Official packaging requires a clean worktree. Commit the changes or pass -AllowDirty for a clearly marked local test artifact.'
     }
-    foreach ($name in 'msiProductCode', 'msiUpgradeCode', 'bundleUpgradeCode', 'bundleProviderKey') {
-        if (-not $identity.$name) { throw "Installer identity is missing '$name'." }
+    $timestamp = [long]((& git show -s --format=%ct HEAD).Trim())
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to read the source commit timestamp.' }
+    $ancestors = @(& git rev-list HEAD)
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to read Git ancestry.' }
+    $buildId = $commit.Substring(0, 12) + $(if ($dirty) { '-dirty' } else { '' })
+    return [ordered]@{
+        product = 'Wolfmark'
+        version = $Version
+        sourceCommit = $commit
+        buildId = $buildId
+        sourceTimestamp = $timestamp
+        architecture = 'x86_64'
+        channel = $BuildChannel
+        dirty = $dirty
+        ancestors = $ancestors
     }
-    return $identity
-}
-
-function Find-Wix {
-    $candidates = @($WixExecutable, $env:WOLFMARK_WIX)
-    $candidates += Join-Path $outRoot 'toolchains/wix/wix.exe'
-    $command = Get-Command wix.exe -ErrorAction SilentlyContinue
-    if ($command) { $candidates += $command.Source }
-    $selected = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
-    if (-not $selected) { throw 'WiX Toolset 7.0.0 was not found. Run: cargo setup' }
-    $selected = [IO.Path]::GetFullPath($selected)
-    $reported = (& $selected --version).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $reported.StartsWith('7.0.0', [StringComparison]::Ordinal)) {
-        throw "Wolfmark requires WiX Toolset 7.0.0; $selected reported '$reported'."
-    }
-    return $selected
 }
 
 function Find-VisualStudio {
@@ -81,8 +82,7 @@ function Find-VisualStudio {
 }
 
 function Find-VcRedistDirectory([string]$VisualStudioRoot) {
-    $redistRoot = Join-Path $VisualStudioRoot 'VC/Redist/MSVC'
-    $candidates = foreach ($versionDirectory in Get-ChildItem -LiteralPath $redistRoot -Directory) {
+    $candidates = foreach ($versionDirectory in Get-ChildItem -LiteralPath (Join-Path $VisualStudioRoot 'VC/Redist/MSVC') -Directory) {
         if ($versionDirectory.Name -notmatch '^\d+(\.\d+)+$') { continue }
         foreach ($crtDirectory in Get-ChildItem -LiteralPath (Join-Path $versionDirectory.FullName 'x64') -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue) {
             [pscustomobject]@{ Version = [version]$versionDirectory.Name; Path = $crtDirectory.FullName }
@@ -93,9 +93,19 @@ function Find-VcRedistDirectory([string]$VisualStudioRoot) {
     return $selected.Path
 }
 
+function Find-Nsis {
+    $candidates = @($NsisExecutable, $env:WOLFMARK_NSIS)
+    $candidates += Join-Path $outRoot 'toolchains/nsis/makensis.exe'
+    $command = Get-Command makensis.exe -ErrorAction SilentlyContinue
+    if ($command) { $candidates += $command.Source }
+    $selected = $candidates | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+    if (-not $selected) { throw 'NSIS 3.12 was not found. Run: cargo setup' }
+    $reported = (& $selected /VERSION).Trim()
+    if ($LASTEXITCODE -ne 0 -or $reported -ne 'v3.12') { throw "Wolfmark requires NSIS 3.12; $selected reported '$reported'." }
+    return [IO.Path]::GetFullPath($selected)
+}
+
 function Invoke-MsBuild([string]$MsBuild, [string[]]$Arguments) {
-    # Normalize environment-variable key casing because .NET Framework MSBuild
-    # otherwise rejects hosts that expose both Path and PATH.
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $MsBuild
     $start.WorkingDirectory = $projectRoot
@@ -103,23 +113,13 @@ function Invoke-MsBuild([string]$MsBuild, [string[]]$Arguments) {
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
     foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
-    $cleanEnvironment = @{}
-    foreach ($key in [Environment]::GetEnvironmentVariables().Keys) {
-        $cleanEnvironment[[string]$key] = [Environment]::GetEnvironmentVariable([string]$key)
-    }
-    $start.Environment.Clear()
-    foreach ($entry in $cleanEnvironment.GetEnumerator()) { $start.Environment[$entry.Key] = $entry.Value }
-    $temp = Assert-UnderOut (Join-Path $outRoot 'tmp/msbuild')
-    New-Item -ItemType Directory -Force $temp | Out-Null
-    $start.Environment['TEMP'] = $temp
-    $start.Environment['TMP'] = $temp
     $process = [Diagnostics.Process]::Start($start)
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
     $process.WaitForExit()
     Write-Host $stdout.Result -NoNewline
     if ($stderr.Result) { Write-Host $stderr.Result -NoNewline }
-    if ($process.ExitCode -ne 0) { throw "Native bootstrapper build failed with exit code $($process.ExitCode)." }
+    if ($process.ExitCode -ne 0) { throw "Native setup UI build failed with exit code $($process.ExitCode)." }
 }
 
 function Copy-RequiredFile([string]$Source, [string]$Destination) {
@@ -130,30 +130,39 @@ function Copy-RequiredFile([string]$Source, [string]$Destination) {
 Push-Location $projectRoot
 try {
     $version = Get-WolfmarkVersion
-    $windowsVersion = Get-WindowsVersions $version
-    $installerIdentity = Get-InstallerIdentity $version
+    $windowsVersion = Get-WindowsVersion $version
+    $buildIdentity = Get-BuildIdentity $version $Channel
     if (-not $QtRoot) { $QtRoot = if ($env:WOLFMARK_QT_DIR) { $env:WOLFMARK_QT_DIR } else { Join-Path $outRoot 'toolchains/qt' } }
     $QtRoot = [IO.Path]::GetFullPath($QtRoot)
     if (-not $OutputDirectory) { $OutputDirectory = Join-Path $outRoot "release/$version" }
     $OutputDirectory = Assert-UnderOut $OutputDirectory
     $packageRoot = Assert-UnderOut (Join-Path $outRoot "package/staging/$version/Wolfmark")
+    $setupRuntime = Assert-UnderOut (Join-Path $outRoot 'package/nsis/setup-runtime')
+    $identityRoot = Assert-UnderOut (Join-Path $outRoot 'package/identity')
     $zipPath = Join-Path $OutputDirectory 'Wolfmark-portable-win-x64.zip'
-    $msiPath = Join-Path $OutputDirectory 'Wolfmark-win-x64.msi'
     $setupPath = Join-Path $OutputDirectory 'Wolfmark-Setup-win-x64.exe'
     $checksumPath = Join-Path $OutputDirectory 'SHA256SUMS.txt'
     $visualStudio = Find-VisualStudio
     $redist = Find-VcRedistDirectory $visualStudio
-    New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
-    foreach ($name in 'Wolfmark-Setup-win-x64.exe', 'Wolfmark-Setup-win-x64.wixpdb', 'Wolfmark-win-x64.msi', 'Wolfmark-win-x64.wixpdb', 'Wolfmark-portable-win-x64.zip', 'Moonmark-Setup-win-x64.exe', 'Moonmark-Setup-win-x64.wixpdb', 'Moonmark-win-x64.msi', 'Moonmark-win-x64.wixpdb', 'Moonmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
+    New-Item -ItemType Directory -Force $OutputDirectory, $identityRoot | Out-Null
+    foreach ($name in 'Wolfmark-Setup-win-x64.exe', 'Wolfmark-win-x64.msi', 'Wolfmark-portable-win-x64.zip', 'SHA256SUMS.txt') {
         $stale = Join-Path $OutputDirectory $name
         if (Test-Path -LiteralPath $stale) { Remove-Item -Force -LiteralPath $stale }
     }
 
-    & cargo build --release
+    $identityPath = Join-Path $identityRoot 'build-identity.json'
+    $buildIdentity | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $identityPath -Encoding utf8NoBOM
+    $env:WOLFMARK_SOURCE_COMMIT = $buildIdentity.sourceCommit
+    $env:WOLFMARK_BUILD_ID = $buildIdentity.buildId
+    $env:WOLFMARK_SOURCE_TIMESTAMP = [string]$buildIdentity.sourceTimestamp
+    $env:WOLFMARK_BUILD_CHANNEL = $buildIdentity.channel
+    & cargo build --release -p wolfmark -p wolfmark-maintenance
     if ($LASTEXITCODE -ne 0) { throw 'Wolfmark release build failed.' }
 
-    if (Test-Path -LiteralPath $packageRoot) { Remove-Item -Recurse -Force -LiteralPath $packageRoot }
-    New-Item -ItemType Directory -Force (Join-Path $packageRoot 'platforms'), (Join-Path $packageRoot 'assets/branding'), (Join-Path $packageRoot 'assets/icons'), (Join-Path $packageRoot 'licenses'), $OutputDirectory | Out-Null
+    foreach ($path in $packageRoot, $setupRuntime) {
+        if (Test-Path -LiteralPath $path) { Remove-Item -Recurse -Force -LiteralPath $path }
+    }
+    New-Item -ItemType Directory -Force (Join-Path $packageRoot 'platforms'), (Join-Path $packageRoot 'assets/branding'), (Join-Path $packageRoot 'assets/icons'), (Join-Path $packageRoot 'licenses'), (Join-Path $setupRuntime 'platforms'), (Join-Path $setupRuntime 'assets/branding') | Out-Null
     Copy-RequiredFile 'out/cargo/release/wolfmark.exe' (Join-Path $packageRoot 'Wolfmark.exe')
     foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $packageRoot }
     Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $packageRoot 'platforms')
@@ -165,8 +174,12 @@ try {
     Copy-RequiredFile 'LICENSE' $packageRoot
     Copy-RequiredFile 'docs/licenses/Qt-LGPL-3.0-only.txt' (Join-Path $packageRoot 'licenses')
     Copy-RequiredFile 'LICENSE' (Join-Path $packageRoot 'licenses/Qt-GPL-3.0-only.txt')
-    Copy-RequiredFile 'docs/licenses/WiX-OSMF-EULA.txt' (Join-Path $packageRoot 'licenses')
+    Copy-RequiredFile 'docs/licenses/NSIS-zlib-license.txt' (Join-Path $packageRoot 'licenses')
     foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $packageRoot }
+
+    $maintenance = 'out/cargo/release/WolfmarkMaintenance.exe'
+    & $maintenance manifest --payload $packageRoot --identity $identityPath --output (Join-Path $packageRoot 'payload-manifest.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Payload manifest generation failed.' }
 
     $savedPath = $env:PATH
     try {
@@ -177,78 +190,37 @@ try {
 
     $artifacts = @()
     if (-not $SkipInstaller) {
-        $wix = Find-Wix
+        $nsis = Find-Nsis
         $msbuild = Join-Path $visualStudio 'MSBuild/Current/Bin/MSBuild.exe'
-        if (-not (Test-Path -LiteralPath $msbuild -PathType Leaf)) { throw "MSBuild was not found at $msbuild." }
-        $wixRoot = Assert-UnderOut (Join-Path $outRoot 'package/wix')
-        $baBuild = Join-Path $wixRoot 'bootstrapper-build'
-        $baPayload = Join-Path $wixRoot 'bootstrapper-payload'
-        $msiUiBuild = Join-Path $wixRoot 'msi-ui-build'
-        $msiUiPayload = Join-Path $wixRoot 'msi-ui-payload'
-        $nugetPackages = Assert-UnderOut (Join-Path $outRoot 'cache/nuget')
-        $baApi = Join-Path $nugetPackages 'wixtoolset.bootstrapperapplicationapi/7.0.0'
-        if (-not (Test-Path -LiteralPath $baApi -PathType Container)) { throw 'WiX bootstrapper API packages are missing. Run: cargo setup' }
-        if (Test-Path -LiteralPath $baBuild) { Remove-Item -Recurse -Force -LiteralPath $baBuild }
-        if (Test-Path -LiteralPath $baPayload) { Remove-Item -Recurse -Force -LiteralPath $baPayload }
-        if (Test-Path -LiteralPath $msiUiBuild) { Remove-Item -Recurse -Force -LiteralPath $msiUiBuild }
-        if (Test-Path -LiteralPath $msiUiPayload) { Remove-Item -Recurse -Force -LiteralPath $msiUiPayload }
-        $generated = Join-Path $baBuild 'generated'
-        New-Item -ItemType Directory -Force $generated, (Join-Path $baPayload 'platforms'), (Join-Path $baPayload 'assets/branding') | Out-Null
-        Set-Content -LiteralPath (Join-Path $generated 'wolfmark_setup_version.h') -Encoding ascii -Value @(
+        $buildRoot = Assert-UnderOut (Join-Path $outRoot 'package/nsis/setup-build')
+        if (Test-Path -LiteralPath $buildRoot) { Remove-Item -Recurse -Force -LiteralPath $buildRoot }
+        New-Item -ItemType Directory -Force (Join-Path $buildRoot 'generated'), (Join-Path $buildRoot 'bin') | Out-Null
+        Set-Content -LiteralPath (Join-Path $buildRoot 'generated/wolfmark_setup_version.h') -Encoding ascii -Value @(
             "#define WOLFMARK_SETUP_VERSION_COMMAS $($windowsVersion.Resource)",
             "#define WOLFMARK_SETUP_VERSION_STRING `"$version`""
         )
         Invoke-MsBuild $msbuild @(
-            'packaging\windows\bootstrapper\WolfmarkSetup.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
-            "/p:QtRoot=$QtRoot", "/p:ProjectRoot=$projectRoot", "/p:WolfmarkOutputDir=$(Join-Path $baBuild 'bin')",
-            "/p:WolfmarkIntermediateDir=$(Join-Path $baBuild 'obj')", "/p:WolfmarkGeneratedDir=$generated",
-            "/p:RestorePackagesPath=$nugetPackages", '/p:AcceptEula=wix7', '/m:1', '/nr:false', '/v:minimal'
+            'packaging\windows\setup-ui\WolfmarkSetup.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
+            "/p:QtRoot=$QtRoot", "/p:ProjectRoot=$projectRoot", "/p:WolfmarkOutputDir=$(Join-Path $buildRoot 'bin')",
+            "/p:WolfmarkIntermediateDir=$(Join-Path $buildRoot 'obj')", "/p:WolfmarkGeneratedDir=$(Join-Path $buildRoot 'generated')",
+            '/m:1', '/nr:false', '/v:minimal'
         )
-        $bootstrapperExe = Join-Path $baBuild 'bin/WolfmarkSetup.exe'
-        if (-not (Test-Path -LiteralPath $bootstrapperExe -PathType Leaf)) { throw "Native bootstrapper is missing: $bootstrapperExe" }
-        foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $baPayload }
-        Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $baPayload 'platforms')
-        Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' (Join-Path $baPayload 'assets/branding')
-        Set-Content -LiteralPath (Join-Path $baPayload 'qt.conf') -Encoding ascii -Value @('[Paths]', 'Plugins=.')
-        Copy-RequiredFile 'docs/licenses/WiX-OSMF-EULA.txt' $baPayload
-        foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $baPayload }
+        Copy-RequiredFile (Join-Path $buildRoot 'bin/WolfmarkSetup.exe') $setupRuntime
+        Copy-RequiredFile $maintenance $setupRuntime
+        foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $setupRuntime }
+        Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $setupRuntime 'platforms')
+        Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' (Join-Path $setupRuntime 'assets/branding')
+        Set-Content -LiteralPath (Join-Path $setupRuntime 'qt.conf') -Encoding ascii -Value @('[Paths]', 'Plugins=.')
+        foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $setupRuntime }
 
-        New-Item -ItemType Directory -Force (Join-Path $msiUiBuild 'bin'), $msiUiPayload | Out-Null
-        Invoke-MsBuild $msbuild @(
-            'packaging\windows\msi-ui\WolfmarkMsiUi.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
-            "/p:QtRoot=$QtRoot", "/p:WolfmarkOutputDir=$(Join-Path $msiUiBuild 'bin')",
-            "/p:WolfmarkIntermediateDir=$(Join-Path $msiUiBuild 'host-obj')", '/m:1', '/nr:false', '/v:minimal'
-        )
-        Invoke-MsBuild $msbuild @(
-            'packaging\windows\msi-ui\WolfmarkMsiEmbeddedUI.vcxproj', '/t:Build', '/p:Configuration=Release', '/p:Platform=x64',
-            "/p:WolfmarkOutputDir=$(Join-Path $msiUiBuild 'bin')",
-            "/p:WolfmarkIntermediateDir=$(Join-Path $msiUiBuild 'stub-obj')", '/m:1', '/nr:false', '/v:minimal'
-        )
-        Copy-RequiredFile (Join-Path $msiUiBuild 'bin/WolfmarkMsiUi.dll') $msiUiPayload
-        Copy-RequiredFile (Join-Path $msiUiBuild 'bin/WolfmarkMsiEmbeddedUI.dll') $msiUiPayload
-        foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $msiUiPayload }
-        Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $msiUiPayload 'qwindows.dll')
-        Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' $msiUiPayload
-        foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $msiUiPayload }
-
-        $msiBuild = Join-Path $wixRoot 'msi'
-        $bundleBuild = Join-Path $wixRoot 'bundle'
-        New-Item -ItemType Directory -Force $msiBuild, $bundleBuild | Out-Null
-        $builtMsi = Join-Path $msiBuild 'Wolfmark-win-x64.msi'
-        $builtSetup = Join-Path $bundleBuild 'Wolfmark-Setup-win-x64.exe'
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Payload=$packageRoot" -bindpath "EmbeddedUI=$msiUiPayload" -d "MsiVersion=$($windowsVersion.Msi)" -d "DisplayVersion=$version" -d "MsiProductCode=$($installerIdentity.msiProductCode)" -d "MsiUpgradeCode=$($installerIdentity.msiUpgradeCode)" -d "ProjectRoot=$projectRoot" -intermediatefolder (Join-Path $msiBuild 'obj') 'packaging/windows/wix/Wolfmark.wxs' -o $builtMsi
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtMsi -PathType Leaf)) { throw 'Wolfmark MSI compilation failed.' }
-        & $wix build -acceptEula wix7 -arch x64 -bindpath "Bootstrapper=$baPayload" -d "BundleVersion=$($windowsVersion.Bundle)" -d "DisplayVersion=$version" -d "BundleUpgradeCode=$($installerIdentity.bundleUpgradeCode)" -d "BundleProviderKey=$($installerIdentity.bundleProviderKey)" -d "ProjectRoot=$projectRoot" -d "MsiPath=$builtMsi" -d "BootstrapperExe=$bootstrapperExe" -intermediatefolder (Join-Path $bundleBuild 'obj') 'packaging/windows/wix/Bundle.wxs' -o $builtSetup
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $builtSetup -PathType Leaf)) { throw 'Wolfmark setup bundle compilation failed.' }
-        Copy-Item -LiteralPath $builtMsi -Destination $msiPath
-        Copy-Item -LiteralPath $builtSetup -Destination $setupPath
-        $artifacts += $setupPath, $msiPath
+        & $nsis /V3 "/DOUTPUT_EXE=$setupPath" "/DSETUP_RUNTIME=$setupRuntime" "/DPAYLOAD_ROOT=$packageRoot" "/DDISPLAY_VERSION=$version" "/DWINDOWS_VERSION=$($windowsVersion.Dotted)" 'packaging/windows/nsis/Wolfmark.nsi'
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw 'Wolfmark NSIS setup compilation failed.' }
+        $artifacts += $setupPath
     }
 
     $portableMarker = Join-Path $packageRoot 'portable.flag'
     try {
         Set-Content -LiteralPath $portableMarker -Value '' -Encoding utf8NoBOM
-        if (Test-Path -LiteralPath $zipPath) { Remove-Item -Force -LiteralPath $zipPath }
         Compress-Archive -Path $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
     } finally { if (Test-Path -LiteralPath $portableMarker) { Remove-Item -Force -LiteralPath $portableMarker } }
     $artifacts += $zipPath
@@ -256,12 +228,13 @@ try {
         "{0} *{1}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant(), [IO.Path]::GetFileName($artifact)
     }
     Set-Content -LiteralPath $checksumPath -Value $checksumLines -Encoding utf8NoBOM
-
     foreach ($artifact in $artifacts) {
         $item = Get-Item -LiteralPath $artifact
         Write-Host ("{0}: {1:N2} MiB" -f $item.Name, ($item.Length / 1MB))
     }
+    Write-Host "Build identity: $($buildIdentity.buildId) ($($buildIdentity.sourceCommit))"
     Write-Host "Checksums: $checksumPath"
 } finally {
+    Remove-Item Env:WOLFMARK_SOURCE_COMMIT, Env:WOLFMARK_BUILD_ID, Env:WOLFMARK_SOURCE_TIMESTAMP, Env:WOLFMARK_BUILD_CHANNEL -ErrorAction SilentlyContinue
     Pop-Location
 }

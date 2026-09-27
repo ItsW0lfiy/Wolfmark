@@ -8,7 +8,9 @@ enum class InstallerAction {
     Update,
     Modify,
     Repair,
+    Reinstall,
     Uninstall,
+    Diagnose,
 };
 
 enum class InstallerPresence {
@@ -28,6 +30,9 @@ struct InstallerOptions {
 struct InstallerState {
     QString installedVersion;
     QString targetVersion;
+    QString installedBuildId;
+    QString targetBuildId;
+    QString statusDetail;
     InstallerOptions options;
     InstallerAction activeAction = InstallerAction::None;
     InstallerPresence presence = InstallerPresence::None;

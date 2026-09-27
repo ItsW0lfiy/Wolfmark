@@ -12,6 +12,7 @@ authors = ["ItsW0lfiy"]
 [workspace]
 members = [".", "installer/maintenance"]
 default-members = ["."]
+exclude = ["scripts/cargo_alias"]
 resolver = "3"
 
 [dependencies]
