@@ -1,0 +1,39 @@
+[package]
+name = "wolfmark-maintenance"
+version = "0.1.0-dev.7"
+edition = "2024"
+rust-version = "1.94"
+description = "Framework-independent installation and maintenance core for Wolfmark"
+license = "GPL-3.0-only"
+
+[[bin]]
+name = "WolfmarkMaintenance"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4.42", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4.5.53", features = ["derive"] }
+hex = "0.4.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+thiserror = "2.0.17"
+walkdir = "2.5.0"
+winreg = "0.55.0"
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "warn"

@@ -9,6 +9,11 @@ description = "Native Markdown viewer built with Rust, C++20, Qt 6 Widgets, and 
 license = "GPL-3.0-only"
 authors = ["ItsW0lfiy"]
 
+[workspace]
+members = [".", "installer/maintenance"]
+default-members = ["."]
+resolver = "3"
+
 [dependencies]
 comrak = { version = "0.54.0", default-features = false }
 crossbeam-channel = "0.5.15"
