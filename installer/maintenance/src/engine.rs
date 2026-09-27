@@ -46,11 +46,19 @@ pub struct OperationResult {
 
 pub struct Engine {
     paths: EnginePaths,
+    cancel_file: Option<PathBuf>,
 }
 
 impl Engine {
     pub fn new(paths: EnginePaths) -> Self {
-        Self { paths }
+        Self {
+            paths,
+            cancel_file: None,
+        }
+    }
+
+    pub fn with_cancel_file(paths: EnginePaths, cancel_file: Option<PathBuf>) -> Self {
+        Self { paths, cancel_file }
     }
 
     pub fn state(&self) -> Result<Option<InstallState>, String> {
@@ -174,6 +182,8 @@ impl Engine {
             ));
         }
         let previous = self.state()?;
+        integration::request_wolfmark_exit()?;
+        self.check_cancel()?;
         let mut journal = self.begin_journal(
             operation,
             Some(payload_root.to_path_buf()),
@@ -198,6 +208,7 @@ impl Engine {
     }
 
     pub fn repair(&self, uninstaller_source: &Path) -> Result<OperationResult, String> {
+        integration::request_wolfmark_exit()?;
         let state = self
             .state()?
             .ok_or_else(|| "Wolfmark is not installed".to_owned())?;
@@ -269,6 +280,7 @@ impl Engine {
     }
 
     pub fn uninstall(&self) -> Result<OperationResult, String> {
+        integration::request_wolfmark_exit()?;
         let state = self.state()?;
         if let Some(state) = &state {
             for file in &state.manifest.files {
@@ -281,13 +293,19 @@ impl Engine {
             remove_empty_directories(&state.options.install_directory)?;
         }
         integration::remove()?;
-        if self.paths.state_root.exists() {
-            fs::remove_dir_all(&self.paths.state_root).map_err(|error| {
-                format!(
-                    "removing {} failed: {error}",
-                    self.paths.state_root.display()
-                )
-            })?;
+        for entry in [STATE_FILE, JOURNAL_FILE] {
+            let path = self.paths.state_root.join(entry);
+            if path.exists() {
+                fs::remove_file(&path)
+                    .map_err(|error| format!("removing {} failed: {error}", path.display()))?;
+            }
+        }
+        for directory in ["Cache", "Staging", "Backup"] {
+            let path = self.paths.state_root.join(directory);
+            if path.exists() {
+                fs::remove_dir_all(&path)
+                    .map_err(|error| format!("removing {} failed: {error}", path.display()))?;
+            }
         }
         self.result(
             Operation::Uninstall,
@@ -313,6 +331,7 @@ impl Engine {
             .join(&journal.transaction_id);
         copy_manifest_files(payload_root, &staged, manifest)?;
         self.advance(journal, TransactionPhase::PayloadStaged)?;
+        self.check_cancel()?;
 
         let backup = self
             .paths
@@ -327,12 +346,14 @@ impl Engine {
             )?;
         }
         self.advance(journal, TransactionPhase::ExistingBackedUp)?;
+        self.check_cancel()?;
 
         if let Some(previous) = &previous {
             remove_owned_files(&previous.options.install_directory, &previous.manifest)?;
         }
         copy_manifest_files(&staged, &options.install_directory, manifest)?;
         self.advance(journal, TransactionPhase::PayloadApplied)?;
+        self.check_cancel()?;
 
         let uninstaller = self.paths.state_root.join("Wolfmark-Uninstall.exe");
         copy_one(uninstaller_source, &uninstaller)?;
@@ -343,6 +364,7 @@ impl Engine {
             &uninstaller,
         )?;
         self.advance(journal, TransactionPhase::IntegrationApplied)?;
+        self.check_cancel()?;
         let damaged = verify_payload(&options.install_directory, manifest)?;
         if !damaged.is_empty() {
             return Err(format!(
@@ -429,6 +451,13 @@ impl Engine {
 
     fn rollback(&self, journal: &mut TransactionJournal) -> Result<(), String> {
         self.advance(journal, TransactionPhase::RollingBack)?;
+        if let Some(source_payload) = &journal.source_payload
+            && let Some(candidate) = read_json_optional::<PayloadManifest>(
+                &source_payload.join("payload-manifest.json"),
+            )?
+        {
+            remove_owned_files(&journal.target_directory, &candidate)?;
+        }
         if let Some(previous) = &journal.previous_state {
             let backup = self
                 .paths
@@ -437,7 +466,7 @@ impl Engine {
                 .join(&journal.transaction_id);
             if backup.exists() {
                 remove_owned_files(&journal.target_directory, &previous.manifest)?;
-                copy_manifest_files(
+                copy_existing_manifest_files(
                     &backup,
                     &previous.options.install_directory,
                     &previous.manifest,
@@ -481,6 +510,14 @@ impl Engine {
             message,
             log_path,
         })
+    }
+
+    fn check_cancel(&self) -> Result<(), String> {
+        if self.cancel_file.as_ref().is_some_and(|path| path.exists()) {
+            Err("operation cancelled; the previous installation was restored".into())
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -643,5 +680,79 @@ mod tests {
         let cache = root.path().join("cache");
         copy_manifest_files(&payload, &cache, &manifest).unwrap();
         assert!(verify_payload(&cache, &manifest).unwrap().is_empty());
+    }
+
+    #[test]
+    fn detection_distinguishes_exact_damage_and_same_version_lineage() {
+        let root = tempdir().unwrap();
+        let install = root.path().join("install");
+        let state_root = root.path().join("state");
+        fs::create_dir_all(&install).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+        fs::write(install.join("Wolfmark.exe"), b"installed").unwrap();
+        let commit_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let commit_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let installed_manifest = build_payload_manifest(&install, identity(commit_a, &[])).unwrap();
+        let state = InstallState {
+            schema_version: STATE_SCHEMA_VERSION,
+            manifest: installed_manifest.clone(),
+            options: InstallOptions {
+                install_directory: install.clone(),
+                file_associations: true,
+                desktop_shortcut: false,
+            },
+            installed_at: 1,
+            updated_at: 1,
+        };
+        write_json_atomic(&state_root.join(STATE_FILE), &state).unwrap();
+        let engine = Engine::new(EnginePaths {
+            state_root: state_root.clone(),
+            cache_root: state_root.join("Cache"),
+            log_root: state_root.join("Logs"),
+        });
+        assert!(matches!(
+            engine.detect(Some(&installed_manifest)).unwrap(),
+            InstallationStatus::Exact { .. }
+        ));
+
+        let mut candidate = installed_manifest.clone();
+        candidate.build = identity(commit_b, &[commit_a]);
+        assert!(matches!(
+            engine.detect(Some(&candidate)).unwrap(),
+            InstallationStatus::SameVersionInstalledAncestor { .. }
+        ));
+
+        fs::write(install.join("Wolfmark.exe"), b"damaged").unwrap();
+        assert!(matches!(
+            engine.detect(Some(&installed_manifest)).unwrap(),
+            InstallationStatus::Damaged { .. }
+        ));
+    }
+
+    #[test]
+    fn unfinished_journal_is_reported_before_install_state() {
+        let root = tempdir().unwrap();
+        let paths = EnginePaths {
+            state_root: root.path().join("state"),
+            cache_root: root.path().join("state/Cache"),
+            log_root: root.path().join("state/Logs"),
+        };
+        fs::create_dir_all(&paths.state_root).unwrap();
+        let journal = TransactionJournal {
+            schema_version: STATE_SCHEMA_VERSION,
+            transaction_id: "test".into(),
+            operation: Operation::Update,
+            phase: TransactionPhase::PayloadApplied,
+            started_at: 1,
+            source_payload: None,
+            target_directory: root.path().join("install"),
+            previous_state: None,
+            error: None,
+        };
+        write_json_atomic(&paths.state_root.join(JOURNAL_FILE), &journal).unwrap();
+        assert!(matches!(
+            Engine::new(paths).detect(None).unwrap(),
+            InstallationStatus::Interrupted { .. }
+        ));
     }
 }

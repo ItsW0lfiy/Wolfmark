@@ -1,12 +1,19 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoUninitialize, IPersistFile,
 };
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+};
 use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
-use windows::core::{Interface, PCWSTR};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowThreadProcessId, PostMessageW, WM_CLOSE,
+};
+use windows::core::{BOOL, Interface, PCWSTR};
 use winreg::RegKey;
 use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE};
 
@@ -14,6 +21,10 @@ use crate::InstallOptions;
 
 const APPLICATION_KEY: &str = r"Software\Classes\Applications\Wolfmark.exe";
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Wolfmark";
+const INSTALLER_KEY: &str = r"Software\ItsW0lfiy\Wolfmark\Installer";
+const CAPABILITIES_KEY: &str = r"Software\ItsW0lfiy\Wolfmark\Capabilities";
+const MARKDOWN_PROGID: &str = r"Software\Classes\Wolfmark.MarkdownDocument";
+const TEXT_PROGID: &str = r"Software\Classes\Wolfmark.TextDocument";
 
 struct ComGuard;
 
@@ -98,9 +109,6 @@ pub fn apply(
     application
         .set_value("FriendlyAppName", &"Wolfmark")
         .map_err(|error| error.to_string())?;
-    application
-        .set_value("NoOpenWith", &"")
-        .map_err(|error| error.to_string())?;
     let (command_key, _) = application
         .create_subkey_with_flags(r"shell\open\command", KEY_READ | KEY_WRITE)
         .map_err(|error| error.to_string())?;
@@ -120,6 +128,30 @@ pub fn apply(
         }
     }
 
+    let (installer, _) = hklm
+        .create_subkey_with_flags(INSTALLER_KEY, KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    installer
+        .set_value(
+            "InstallDir",
+            &options.install_directory.to_string_lossy().as_ref(),
+        )
+        .map_err(|error| error.to_string())?;
+    installer
+        .set_value("Version", &version)
+        .map_err(|error| error.to_string())?;
+    installer
+        .set_value("FileAssociations", &u32::from(options.file_associations))
+        .map_err(|error| error.to_string())?;
+    installer
+        .set_value("DesktopShortcut", &u32::from(options.desktop_shortcut))
+        .map_err(|error| error.to_string())?;
+    if options.file_associations {
+        write_file_associations(&hklm, &options.install_directory, &executable, &command)?;
+    } else {
+        remove_file_associations(&hklm)?;
+    }
+
     let (uninstall, _) = hklm
         .create_subkey_with_flags(UNINSTALL_KEY, KEY_READ | KEY_WRITE)
         .map_err(|error| format!("creating Installed Apps registration failed: {error}"))?;
@@ -131,6 +163,15 @@ pub fn apply(
         .map_err(|error| error.to_string())?;
     uninstall
         .set_value("Publisher", &"ItsW0lfiy")
+        .map_err(|error| error.to_string())?;
+    uninstall
+        .set_value("URLInfoAbout", &"https://github.com/ItsW0lfiy/Wolfmark")
+        .map_err(|error| error.to_string())?;
+    uninstall
+        .set_value("HelpLink", &"https://github.com/ItsW0lfiy/Wolfmark/issues")
+        .map_err(|error| error.to_string())?;
+    uninstall
+        .set_value("Comments", &"Native Markdown and text document viewer")
         .map_err(|error| error.to_string())?;
     uninstall
         .set_value(
@@ -185,7 +226,8 @@ pub fn apply(
 
 pub fn remove() -> Result<(), String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    for key in [APPLICATION_KEY, UNINSTALL_KEY] {
+    remove_file_associations(&hklm)?;
+    for key in [APPLICATION_KEY, UNINSTALL_KEY, INSTALLER_KEY] {
         match hklm.delete_subkey_all(key) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -201,6 +243,131 @@ pub fn remove() -> Result<(), String> {
     Ok(())
 }
 
+fn write_file_associations(
+    hklm: &RegKey,
+    install_directory: &Path,
+    executable: &Path,
+    command: &str,
+) -> Result<(), String> {
+    let (registered, _) = hklm
+        .create_subkey_with_flags(r"Software\RegisteredApplications", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    registered
+        .set_value("Wolfmark", &r"Software\ItsW0lfiy\Wolfmark\Capabilities")
+        .map_err(|error| error.to_string())?;
+    let (capabilities, _) = hklm
+        .create_subkey_with_flags(CAPABILITIES_KEY, KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    capabilities
+        .set_value("ApplicationName", &"Wolfmark")
+        .map_err(|error| error.to_string())?;
+    capabilities
+        .set_value(
+            "ApplicationDescription",
+            &"Native Markdown and text document viewer",
+        )
+        .map_err(|error| error.to_string())?;
+    capabilities
+        .set_value("ApplicationIcon", &format!("{},0", executable.display()))
+        .map_err(|error| error.to_string())?;
+    let (associations, _) = capabilities
+        .create_subkey_with_flags("FileAssociations", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    associations
+        .set_value(".md", &"Wolfmark.MarkdownDocument")
+        .map_err(|error| error.to_string())?;
+    associations
+        .set_value(".markdown", &"Wolfmark.MarkdownDocument")
+        .map_err(|error| error.to_string())?;
+    associations
+        .set_value(".txt", &"Wolfmark.TextDocument")
+        .map_err(|error| error.to_string())?;
+    write_progid(
+        hklm,
+        MARKDOWN_PROGID,
+        "Wolfmark Markdown Document",
+        &install_directory.join(r"assets\icons\wolfmark-markdown.ico"),
+        command,
+    )?;
+    write_progid(
+        hklm,
+        TEXT_PROGID,
+        "Wolfmark Text Document",
+        &install_directory.join(r"assets\icons\wolfmark-text.ico"),
+        command,
+    )?;
+    for (extension, progid) in [
+        (".md", "Wolfmark.MarkdownDocument"),
+        (".markdown", "Wolfmark.MarkdownDocument"),
+        (".txt", "Wolfmark.TextDocument"),
+    ] {
+        let (open_with, _) = hklm
+            .create_subkey_with_flags(
+                format!(r"Software\Classes\{extension}\OpenWithProgids"),
+                KEY_READ | KEY_WRITE,
+            )
+            .map_err(|error| error.to_string())?;
+        open_with
+            .set_value(progid, &"")
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn write_progid(
+    hklm: &RegKey,
+    key: &str,
+    description: &str,
+    icon: &Path,
+    command: &str,
+) -> Result<(), String> {
+    let (progid, _) = hklm
+        .create_subkey_with_flags(key, KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    progid
+        .set_value("", &description)
+        .map_err(|error| error.to_string())?;
+    let (default_icon, _) = progid
+        .create_subkey_with_flags("DefaultIcon", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    default_icon
+        .set_value("", &icon.to_string_lossy().as_ref())
+        .map_err(|error| error.to_string())?;
+    let (open, _) = progid
+        .create_subkey_with_flags(r"shell\open\command", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    open.set_value("", &command)
+        .map_err(|error| error.to_string())
+}
+
+fn remove_file_associations(hklm: &RegKey) -> Result<(), String> {
+    if let Ok(registered) =
+        hklm.open_subkey_with_flags(r"Software\RegisteredApplications", KEY_READ | KEY_WRITE)
+    {
+        let _ = registered.delete_value("Wolfmark");
+    }
+    for key in [CAPABILITIES_KEY, MARKDOWN_PROGID, TEXT_PROGID] {
+        match hklm.delete_subkey_all(key) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("removing registry key {key} failed: {error}")),
+        }
+    }
+    for (extension, progid) in [
+        (".md", "Wolfmark.MarkdownDocument"),
+        (".markdown", "Wolfmark.MarkdownDocument"),
+        (".txt", "Wolfmark.TextDocument"),
+    ] {
+        if let Ok(open_with) = hklm.open_subkey_with_flags(
+            format!(r"Software\Classes\{extension}\OpenWithProgids"),
+            KEY_READ | KEY_WRITE,
+        ) {
+            let _ = open_with.delete_value(progid);
+        }
+    }
+    Ok(())
+}
+
 pub fn registration_exists() -> bool {
     RegKey::predef(HKEY_LOCAL_MACHINE)
         .open_subkey(APPLICATION_KEY)
@@ -208,4 +375,68 @@ pub fn registration_exists() -> bool {
         || RegKey::predef(HKEY_LOCAL_MACHINE)
             .open_subkey(UNINSTALL_KEY)
             .is_ok()
+}
+
+pub fn request_wolfmark_exit() -> Result<(), String> {
+    let mut process_ids = wolfmark_process_ids()?;
+    if process_ids.is_empty() {
+        return Ok(());
+    }
+    for process_id in &process_ids {
+        unsafe extern "system" fn close_window(window: HWND, parameter: LPARAM) -> BOOL {
+            let mut owner = 0_u32;
+            unsafe { GetWindowThreadProcessId(window, Some(&mut owner)) };
+            if owner == parameter.0 as u32 {
+                let _ = unsafe { PostMessageW(Some(window), WM_CLOSE, WPARAM(0), LPARAM(0)) };
+            }
+            true.into()
+        }
+        unsafe { EnumWindows(Some(close_window), LPARAM(*process_id as isize)) }
+            .map_err(|error| format!("requesting Wolfmark shutdown failed: {error}"))?;
+    }
+    for _ in 0..100 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_ids = wolfmark_process_ids()?;
+        if process_ids.is_empty() {
+            return Ok(());
+        }
+    }
+    Err(format!(
+        "Wolfmark is still running (process {}). Close it and retry.",
+        process_ids
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+fn wolfmark_process_ids() -> Result<Vec<u32>, String> {
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }
+        .map_err(|error| format!("enumerating processes failed: {error}"))?;
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut result = Vec::new();
+    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+        loop {
+            let length = entry
+                .szExeFile
+                .iter()
+                .position(|character| *character == 0)
+                .unwrap_or(entry.szExeFile.len());
+            if String::from_utf16_lossy(&entry.szExeFile[..length])
+                .eq_ignore_ascii_case("Wolfmark.exe")
+            {
+                result.push(entry.th32ProcessID);
+            }
+            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+                break;
+            }
+        }
+    }
+    unsafe { CloseHandle(snapshot) }
+        .map_err(|error| format!("closing process snapshot failed: {error}"))?;
+    Ok(result)
 }
