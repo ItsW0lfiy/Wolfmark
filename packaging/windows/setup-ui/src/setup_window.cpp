@@ -521,7 +521,7 @@ void SetupWindow::showSmokeState(const QString& stateName) {
     if (stateName == QStringLiteral("install")) {
         smoke.activeAction = InstallerAction::Install;
         showInstall(smoke);
-    } else if (stateName == QStringLiteral("upgrade")) {
+    } else if (stateName == QStringLiteral("upgrade") || stateName == QStringLiteral("update")) {
         showUpdate(smoke);
     } else if (stateName == QStringLiteral("maintenance")) {
         showMaintenance(smoke);
