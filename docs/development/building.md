@@ -20,6 +20,7 @@ Cargo aliases provide the normal Wolfmark workflow:
 | Command | Purpose |
 | --- | --- |
 | `cargo app` | Build Wolfmark in Release mode and launch it. Arguments may follow `--`, as with `cargo app -- README.md`. |
+| `cargo all` | Prepare tooling, run all workspace checks/tests/strict lint, build Release, smoke the application, and create the Windows release artifacts. |
 | `cargo build-app` | Build the Release application without launching. |
 | `cargo setup` | Verify MSVC and prepare the pinned project-local Qt and NSIS 3.12 toolchains only when missing. |
 | `cargo package-app` | Build the setup EXE, portable ZIP, and `SHA256SUMS.txt`. |
@@ -27,6 +28,8 @@ Cargo aliases provide the normal Wolfmark workflow:
 | `cargo deep-clean` | Also remove project-local downloaded/bootstrap toolchains and caches. |
 
 Cargo's built-in `cargo package` command remains unchanged; Wolfmark uses `cargo package-app` because Cargo aliases cannot override built-in commands.
+
+`cargo all` is the complete non-interactive validation and packaging path. It deliberately does not run `cargo clean-app`, `cargo deep-clean`, or leave the normal application window open. Official packaging still requires a clean worktree; use `cargo all -- -AllowDirty` only for clearly marked local test artifacts.
 
 ## Toolchain
 

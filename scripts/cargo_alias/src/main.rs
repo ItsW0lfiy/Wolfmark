@@ -20,6 +20,7 @@ fn main() -> ExitCode {
     let scripts = root.join("scripts");
     let (script, extra_arguments): (&str, &[&str]) = match action.as_str() {
         "setup" => ("setup.ps1", &[]),
+        "all" => ("all.ps1", &[]),
         "package" => ("package_windows.ps1", &[]),
         "clean" => ("clean.ps1", &[]),
         "deep-clean" => ("clean.ps1", &["-Deep"]),
