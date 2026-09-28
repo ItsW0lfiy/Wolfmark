@@ -78,7 +78,7 @@ fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    Err("Qt 6.11.2 or another compatible Qt 6 Widgets SDK was not found. Set WOLFMARK_QT_DIR or QTDIR, or run scripts/bootstrap_qt.ps1 on Windows.".into())
+    Err("Qt 6.11.2 or another compatible Qt 6 Widgets SDK was not found. Run `cargo setup` from the Wolfmark repository root, or set WOLFMARK_QT_DIR or QTDIR.".into())
 }
 
 fn qt_is_usable(path: &Path) -> bool {

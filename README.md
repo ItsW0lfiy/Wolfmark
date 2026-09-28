@@ -23,7 +23,7 @@ Build the setup EXE, portable ZIP, and checksums with:
 cargo package-app
 ```
 
-`cargo build-app` builds the Release application without launching it. `cargo clean-app` removes normal generated output; `cargo deep-clean` also removes project-local downloaded SDK/compiler caches. Standard commands such as `cargo check`, `cargo test`, `cargo run`, `cargo build --release`, and `cargo clippy` continue to work normally.
+`cargo build-app` builds the Release application without launching it. `cargo clean-app` removes normal generated output; `cargo deep-clean` also removes project-local downloaded SDK/compiler caches, so run `cargo setup` again afterward. Standard commands such as `cargo check`, `cargo test`, `cargo run`, `cargo build --release`, and `cargo clippy` continue to work normally.
 
 ## Architecture
 
