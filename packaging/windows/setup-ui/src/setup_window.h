@@ -46,6 +46,7 @@ private:
     InstallerOptions optionsFromControls() const;
     void chooseInstallFolder();
     void applyStyle();
+    void openWindowsDefaults();
     QString actionTitle(InstallerAction action) const;
     QString actionProgressDetail(InstallerAction action) const;
 
@@ -65,6 +66,7 @@ private:
     QPushButton* primaryButton_ = nullptr;
     QWidget* maintenancePage_ = nullptr;
     QLabel* maintenanceVersion_ = nullptr;
+    QPushButton* maintenanceDefaults_ = nullptr;
     QWidget* confirmationPage_ = nullptr;
     QLabel* confirmationTitle_ = nullptr;
     QLabel* confirmationDetail_ = nullptr;
@@ -77,6 +79,7 @@ private:
     QLabel* completeTitle_ = nullptr;
     QLabel* completeDetail_ = nullptr;
     QCheckBox* launchCheck_ = nullptr;
+    QPushButton* completeDefaults_ = nullptr;
     QWidget* errorPage_ = nullptr;
     QLabel* errorSummary_ = nullptr;
     QLabel* errorDetails_ = nullptr;

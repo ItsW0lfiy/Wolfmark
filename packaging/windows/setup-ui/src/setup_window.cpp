@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -19,6 +20,9 @@
 #include <QStackedWidget>
 #include <QStyle>
 #include <QVBoxLayout>
+#include <QUrl>
+
+#include "bootstrap_log.h"
 
 namespace {
 class WolfmarkSymbol final : public QWidget {
@@ -168,9 +172,9 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
-    associationsCheck_ = new QCheckBox(QStringLiteral("Add Wolfmark to Open With"));
+    associationsCheck_ = new QCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"));
     desktopCheck_ = new QCheckBox(QStringLiteral("Create a desktop shortcut"));
-    associationsCheck_->setAccessibleName(QStringLiteral("Add Wolfmark to Open With"));
+    associationsCheck_->setAccessibleName(QStringLiteral("Register for Open With and Windows Default Apps"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
     layout->addWidget(associationsCheck_);
     layout->addWidget(desktopCheck_);
@@ -224,6 +228,9 @@ QWidget* SetupWindow::createMaintenancePage() {
     auto* close = makeButton(QStringLiteral("Close"));
     connect(close, &QPushButton::clicked, this, &QWidget::close);
     auto* actions = new QHBoxLayout;
+    maintenanceDefaults_ = makeButton(QStringLiteral("Choose Windows defaults"));
+    connect(maintenanceDefaults_, &QPushButton::clicked, this, &SetupWindow::openWindowsDefaults);
+    actions->addWidget(maintenanceDefaults_);
     actions->addStretch(1);
     actions->addWidget(close);
     layout->addLayout(actions);
@@ -312,6 +319,9 @@ QWidget* SetupWindow::createCompletePage() {
     launchCheck_ = new QCheckBox(QStringLiteral("Launch Wolfmark"));
     launchCheck_->setChecked(true);
     layout->addWidget(launchCheck_);
+    completeDefaults_ = makeButton(QStringLiteral("Choose Windows defaults"));
+    connect(completeDefaults_, &QPushButton::clicked, this, &SetupWindow::openWindowsDefaults);
+    layout->addWidget(completeDefaults_);
     layout->addStretch(1);
     auto* finish = makeButton(QStringLiteral("Finish"), true);
     connect(finish, &QPushButton::clicked, this, [this] {
@@ -403,6 +413,7 @@ void SetupWindow::showMaintenance(const InstallerState& state) {
                           .arg(state.installedVersion, state.installedBuildId);
     if (!state.statusDetail.isEmpty()) details += QStringLiteral("\n") + state.statusDetail;
     maintenanceVersion_->setText(details);
+    maintenanceDefaults_->setVisible(state.options.fileAssociations);
     pages_->setCurrentWidget(maintenancePage_);
 }
 
@@ -473,7 +484,16 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
         break;
     }
     launchCheck_->setVisible(action == InstallerAction::Install || action == InstallerAction::Update || action == InstallerAction::Reinstall);
+    completeDefaults_->setVisible(action != InstallerAction::Uninstall && state.options.fileAssociations);
     pages_->setCurrentWidget(completePage_);
+}
+
+void SetupWindow::openWindowsDefaults() {
+    const QUrl target(QStringLiteral("ms-settings:defaultapps?registeredAppMachine=Wolfmark"));
+    const bool launched = QDesktopServices::openUrl(target);
+    BootstrapLog::write(QStringLiteral("stage=windows-default-apps launched=%1").arg(launched));
+    if (!launched) QMessageBox::warning(this, QStringLiteral("Windows Default Apps"),
+        QStringLiteral("Windows Default Apps could not be opened. Open Settings > Apps > Default apps and search for Wolfmark."));
 }
 
 void SetupWindow::showFailure(const QString& summary, const QString& details) {

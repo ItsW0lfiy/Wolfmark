@@ -31,11 +31,20 @@ The implemented conventional registration model is:
 
 - an application registration under `RegisteredApplications`;
 - Wolfmark capabilities with `FileAssociations` entries;
-- one Wolfmark-owned document ProgID and quoted `shell\open\command`;
-- `Applications\Wolfmark.exe\SupportedTypes` for Open With discovery;
+- separate Wolfmark-owned Markdown/text ProgIDs and quoted `shell\open\command`;
+- `Applications\Wolfmark.exe\SupportedTypes`, friendly name and application icon for Open With discovery;
+- an installed-executable `App Paths\Wolfmark.exe` entry, without changing the system PATH;
 - uninstall flags that remove only Wolfmark-owned registration;
 - an Explorer association-change notification after install/uninstall.
 
 The native setup UI offers Open With registration and the user may opt out or later change it through maintenance. It registers availability but does not overwrite Windows `UserChoice` or silently claim the current default. On modern Windows, the user remains authoritative through Open With / Default Apps. Portable archives perform no registration.
+
+Setup's completion and maintenance pages offer **Choose Windows defaults** when file registration is enabled. This opens the system-owned `ms-settings:defaultapps?registeredAppMachine=Wolfmark` page; it does not set a default. Failure to open Settings is reported, with instructions to open it manually. Silent setup does not open Settings.
+
+After successful install, repair, option changes, rollback restoration or uninstall, the maintenance core sends `SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT, ...)` so Explorer refreshes its association information. The pre-fix core wrote registration without this notification. Windows owns the next-file-open chooser and any **New** label: registration makes Wolfmark eligible, but setup does not manufacture a label, reset per-user chooser history, or force a prompt. Reinstalling an already-known ProgID is not a fresh application registration for every user.
+
+Registry regression tests use uniquely named, isolated HKCU test subtrees, not live file associations. They verify the installed path/quoting, all three file types, Default Apps capabilities and opt-out cleanup while retaining another application's registration, extension default and simulated UserChoice/hash. The restricted Codex sandbox denies these test writes; run the tests from an ordinary Windows developer shell or with approved unsandboxed execution. No administrator rights are needed for those isolated tests.
+
+References: [Windows app defaults platform](https://learn.microsoft.com/en-us/windows/apps/develop/windows-integration/default-apps-platform), [Default Apps Settings URI](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-apps-settings), [application registration](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration), [Shell association-change notification](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shchangenotify).
 
 Dev.7 deliberately retains a multiple-process policy: an Explorer invocation may create a new Wolfmark process. No single-instance mutex, named pipe, or shell-routing IPC is part of this milestone.
