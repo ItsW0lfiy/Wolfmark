@@ -11,6 +11,7 @@
 
 #include "setup_window.h"
 #include "wolfmark_setup_version.h"
+#include "bootstrap_log.h"
 
 namespace {
 QString buildField(const QJsonObject& value, const char* name) {
@@ -42,11 +43,18 @@ void MaintenanceController::initialize() {
 
 int MaintenanceController::runSilent() {
     QProcess detect;
+    BootstrapLog::write(QStringLiteral("stage=core-detect mode=silent program=%1 manifest=%2").arg(paths_.maintenance, paths_.manifest));
     detect.start(paths_.maintenance, detectArguments());
-    if (!detect.waitForStarted() || !detect.waitForFinished(-1) || detect.exitCode() != 0) {
+    if (!detect.waitForStarted() || !detect.waitForFinished(-1)) {
+        BootstrapLog::write(QStringLiteral("stage=core-detect process-error=%1").arg(detect.errorString()));
         return ERROR_INSTALL_FAILURE;
     }
+    BootstrapLog::write(QStringLiteral("stage=core-detect child-exit=%1 status=%2 stderr=%3")
+        .arg(detect.exitCode()).arg(static_cast<int>(detect.exitStatus())).arg(QString::fromUtf8(detect.readAllStandardError())));
+    if (detect.exitStatus() != QProcess::NormalExit) return ERROR_INSTALL_FAILURE;
+    if (detect.exitCode() != 0) return detect.exitCode();
     if (!parseDetection(detect.readAllStandardOutput(), false)) {
+        BootstrapLog::write(QStringLiteral("stage=core-detect invalid-json-or-state"));
         return ERROR_INSTALL_FAILURE;
     }
     InstallerAction action = requestedInstallerAction();
@@ -64,11 +72,15 @@ int MaintenanceController::runSilent() {
     }
     if (action == InstallerAction::Diagnose) return ERROR_SUCCESS;
     QProcess operation;
+    BootstrapLog::write(QStringLiteral("stage=core-operation arguments=%1").arg(operationArguments(action, state_.options).join(QLatin1Char(' '))));
     operation.start(paths_.maintenance, operationArguments(action, state_.options));
     if (!operation.waitForStarted() || !operation.waitForFinished(-1)) {
+        BootstrapLog::write(QStringLiteral("stage=core-operation process-error=%1").arg(operation.errorString()));
         return ERROR_INSTALL_FAILURE;
     }
-    return operation.exitCode() == 0 ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
+    BootstrapLog::write(QStringLiteral("stage=core-operation child-exit=%1 status=%2 stderr=%3")
+        .arg(operation.exitCode()).arg(static_cast<int>(operation.exitStatus())).arg(QString::fromUtf8(operation.readAllStandardError())));
+    return operation.exitStatus() == QProcess::NormalExit ? operation.exitCode() : ERROR_INSTALL_FAILURE;
 }
 
 void MaintenanceController::begin(InstallerAction action, const InstallerOptions& options) {
@@ -112,17 +124,18 @@ QStringList MaintenanceController::operationArguments(
         const QString operation = action == InstallerAction::Update
             ? QStringLiteral("update")
             : action == InstallerAction::Reinstall ? QStringLiteral("reinstall") : QStringLiteral("install");
-        return {
+        QStringList arguments = {
             QStringLiteral("install"),
             QStringLiteral("--payload"), paths_.payload,
             QStringLiteral("--manifest"), paths_.manifest,
             QStringLiteral("--install-dir"), options.installFolder,
             QStringLiteral("--uninstaller"), paths_.uninstaller,
-            QStringLiteral("--cancel-file"), cancelFile_,
             QStringLiteral("--file-associations"), boolArgument(options.fileAssociations),
             QStringLiteral("--desktop-shortcut"), boolArgument(options.desktopShortcut),
             QStringLiteral("--operation"), operation,
         };
+        if (!cancelFile_.isEmpty()) arguments.append({QStringLiteral("--cancel-file"), cancelFile_});
+        return arguments;
     }
     case InstallerAction::Repair:
         return {QStringLiteral("repair"), QStringLiteral("--uninstaller"), paths_.uninstaller};
@@ -146,13 +159,26 @@ void MaintenanceController::start(
     process_.setProgram(paths_.maintenance);
     process_.setArguments(arguments);
     process_.setProcessChannelMode(QProcess::SeparateChannels);
+    BootstrapLog::write(QStringLiteral("stage=core-launch program=%1 arguments=%2").arg(paths_.maintenance, arguments.join(QLatin1Char(' '))));
+    connect(&process_, &QProcess::errorOccurred, this, [this, detection](QProcess::ProcessError error) {
+        BootstrapLog::write(QStringLiteral("stage=core-process-error error=%1 message=%2").arg(static_cast<int>(error)).arg(process_.errorString()));
+        if (error != QProcess::FailedToStart) return; // Crashes also deliver finished().
+        process_.disconnect(this);
+        exitCode_ = ERROR_INSTALL_FAILURE;
+        if (detection) detectionFinished_ = true;
+        if (window_) window_->showFailure(QStringLiteral("The maintenance core could not start."),
+            process_.errorString() + QStringLiteral("\nDiagnostic log: ") + BootstrapLog::path);
+    });
     connect(&process_, &QProcess::finished, this,
             [this, action, detection](int exitCode, QProcess::ExitStatus status) {
         const QByteArray output = process_.readAllStandardOutput();
         const QString errors = QString::fromUtf8(process_.readAllStandardError()).trimmed();
+        BootstrapLog::write(QStringLiteral("stage=core-exit child-exit=%1 status=%2 stderr=%3")
+            .arg(exitCode).arg(static_cast<int>(status)).arg(errors));
         process_.disconnect(this);
+        if (detection) detectionFinished_ = true;
         if (status != QProcess::NormalExit || exitCode != 0) {
-            exitCode_ = ERROR_INSTALL_FAILURE;
+            exitCode_ = status == QProcess::NormalExit ? exitCode : ERROR_INSTALL_FAILURE;
             if (window_) {
                 window_->showFailure(
                     QStringLiteral("Wolfmark setup could not complete the requested operation."),
@@ -161,9 +187,11 @@ void MaintenanceController::start(
             return;
         }
         if (detection) {
-            if (!parseDetection(output, true) && window_) {
-                window_->showFailure(QStringLiteral("Wolfmark setup state is unreadable."),
-                                     QStringLiteral("The maintenance core returned invalid status data."));
+            if (!parseDetection(output, true)) {
+                exitCode_ = ERROR_INSTALL_FAILURE;
+                BootstrapLog::write(QStringLiteral("stage=core-detect invalid-json-or-state"));
+                if (window_) window_->showFailure(QStringLiteral("Wolfmark setup state is unreadable."),
+                    QStringLiteral("The maintenance core returned invalid status data.\nDiagnostic log: ") + BootstrapLog::path);
             }
             return;
         }
@@ -183,6 +211,13 @@ bool MaintenanceController::parseDetection(const QByteArray& output, bool presen
     const QJsonObject root = document.object();
     const QJsonObject status = root.value(QStringLiteral("status")).toObject();
     statusKind_ = status.value(QStringLiteral("kind")).toString();
+    const QStringList statuses = {QStringLiteral("absent"), QStringLiteral("exact"), QStringLiteral("damaged"),
+        QStringLiteral("older"), QStringLiteral("newer"), QStringLiteral("same-version-installed-ancestor"),
+        QStringLiteral("same-version-candidate-ancestor"), QStringLiteral("diverged"), QStringLiteral("dirty-build"),
+        QStringLiteral("partial"), QStringLiteral("interrupted"), QStringLiteral("inconsistent")};
+    if (!statuses.contains(statusKind_)) return false;
+    BootstrapLog::write(QStringLiteral("stage=detected status=%1 mode=%2 action=%3")
+        .arg(statusKind_, presentUi ? QStringLiteral("interactive") : QStringLiteral("silent"), requestedAction_));
     QJsonObject installedBuild;
     if (status.contains(QStringLiteral("build"))) installedBuild = status.value(QStringLiteral("build")).toObject();
     if (status.contains(QStringLiteral("installed"))) installedBuild = status.value(QStringLiteral("installed")).toObject();

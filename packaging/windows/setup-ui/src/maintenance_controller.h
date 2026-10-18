@@ -30,6 +30,7 @@ public:
     void quit(DWORD exitCode) override;
 
     int exitCode() const { return exitCode_; }
+    bool detectionFinished() const { return detectionFinished_; }
 
 private:
     QStringList detectArguments() const;
@@ -46,6 +47,7 @@ private:
     bool silent_ = false;
     bool cancelRequested_ = false;
     int exitCode_ = ERROR_SUCCESS;
+    bool detectionFinished_ = false;
     SetupWindow* window_ = nullptr;
     QProcess process_;
     InstallerState state_;

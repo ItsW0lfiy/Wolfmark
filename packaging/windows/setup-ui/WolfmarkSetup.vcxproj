@@ -36,6 +36,7 @@
     <ClCompile Include="src\setup_window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\bootstrap_log.h" />
     <ClInclude Include="src\maintenance_controller.h" />
     <ClInclude Include="src\installer_host.h" />
     <ClInclude Include="src\installer_model.h" />
