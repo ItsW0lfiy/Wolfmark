@@ -28,12 +28,14 @@
     <OutDir>$(WolfmarkOutputDir)\</OutDir>
     <IntDir>$(WolfmarkIntermediateDir)\</IntDir>
     <TargetName>WolfmarkSetup</TargetName>
+    <TargetName Condition="'$(WolfmarkSetupContractTests)'=='true'">WolfmarkSetupContractTests</TargetName>
     <RestoreProjectStyle>None</RestoreProjectStyle>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="src\maintenance_controller.cpp" />
-    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\main.cpp" Condition="'$(WolfmarkSetupContractTests)'!='true'" />
     <ClCompile Include="src\setup_window.cpp" />
+    <ClCompile Include="tests\window_contract.cpp" Condition="'$(WolfmarkSetupContractTests)'=='true'" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\bootstrap_log.h" />
@@ -60,6 +62,7 @@
       <AdditionalLibraryDirectories>$(QtRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>Qt6Widgets.lib;Qt6Gui.lib;Qt6Core.lib;version.lib;user32.lib;advapi32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
+      <SubSystem Condition="'$(WolfmarkSetupContractTests)'=='true'">Console</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
     <ResourceCompile>

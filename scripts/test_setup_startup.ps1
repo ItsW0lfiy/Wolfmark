@@ -9,6 +9,7 @@ $version = ((& cargo metadata --format-version 1 --no-deps) | ConvertFrom-Json).
     Where-Object name -eq 'wolfmark' | Select-Object -ExpandProperty version -First 1
 $payload = Join-Path $projectRoot "out/package/staging/$version/Wolfmark"
 New-Item -ItemType Directory -Force $testRoot | Out-Null
+& (Join-Path $PSScriptRoot 'test_setup_ui_contract.ps1')
 
 function Invoke-Checked([string]$Executable, [string[]]$Arguments, [int]$Expected = 0) {
     $start = [Diagnostics.ProcessStartInfo]::new()

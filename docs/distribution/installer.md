@@ -98,9 +98,13 @@ Host startup codes use existing Win32 values, not a new internal numbering schem
 
 The interactive startup regression had two coupled causes: `SilentInstall silent` forced every launch into the unattended host path, and that path supplied `--cancel-file` with an empty value. The Rust parser rejected the empty value with exit 2 before its failure logger; the host then mapped it to 1603. Cancellation paths are now supplied only when a real cancellation file exists. Runtime extraction was not missing: NSIS initializes its plugin directory before the extraction section; explicit initialization now makes the ordering visible in the bootstrap source.
 
+Interactive updates retain the installation directory returned by core detection. Only a fresh install reads the editable location control; update pages hide that control, so its empty or stale text must never replace the detected directory.
+
 ## Release gate
 
 `cargo package-app` gates packaging on real native-host argument parsing, Qt/plugin loading, core detection and rendering under a restricted PATH and unrelated working directory. `scripts/test_windows_setup.ps1` checks exact artifact names, absence of MSI output, hashes, payload-manifest bytes, private Qt setup runtime, portable extraction, and restricted-PATH smoke, then runs `scripts/test_setup_startup.ps1`. The startup suite tests the real Qt/core path and compiles the production NSIS source into test-local bootstraps with a recording Rust maintenance double. It checks extraction, quoting/Unicode/spaces, interactive and silent routing, the generated uninstaller, empty cancellation argument regression, original exit propagation and process-creation failure logging. Only those test copies lower execution level and add a read-only probe; production packages retain required elevation and normal cleanup. These tests do not establish physical UAC or real elevated lifecycle success.
+
+Packaging and the startup suite also run `scripts/test_setup_ui_contract.ps1`, which compiles the production window/controller with a separate native test entry point. It clicks Install/Update, checks fresh and stale hidden-location cases and current option choices, and runs core detection followed by the real Update action against a recording helper that validates the received directory, operation and cancellation arguments. Test executables remain outside the packaged runtime.
 
 The setup script's `-ExecuteLifecycle` mode requires an elevated clean Windows environment and performs two real install/damage/repair/uninstall cycles. It refuses to replace an existing Wolfmark installation without `-AllowExistingWolfmarkReplacement`.
 

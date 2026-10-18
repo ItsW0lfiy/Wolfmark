@@ -19,7 +19,26 @@ fn main() {
         println!("{}", env::var("WOLFMARK_TEST_CORE_STATE").unwrap());
     } else {
         if args.first().is_some_and(|arg| arg == "install") {
-            assert!(!args.iter().any(|arg| arg == "--cancel-file"));
+            if env::var_os("WOLFMARK_TEST_ALLOW_CANCEL").is_none() {
+                assert!(!args.iter().any(|arg| arg == "--cancel-file"));
+            }
+            if let Ok(expected) = env::var("WOLFMARK_TEST_EXPECT_INSTALL_DIR") {
+                let actual = args
+                    .windows(2)
+                    .find(|pair| pair[0] == "--install-dir")
+                    .unwrap();
+                assert_eq!(actual[1], expected);
+                let operation = args
+                    .windows(2)
+                    .find(|pair| pair[0] == "--operation")
+                    .unwrap();
+                assert_eq!(operation[1], "update");
+                let cancel = args
+                    .windows(2)
+                    .find(|pair| pair[0] == "--cancel-file")
+                    .unwrap();
+                assert!(!cancel[1].is_empty() && !cancel[1].starts_with("--"));
+            }
         }
         println!("{{\"changed\":false}}");
     }

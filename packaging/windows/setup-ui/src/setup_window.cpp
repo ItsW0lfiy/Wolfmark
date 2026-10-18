@@ -597,7 +597,8 @@ void SetupWindow::keyPressEvent(QKeyEvent* event) {
 
 InstallerOptions SetupWindow::optionsFromControls() const {
     InstallerOptions options;
-    options.installFolder = locationEdit_->text();
+    options.installFolder = state_.activeAction == InstallerAction::Install
+        ? locationEdit_->text() : state_.options.installFolder;
     options.fileAssociations = associationsCheck_->isChecked();
     options.desktopShortcut = desktopCheck_->isChecked();
     return options;

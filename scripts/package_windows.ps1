@@ -237,6 +237,7 @@ try {
             throw "Native setup startup timed out. See $startupRoot/bootstrap.log."
         }
         if ($startupProcess.ExitCode -ne 0) { throw "Native setup startup failed with exit code $($startupProcess.ExitCode). See $startupRoot/bootstrap.log." }
+        & (Join-Path $PSScriptRoot 'test_setup_ui_contract.ps1') -QtRoot $QtRoot
 
         & $nsis /V3 "/DOUTPUT_EXE=$setupPath" "/DSETUP_RUNTIME=$setupRuntime" "/DPAYLOAD_ROOT=$packageRoot" "/DDISPLAY_VERSION=$version" "/DWINDOWS_VERSION=$($windowsVersion.Dotted)" 'packaging/windows/nsis/Wolfmark.nsi'
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw 'Wolfmark NSIS setup compilation failed.' }
