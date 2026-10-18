@@ -85,6 +85,7 @@ try {
         throw 'Obsolete WiX/MSI runtime content remains in the NSIS setup runtime.'
     }
     Write-Host 'NSIS artifact, checksum, payload-manifest, runtime, and portable smoke checks passed.'
+    & (Join-Path $PSScriptRoot 'test_setup_startup.ps1')
 
     if (-not $ExecuteLifecycle) { exit 0 }
     Assert-Administrator

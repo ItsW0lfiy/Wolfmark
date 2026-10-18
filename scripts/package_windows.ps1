@@ -213,6 +213,31 @@ try {
         Set-Content -LiteralPath (Join-Path $setupRuntime 'qt.conf') -Encoding ascii -Value @('[Paths]', 'Plugins=.')
         foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $setupRuntime }
 
+        # Exercise real argument parsing, Qt/plugin loading, core detection and the
+        # native window before packaging. The probe cannot perform an operation.
+        $startupRoot = Assert-UnderOut (Join-Path $outRoot 'tests/package-setup-startup')
+        New-Item -ItemType Directory -Force $startupRoot | Out-Null
+        $startup = [Diagnostics.ProcessStartInfo]::new()
+        $startup.FileName = Join-Path $setupRuntime 'WolfmarkSetup.exe'
+        $startup.WorkingDirectory = $startupRoot
+        $startup.UseShellExecute = $false
+        $startup.Environment['PATH'] = "$env:SystemRoot\System32;$env:SystemRoot"
+        $startup.Environment.Remove('WOLFMARK_SETUP_SMOKE_STATE') | Out-Null
+        $startup.Environment.Remove('WOLFMARK_SETUP_SCREENSHOT') | Out-Null
+        foreach ($argument in @(
+            "--maintenance=$(Join-Path $setupRuntime 'WolfmarkMaintenance.exe')", "--payload=$packageRoot",
+            "--manifest=$(Join-Path $packageRoot 'payload-manifest.json')",
+            # Existing file placeholder; this read-only probe never deploys it.
+            "--uninstaller=$(Join-Path $setupRuntime 'WolfmarkSetup.exe')", '--install-dir=C:\Program Files\Wolfmark',
+            "--bootstrap-log=$(Join-Path $startupRoot 'bootstrap.log')", "--startup-check=$(Join-Path $startupRoot 'startup.png')"
+        )) { $startup.ArgumentList.Add($argument) }
+        $startupProcess = [Diagnostics.Process]::Start($startup)
+        if (-not $startupProcess.WaitForExit(45000)) {
+            $startupProcess.Kill($true)
+            throw "Native setup startup timed out. See $startupRoot/bootstrap.log."
+        }
+        if ($startupProcess.ExitCode -ne 0) { throw "Native setup startup failed with exit code $($startupProcess.ExitCode). See $startupRoot/bootstrap.log." }
+
         & $nsis /V3 "/DOUTPUT_EXE=$setupPath" "/DSETUP_RUNTIME=$setupRuntime" "/DPAYLOAD_ROOT=$packageRoot" "/DDISPLAY_VERSION=$version" "/DWINDOWS_VERSION=$($windowsVersion.Dotted)" 'packaging/windows/nsis/Wolfmark.nsi'
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $setupPath -PathType Leaf)) { throw 'Wolfmark NSIS setup compilation failed.' }
         $artifacts += $setupPath
