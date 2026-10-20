@@ -49,6 +49,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
+    QMimeData* createMimeDataFromSelection() const override;
     void showEvent(QShowEvent* event) override;
 
 private:

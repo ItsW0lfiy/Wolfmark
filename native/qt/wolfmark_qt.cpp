@@ -562,6 +562,7 @@ public:
         });
         applyDocumentWidth();
 
+        next->setLayoutEnabled(false);
         QTextCursor cursor(next);
         cursor.beginEditBlock();
         const auto error = root.value("error").toString();
@@ -588,6 +589,7 @@ public:
         zoom_layout_.capture(next);
         if (zoom_percent_ != 100) zoom_layout_.apply(zoom_percent_);
         applyDocumentWidth();
+        next->setLayoutEnabled(true);
         construction_us_ = static_cast<quint64>(timer.nsecsElapsed() / 1000);
         document_construction_count_++;
         QTextCursor start(next);
@@ -2336,6 +2338,7 @@ struct OpenDocumentSession {
     int zoom_percent = 100;
     QJsonArray outline;
     QJsonArray editing_outline;
+    bool editing_outline_ready = false;
     QFileSystemWatcher* watcher = nullptr;
     QTimer* reload_delay = nullptr;
 };
@@ -2427,6 +2430,7 @@ public:
         };
         session->editor->outlineChanged = [this, raw = session.get()](const QJsonArray& headings) {
             raw->editing_outline = headings;
+            raw->editing_outline_ready = true;
             if (active_ == raw && raw->mode != OpenDocumentSession::Mode::Reader) sidebar_->setOutline(headings);
         };
         session->view->zoomChanged = [this, raw = session.get()](int percent) {
@@ -2636,10 +2640,24 @@ public:
                 const auto after = api_->backend_counters(session->backend);
                 ok &= after.parse_count == active_counters.parse_count && after.load_count == before.load_count;
                 ok &= tabs_->count() == 2 && mode_group_->checkedId() == 2;
-                std::fprintf(stdout, "WOLFMARK_SMOKE editor_sessions=%s shared_history=checked dirty=checked find=checked save=checked conflict=checked background_anchor=%d\n",
-                             ok ? "ok" : "failed", old_line);
-                std::fflush(stdout);
-                qApp->exit(ok ? 0 : 19);
+                *stage = QStringLiteral("empty-outline");
+                auto heading = editor->textCursor();
+                heading.movePosition(QTextCursor::Start);
+                heading.select(QTextCursor::BlockUnderCursor);
+                heading.removeSelectedText();
+                auto* outline_poll = new QTimer(this);
+                QObject::connect(outline_poll, &QTimer::timeout, this, [this, outline_poll, editor, ok, old_line]() mutable {
+                    if (!editor->analysisReady()) return;
+                    outline_poll->stop();
+                    ok &= active_->editing_outline_ready && active_->editing_outline.isEmpty();
+                    activateDocument(0); activateDocument(1);
+                    ok &= !sidebar_->activateOutlineAnchorForTest(QStringLiteral("other-document"));
+                    std::fprintf(stdout, "WOLFMARK_SMOKE editor_sessions=%s shared_history=checked dirty=checked find=checked save=checked conflict=checked empty_outline=checked background_anchor=%d\n",
+                                 ok ? "ok" : "failed", old_line);
+                    std::fflush(stdout);
+                    qApp->exit(ok ? 0 : 19);
+                });
+                outline_poll->start(25);
             });
             return;
         }
@@ -2692,6 +2710,16 @@ public:
                 auto* accessible = QAccessible::queryAccessibleInterface(editor);
                 ok &= accessible && accessible->textInterface() &&
                       accessible->textInterface()->text(0, accessible->textInterface()->characterCount()).contains(QStringLiteral("**bold**"));
+                auto* clipboard = snapshotClipboard();
+                editor->selectAll(); editor->copy();
+                const bool copy_exact = QGuiApplication::clipboard()->text() == editor->sourceText();
+                std::fprintf(stdout, "EDITOR_CLIPBOARD source_units=%lld copied_units=%lld source_nbsp=%lld copied_nbsp=%lld\n",
+                    static_cast<long long>(editor->sourceText().size()), static_cast<long long>(QGuiApplication::clipboard()->text().size()),
+                    static_cast<long long>(editor->sourceText().count(QChar(0x00a0))),
+                    static_cast<long long>(QGuiApplication::clipboard()->text().count(QChar(0x00a0))));
+                QGuiApplication::clipboard()->setMimeData(clipboard);
+                std::fprintf(stdout, "EDITOR_COPY source_exact=%s\n", copy_exact ? "yes" : "no");
+                ok &= copy_exact;
                 editor->setTextCursor(editor->document()->find(QStringLiteral("bold")));
                 QKeyEvent bold_key(QEvent::KeyPress, Qt::Key_B, Qt::ControlModifier);
                 QApplication::sendEvent(editor, &bold_key);
@@ -4886,6 +4914,8 @@ private:
         session->watcher->addPath(session->canonical_path);
         session->watcher->addPath(QFileInfo(session->canonical_path).absolutePath());
         session->editor->setMarkdown(QFileInfo(path).suffix().compare(QStringLiteral("txt"), Qt::CaseInsensitive) != 0);
+        if (session->mode != OpenDocumentSession::Mode::Reader)
+            session->editor->setLivePreview(session->mode == OpenDocumentSession::Mode::LivePreview);
         session->external_changed = false;
         session->file_error.clear();
         if (path_changed) {
@@ -5140,7 +5170,7 @@ private:
             names.push_back(QFileInfo(session->canonical_path).fileName() +
                             (session->editor->document()->isModified() ? QStringLiteral(" *") : QString()));
         sidebar_->setDocuments(names, activeDocumentIndex());
-        sidebar_->setOutline(active_ ? (active_->mode != OpenDocumentSession::Mode::Reader && !active_->editing_outline.isEmpty()
+        sidebar_->setOutline(active_ ? (active_->mode != OpenDocumentSession::Mode::Reader && active_->editing_outline_ready
                                            ? active_->editing_outline : active_->outline) : QJsonArray{});
         if (tabs_) {
             const QSignalBlocker blocker(tabs_);

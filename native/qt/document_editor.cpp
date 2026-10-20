@@ -293,6 +293,8 @@ bool DocumentEditor::loadBytes(const QByteArray& bytes, QString* error) {
     const auto fallback = endings.isEmpty() ? QStringLiteral("\n") : endings.front();
     // Block formats participate in Qt's native undo history. New lines inherit
     // nearby conventions; deleting/undoing mixed endings restores their metadata.
+    QTextCursor metadata(document());
+    metadata.beginEditBlock();
     for (auto block = document()->begin(); block.isValid(); block = block.next()) {
         QTextCursor cursor(block);
         auto format = block.blockFormat();
@@ -300,6 +302,7 @@ bool DocumentEditor::loadBytes(const QByteArray& bytes, QString* error) {
         cursor.setBlockFormat(format);
         ++index;
     }
+    metadata.endEditBlock();
     utf8_bom_ = bom;
     setUndoRedoEnabled(true);
     document()->setModified(false);
@@ -386,8 +389,12 @@ void DocumentEditor::setLivePreview(bool live) {
 void DocumentEditor::setMarkdown(bool markdown) {
     if (markdown_ == markdown) return;
     markdown_ = markdown;
+    ++source_revision_;
     decorated_revision_ = 0;
-    if (!markdown) highlighter_->clear();
+    if (!markdown) {
+        highlighter_->clear();
+        if (outlineChanged) outlineChanged({});
+    }
     else if (isVisible()) requestAnalysis();
 }
 
@@ -614,6 +621,15 @@ void DocumentEditor::wheelEvent(QWheelEvent* event) {
 void DocumentEditor::insertFromMimeData(const QMimeData* source) {
     // Even when the clipboard offers rich text, only its literal text is edited.
     insertPlainText(source->text());
+}
+
+QMimeData* DocumentEditor::createMimeDataFromSelection() const {
+    auto* data = new QMimeData;
+    const auto cursor = textCursor();
+    auto text = document()->toRawText().mid(cursor.selectionStart(), cursor.selectionEnd() - cursor.selectionStart());
+    text.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+    data->setText(text);
+    return data;
 }
 
 } // namespace wolfmark::qt
