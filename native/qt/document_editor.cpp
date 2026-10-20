@@ -47,7 +47,16 @@ struct Part {
     bool marker;
     int element_start;
     int element_end;
-    bool operator==(const Part&) const = default;
+    bool operator==(const Part& other) const {
+        return start == other.start && length == other.length && kind == other.kind &&
+               level == other.level && marker == other.marker &&
+               (!marker || (element_start == other.element_start && element_end == other.element_end));
+    }
+};
+
+struct BlockDecorations final : QTextBlockUserData {
+    QString text;
+    QVector<Part> parts;
 };
 }
 
@@ -65,7 +74,7 @@ struct EditorAnalysis {
 class MarkdownHighlighter final : public QSyntaxHighlighter {
 public:
     explicit MarkdownHighlighter(QTextDocument* document) : QSyntaxHighlighter(document) {}
-    void apply(const QJsonArray& spans, const QString& source) {
+    int apply(const QJsonArray& spans) {
         QMap<int, QVector<Part>> next;
         for (const auto& value : spans) {
             const auto span = value.toObject();
@@ -78,7 +87,7 @@ public:
                     const int length = std::min(b - block.position(), block.length() - 1) - local;
                     if (length > 0) next[block.blockNumber()].push_back(
                         {local, length, span.value("kind").toString(), span.value("level").toInt(),
-                         marker, start, end});
+                         marker, start - block.position(), end - block.position()});
                 }
             };
             append(start, end, false);
@@ -87,15 +96,22 @@ public:
                 append(range[0].toInt(), range[1].toInt(), true);
             }
         }
-        const auto old = std::move(parts_);
-        const auto old_lines = std::move(lines_);
-        parts_ = std::move(next);
-        lines_ = source.split(QLatin1Char('\n'));
+        int decorated = 0;
         for (auto block = document()->begin(); block.isValid(); block = block.next()) {
             const int number = block.blockNumber();
-            if (old.value(number) != parts_.value(number) ||
-                number >= old_lines.size() || old_lines[number] != lines_[number]) rehighlightBlock(block);
+            const auto parts = next.value(number);
+            const auto* previous = dynamic_cast<BlockDecorations*>(block.userData());
+            if (!previous && parts.isEmpty()) continue;
+            if (!previous || previous->parts != parts || previous->text != block.text()) {
+                auto* cached = new BlockDecorations;
+                cached->text = block.text();
+                cached->parts = parts;
+                block.setUserData(cached);
+                rehighlightBlock(block);
+                ++decorated;
+            }
         }
+        return decorated;
     }
 
     void setSelection(int anchor, int position) {
@@ -106,32 +122,38 @@ public:
         if (!live_) return;
         // Only blocks containing markers whose contextual visibility changed
         // need a layout update. No source mutation or undo command is created.
-        for (auto it = parts_.cbegin(); it != parts_.cend(); ++it) {
-            const bool changed = std::any_of(it->cbegin(), it->cend(), [&](const Part& part) {
-                return part.marker && active(part, old_start, old_end) !=
-                                      active(part, selection_start_, selection_end_);
+        for (auto block = document()->begin(); block.isValid(); block = block.next()) {
+            const auto* cached = dynamic_cast<BlockDecorations*>(block.userData());
+            if (!cached) continue;
+            const int offset = block.position();
+            const bool changed = std::any_of(cached->parts.cbegin(), cached->parts.cend(), [&](const Part& part) {
+                return part.marker && active(part, old_start - offset, old_end - offset) !=
+                                      active(part, selection_start_ - offset, selection_end_ - offset);
             });
-            if (changed) rehighlightBlock(document()->findBlockByNumber(it.key()));
+            if (changed) rehighlightBlock(block);
         }
     }
 
     void setLive(bool live) { if (live_ != live) { live_ = live; rehighlight(); } }
-    void clear() { parts_.clear(); lines_.clear(); rehighlight(); }
+    void clear() {
+        for (auto block = document()->begin(); block.isValid(); block = block.next()) block.setUserData(nullptr);
+        rehighlight();
+    }
     void setScale(int percent) { scale_ = percent / 100.0; rehighlight(); }
 
 protected:
     void highlightBlock(const QString& text) override {
-        const int number = currentBlock().blockNumber();
-        if (number >= lines_.size() || text != lines_[number]) return;
-        const auto parts = parts_.value(number);
-        for (const auto& part : parts) {
+        const auto* cached = dynamic_cast<BlockDecorations*>(currentBlock().userData());
+        if (!cached || text != cached->text) return;
+        for (const auto& part : cached->parts) {
             const int end = std::min(part.start + part.length, static_cast<int>(text.size()));
             for (int start = part.start; start < end;) {
                 auto fmt = format(start);
                 int stop = start + 1;
                 while (stop < end && format(stop) == fmt) ++stop;
                 if (part.marker) {
-                    if (live_ && !active(part, selection_start_, selection_end_)) {
+                    if (live_ && !active(part, selection_start_ - currentBlock().position(),
+                                        selection_end_ - currentBlock().position())) {
                         fmt.setFontPointSize(0.1);
                         fmt.setForeground(Qt::transparent);
                     } else {
@@ -173,8 +195,6 @@ private:
     static bool active(const Part& part, int start, int end) {
         return start <= part.element_end && end >= part.element_start;
     }
-    QMap<int, QVector<Part>> parts_;
-    QStringList lines_;
     int selection_start_ = 0;
     int selection_end_ = 0;
     bool live_ = false;
@@ -348,9 +368,15 @@ void DocumentEditor::setLivePreview(bool live) {
     const bool formatted = live && markdown_;
     highlighter_->setLive(formatted);
     auto font = QFont(formatted ? QStringLiteral("Segoe UI") : QStringLiteral("Cascadia Mono"));
+    if (!formatted) {
+        font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
+        font.setStyleHint(QFont::Monospace);
+    }
     font.setPointSizeF(12.0 * zoom_percent_ / 100.0);
     setFont(font);
     document()->setDefaultFont(font);
+    setTabStopDistance(QFontMetrics(font).horizontalAdvance(QLatin1Char(' ')) * 4.0);
+    updateGutter();
     setTextCursor(cursor);
     restoreViewportCursor(top);
     setAccessibleName(live ? QStringLiteral("Wolfmark Live Preview editor") : QStringLiteral("Wolfmark source editor"));
@@ -358,8 +384,11 @@ void DocumentEditor::setLivePreview(bool live) {
 }
 
 void DocumentEditor::setMarkdown(bool markdown) {
+    if (markdown_ == markdown) return;
     markdown_ = markdown;
+    decorated_revision_ = 0;
     if (!markdown) highlighter_->clear();
+    else if (isVisible()) requestAnalysis();
 }
 
 void DocumentEditor::setZoomPercent(int percent) {
@@ -367,7 +396,7 @@ void DocumentEditor::setZoomPercent(int percent) {
     if (percent == zoom_percent_) return;
     const auto top = cursorForPosition(QPoint(0, 0));
     zoom_percent_ = percent;
-    auto value = font();
+    auto value = document()->defaultFont();
     value.setPointSizeF(12.0 * zoom_percent_ / 100.0);
     setFont(value);
     document()->setDefaultFont(value);
@@ -426,7 +455,7 @@ bool DocumentEditor::markerMinimizedAt(int position) const {
 void DocumentEditor::requestAnalysis() {
     if (!markdown_ || decorated_revision_ == source_revision_) return;
     std::lock_guard lock(analysis_->mutex);
-    if (analysis_->running) { analysis_poll_.start(); return; }
+    if (analysis_->running || analysis_->ready) { analysis_poll_.start(); return; }
     analysis_->running = true;
     analysis_->ready = false;
     analysis_->revision = source_revision_;
@@ -465,7 +494,7 @@ void DocumentEditor::collectAnalysis() {
                 highlighter_->clear();
             } else {
                 const auto top = cursorForPosition(QPoint(0, 0));
-                highlighter_->apply(analysis_->result.value("spans").toArray(), analysis_->source);
+                decorated_blocks_ = highlighter_->apply(analysis_->result.value("spans").toArray());
                 restoreViewportCursor(top);
                 if (outlineChanged) {
                     QJsonArray headings;

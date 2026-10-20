@@ -38,6 +38,7 @@ public:
     [[nodiscard]] quint64 sourceRevision() const { return source_revision_; }
     [[nodiscard]] bool analysisReady() const;
     [[nodiscard]] quint64 analysisMicros() const { return analysis_us_; }
+    [[nodiscard]] int decoratedBlocks() const { return decorated_blocks_; }
     [[nodiscard]] bool markerMinimizedAt(int position) const;
     std::function<void()> stateChanged;
     std::function<void(int)> zoomRequested;
@@ -71,6 +72,7 @@ private:
     quint64 source_revision_ = 0;
     quint64 decorated_revision_ = 0;
     quint64 analysis_us_ = 0;
+    int decorated_blocks_ = 0;
 };
 
 } // namespace wolfmark::qt

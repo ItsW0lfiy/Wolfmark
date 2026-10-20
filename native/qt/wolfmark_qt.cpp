@@ -955,6 +955,7 @@ public:
         return captureViewportAnchor().position;
     }
     [[nodiscard]] int sourceLineAtViewport() const {
+        if (plain_text_) return cursorForPosition(QPoint(0, 0)).blockNumber() + 1;
         const int position = viewportAnchorPosition();
         int line = 1;
         for (const auto& item : source_positions_) {
@@ -967,15 +968,25 @@ public:
     void navigateToSourceLine(int line) {
         cancelScrollMotion();
         int position = 0;
-        for (const auto& item : source_positions_) {
-            if (item.second > line) break;
-            position = item.first;
+        if (plain_text_) {
+            position = document()->findBlockByNumber(std::clamp(line - 1, 0, document()->blockCount() - 1)).position();
+        } else {
+            for (const auto& item : source_positions_) {
+                if (item.second > line) break;
+                position = item.first;
+            }
         }
-        QTextCursor cursor(document());
-        cursor.setPosition(std::clamp(position, 0, document()->characterCount() - 1));
-        verticalScrollBar()->setValue(verticalScrollBar()->value() + cursorRect(cursor).top() - 16);
+        // Reuse semantic navigation's layout-generation tracking. A freshly
+        // built large document can still have a provisional scrollbar range.
+        const auto target = QStringLiteral("\x1fsource-location");
+        anchor_positions_.insert(target, std::clamp(position, 0, document()->characterCount() - 1));
+        navigateToAnchor(target, false);
     }
     std::function<void(int)> zoomChanged;
+    std::function<void()> sourceLocationSettled;
+    [[nodiscard]] bool sourceNavigationActive() const {
+        return navigation_anchor_ == QStringLiteral("\x1fsource-location");
+    }
 
     void navigateToAnchor(const QString& anchor, bool animate = true) {
         scroll_controller_.cancel();
@@ -1443,6 +1454,8 @@ private:
         completed_navigation_anchor_ = navigation_anchor_;
         completed_navigation_clamped_ = navigation_target_clamped_;
         navigation_anchor_.clear();
+        if (completed_navigation_anchor_ == QStringLiteral("\x1fsource-location") && sourceLocationSettled)
+            sourceLocationSettled();
         navigation_target_clamped_ = false;
     }
 
@@ -2420,6 +2433,10 @@ public:
             raw->zoom_percent = percent;
             if (active_ == raw) zoom_label_->setText(QStringLiteral("%1%").arg(percent));
         };
+        session->view->sourceLocationSettled = [raw = session.get()] {
+            if (raw->mode == OpenDocumentSession::Mode::Reader)
+                raw->reader_entry_line = raw->view->sourceLineAtViewport();
+        };
         const bool rendered = renderSession(session.get(), true);
         session->watcher = new QFileSystemWatcher(this);
         session->watcher->addPath(canonical_path);
@@ -2449,13 +2466,16 @@ public:
                 const auto before = api_->backend_counters(backend_);
                 const auto constructions = document_->constructionCount();
                 auto* editor = active_->editor;
+                document_->navigateToSourceLine(editor->document()->blockCount() * 3 / 4);
+                const int reader_line = document_->sourceLineAtViewport();
                 QElapsedTimer timer;
                 timer.start();
                 setDocumentMode(2);
+                const bool mapped = std::abs(editor->textCursor().blockNumber() + 1 - reader_line) <= 2;
                 const auto source_mode_us = timer.nsecsElapsed() / 1000;
                 auto* ready = new QTimer(this);
                 auto waiting = std::make_shared<QElapsedTimer>(); waiting->start();
-                QObject::connect(ready, &QTimer::timeout, this, [this, ready, waiting, editor, before, constructions, source_mode_us] {
+                QObject::connect(ready, &QTimer::timeout, this, [this, ready, waiting, editor, before, constructions, source_mode_us, mapped] {
                     if (!editor->analysisReady() && waiting->elapsed() < 30000) return;
                     ready->stop();
                     const bool decorated = editor->analysisReady();
@@ -2477,7 +2497,7 @@ public:
                     editing_timer.restart();
                     for (int pass = 0; pass < 6; ++pass) setDocumentMode(pass % 2 == 0 ? 1 : 2);
                     const auto modes_us = editing_timer.nsecsElapsed() / 1000;
-                    bool anchored = std::abs(editor->viewportLine() - line) <= 2;
+                    bool anchored = mapped && std::abs(editor->viewportLine() - line) <= 2;
                     for (const int zoom : {80, 100, 125, 150, 100}) {
                         const int start = editor->viewportLine();
                         changeZoom(zoom - active_->zoom_percent);
@@ -2494,13 +2514,32 @@ public:
                         const auto after = api_->backend_counters(backend_);
                         const bool stable = before.parse_count == after.parse_count && before.load_count == after.load_count &&
                                             constructions == document_->constructionCount();
-                        const bool ok = stable && anchored && decorated && editor->analysisReady() &&
+                        const bool incremental = editor->document()->blockCount() < 100 ||
+                                                 editor->decoratedBlocks() < editor->document()->blockCount() / 4;
+                        const bool ok = stable && anchored && decorated && incremental && editor->analysisReady() &&
                                         editor->document()->characterCount() == characters + 128;
-                        std::fprintf(stdout, "WOLFMARK_SMOKE editor_performance=%s chars=%d blocks=%d source_mode_us=%lld typing_64_us=%lld live_typing_64_us=%lld modes_6_us=%lld analysis_us=%llu anchor=%s reader_counters=%s decorated_before_typing=%s\n",
+                        const int source_line = editor->textCursor().blockNumber() + 1;
+                        QElapsedTimer refresh; refresh.start();
+                        setDocumentMode(0);
+                        const auto refresh_us = refresh.nsecsElapsed() / 1000;
+                        std::fprintf(stdout, "WOLFMARK_SMOKE editor_performance=%s chars=%d blocks=%d source_mode_us=%lld typing_64_us=%lld live_typing_64_us=%lld modes_6_us=%lld analysis_us=%llu anchor=%s reader_counters=%s decorated_before_typing=%s decorated_blocks=%d\n",
                             ok ? "ok" : "failed", characters, editor->document()->blockCount(),
                             static_cast<long long>(source_mode_us), static_cast<long long>(typing_us), static_cast<long long>(live_typing_us), static_cast<long long>(modes_us),
-                            static_cast<unsigned long long>(editor->analysisMicros()), anchored ? "stable" : "changed", stable ? "stable" : "changed", decorated ? "yes" : "no");
-                        std::fflush(stdout); qApp->exit(ok ? 0 : 20);
+                            static_cast<unsigned long long>(editor->analysisMicros()), anchored ? "stable" : "changed", stable ? "stable" : "changed", decorated ? "yes" : "no", editor->decoratedBlocks());
+                        auto* landing = new QTimer(this);
+                        auto settling = std::make_shared<QElapsedTimer>(); settling->start();
+                        QObject::connect(landing, &QTimer::timeout, this, [this, landing, settling, source_line, refresh_us, ok] {
+                            if (document_->navigationActive() && settling->elapsed() < 6000) return;
+                            landing->stop();
+                            const int actual_line = document_->sourceLineAtViewport();
+                            const bool round_trip = std::abs(actual_line - source_line) <= 4;
+                            setDocumentMode(2);
+                            std::fprintf(stdout, "EDITOR_READER refresh_us=%lld location=%s source_line=%d reader_line=%d\n",
+                                         static_cast<long long>(refresh_us), round_trip ? "stable" : "changed", source_line, actual_line);
+                            std::fflush(stdout); qApp->exit(ok && round_trip &&
+                                active_->editor->textCursor().blockNumber() + 1 == source_line ? 0 : 20);
+                        });
+                        landing->start(25);
                     });
                     poll->start(25);
                 });
@@ -2509,7 +2548,13 @@ public:
             return;
         }
         if (mode == QStringLiteral("editor-sessions")) {
-            QTimer::singleShot(250, this, [this] {
+            auto stage = std::make_shared<QString>(QStringLiteral("starting"));
+            QTimer::singleShot(15000, this, [stage] {
+                std::fprintf(stderr, "EDITOR_SESSION_TIMEOUT stage=%s\n", qUtf8Printable(*stage));
+                std::fflush(stderr); qApp->exit(21);
+            });
+            QTimer::singleShot(250, this, [this, stage] {
+                *stage = QStringLiteral("modes");
                 bool ok = documents_.size() == 2 && active_->mode == OpenDocumentSession::Mode::Reader;
                 auto* session = active_;
                 auto* editor = session->editor;
@@ -2540,6 +2585,7 @@ public:
                 editor->undo(); editor->redo();
                 ok &= editor->sourceText() == edited;
                 find_input_->setText(QStringLiteral("Unsaved"));
+                *stage = QStringLiteral("find-format");
                 findNext(false);
                 ok &= editor->textCursor().selectedText() == QStringLiteral("Unsaved");
                 focusDocument();
@@ -2552,11 +2598,13 @@ public:
                 ok &= documents_.size() == count && session->mode == OpenDocumentSession::Mode::Source;
                 activateDocument(0); activateDocument(1);
                 ok &= active_ == session && session->mode == OpenDocumentSession::Mode::Source;
+                *stage = QStringLiteral("save");
                 ok &= saveSession(session, false) && !editor->document()->isModified();
                 QFile saved(session->canonical_path);
                 saved.open(QIODevice::ReadOnly);
                 ok &= saved.readAll() == editor->encodedBytes(); saved.close();
                 const auto current = editor->sourceText();
+                *stage = QStringLiteral("external-conflict");
                 editor->insertPlainText(QStringLiteral(" local"));
                 QFile external(session->canonical_path);
                 external.open(QIODevice::Append); external.write("\nexternal writer"); external.close();
@@ -2569,13 +2617,17 @@ public:
                 QTimer::singleShot(0, this, [] {
                     if (auto* dialog = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) dialog->done(QMessageBox::Cancel);
                 });
+                *stage = QStringLiteral("close-cancel");
                 closeDocument(1);
                 ok &= documents_.size() == count;
                 editor->undo();
                 ok &= editor->sourceText() == current;
                 auto* background = documents_.front().get();
-                background->view->verticalScrollBar()->setValue(background->view->verticalScrollBar()->maximum() * 3 / 4);
+                *stage = QStringLiteral("background-reload");
+                background->view->navigateToSourceLine(3003);
+                background->view->verticalScrollBar()->setValue(background->view->verticalScrollBar()->value() + 30);
                 const int old_line = background->view->sourceLineAtViewport();
+                ok &= old_line > 2000;
                 const auto active_counters = api_->backend_counters(session->backend);
                 QFile background_file(background->canonical_path);
                 background_file.open(QIODevice::Append); background_file.write("\n# External heading\n"); background_file.close();
@@ -4771,7 +4823,8 @@ private:
             session->editor->setZoomPercent(session->zoom_percent);
             session->editor->setLivePreview(mode == OpenDocumentSession::Mode::LivePreview);
             session->page->setCurrentWidget(session->editor);
-            if (was_reader && (!session->has_edit_location || line != session->reader_entry_line))
+            if (was_reader && (!session->has_edit_location ||
+                (line != session->reader_entry_line && !session->view->sourceNavigationActive())))
                 session->editor->goToLine(line);
         }
         session->mode = mode;
@@ -4842,7 +4895,11 @@ private:
                 if (renderSession(session)) session->view->navigateToSourceLine(line);
             }
         }
-        if (active_ == session) { current_path_ = session->canonical_path; updateDocumentControls(); }
+        if (active_ == session) {
+            current_path_ = session->canonical_path;
+            if (path_changed) activateDocument(activeDocumentIndex());
+            else updateDocumentControls();
+        }
         refreshSidebar();
         return true;
     }
@@ -4928,6 +4985,15 @@ private:
         return true;
     }
 
+    static qsizetype nearestSourceMatch(const QString& source, const QString& text, qsizetype expected) {
+        if (text.isEmpty()) return -1;
+        qsizetype nearest = -1;
+        for (qsizetype match = source.indexOf(text); match >= 0; match = source.indexOf(text, match + 1)) {
+            if (nearest < 0 || std::abs(match - expected) < std::abs(nearest - expected)) nearest = match;
+        }
+        return nearest;
+    }
+
     void reloadSession(OpenDocumentSession* session, bool requested = false) {
         if (!session) return;
         QString error;
@@ -4957,11 +5023,16 @@ private:
             }
         }
         const auto state = session->view->interactionState();
-        const auto selection = session->editor->textCursor();
+        const int selection_position = session->editor->textCursor().position();
+        const int selection_anchor = session->editor->textCursor().anchor();
         const int old_line = session->mode == OpenDocumentSession::Mode::Reader
                                  ? session->view->sourceLineAtViewport() : session->editor->viewportLine();
         const auto anchor_block = session->editor->document()->findBlockByNumber(old_line - 1);
+        const int anchor_position = std::max(0, anchor_block.position());
         const auto anchor_text = anchor_block.text();
+        const auto old_source = session->editor->sourceText();
+        const int context_start = std::max(0, anchor_position - 120);
+        const auto anchor_context = old_source.mid(context_start, 240);
         if (!session->editor->loadFile(session->canonical_path, &error)) {
             session->file_error = error;
             if (requested) QMessageBox::warning(this, QStringLiteral("Could not reload"), error);
@@ -4974,17 +5045,23 @@ private:
             session->view->restoreInteractionState(state);
             int line = old_line;
             const auto source = session->editor->sourceText();
-            const auto match = anchor_text.isEmpty() ? qsizetype(-1) : source.indexOf(anchor_text);
+            auto match = nearestSourceMatch(source, anchor_context, context_start);
+            if (match >= 0) match += anchor_position - context_start;
+            else match = nearestSourceMatch(source, anchor_text, anchor_position);
             if (match >= 0) line = static_cast<int>(source.first(match).count(QLatin1Char('\n'))) + 1;
-            if (line != old_line) session->view->navigateToSourceLine(line);
+            if (line != old_line || session->view->sourceLineAtViewport() != line) session->view->navigateToSourceLine(line);
             session->editor->goToLine(line);
-            if (line == old_line) {
-                auto retained = session->editor->textCursor();
-                const int limit = session->editor->document()->characterCount() - 1;
-                retained.setPosition(std::min(selection.anchor(), limit));
-                retained.setPosition(std::min(selection.position(), limit), QTextCursor::KeepAnchor);
-                session->editor->setTextCursor(retained);
-            }
+            const auto remap = [&](int position) {
+                const int start = std::max(0, position - 120);
+                const auto context = old_source.mid(start, 240);
+                const auto found = nearestSourceMatch(source, context, start);
+                return static_cast<int>(std::clamp<qsizetype>(found < 0 ? position : found + position - start,
+                                                             0, source.size()));
+            };
+            auto retained = session->editor->textCursor();
+            retained.setPosition(remap(selection_anchor));
+            retained.setPosition(remap(selection_position), QTextCursor::KeepAnchor);
+            session->editor->setTextCursor(retained);
         }
         if (!session->watcher->files().contains(session->canonical_path))
             session->watcher->addPath(session->canonical_path);
