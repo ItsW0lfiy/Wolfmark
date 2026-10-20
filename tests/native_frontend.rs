@@ -86,9 +86,45 @@ impl Drop for GeneratedTestDirectory {
 }
 
 #[test]
+fn native_editor_preserves_source_and_uses_contextual_comrak_decorations() {
+    let output = run_smoke("--smoke-editor-core", "layout-transitions.md");
+    assert!(output.contains("editor_core=ok"), "{output}");
+}
+
+#[test]
+fn document_modes_share_source_history_and_detect_file_conflicts() {
+    let generated = GeneratedTestDirectory::recreate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("out/tests/editor-sessions"),
+    );
+    let first = generated.path().join("first.md");
+    let second = generated.path().join("second.md");
+    let source = (1..=1000)
+        .map(|chapter| format!("# Chapter {chapter}\n\nParagraph **bold** with 月🐺.\n\n"))
+        .collect::<String>();
+    std::fs::write(&first, &source).unwrap();
+    std::fs::write(
+        &second,
+        "# Other document\r\n\r\nSource without final newline",
+    )
+    .unwrap();
+    let output = run_smoke_many(
+        "--smoke-editor-sessions",
+        &[first.to_str().unwrap(), second.to_str().unwrap()],
+    );
+    assert!(output.contains("editor_sessions=ok"), "{output}");
+}
+
+#[test]
 fn background_relayout_cannot_erase_restored_reading_position() {
-    let output = run_smoke("--smoke-scroll-stability", "layout-transitions.md");
-    assert!(output.contains("scroll_stability=ok"), "{output}");
+    for name in [
+        "layout-transitions.md",
+        "generated/large-text.md",
+        "generated/image-stress-250.md",
+    ] {
+        let output = run_smoke("--smoke-scroll-stability", name);
+        assert!(output.contains("scroll_stability=ok"), "{output}");
+        assert!(output.contains("scroll_burst=ok"), "{output}");
+    }
 }
 
 #[test]

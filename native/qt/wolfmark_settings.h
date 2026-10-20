@@ -13,7 +13,7 @@ struct UpdatePreferences {
 
 class UserSettings final {
 public:
-    static constexpr int schema_version = 1;
+    static constexpr int schema_version = 2;
 
     static UserSettings load(bool include_prereleases_default);
 
@@ -23,6 +23,8 @@ public:
     [[nodiscard]] const QString& filePath() const { return file_path_; }
     [[nodiscard]] const QString& recoveryWarning() const { return recovery_warning_; }
     [[nodiscard]] bool portable() const { return portable_; }
+    [[nodiscard]] bool editorWordWrap() const { return editor_word_wrap_; }
+    void setEditorWordWrap(bool value) { editor_word_wrap_ = value; }
 
     void setCheckOnStartup(bool value) { updates_.check_on_startup = value; }
     void setIncludePrereleases(bool value) { updates_.include_prereleases = value; }
@@ -36,6 +38,7 @@ private:
     UpdatePreferences updates_;
     QString last_open_directory_;
     QString recovery_warning_;
+    bool editor_word_wrap_ = true;
 };
 
 } // namespace wolfmark::qt

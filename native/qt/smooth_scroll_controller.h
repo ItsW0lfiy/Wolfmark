@@ -22,6 +22,7 @@ public:
     void addWheelDistance(double distance);
     void moveDirectlyTo(int destination);
     void cancel();
+    void rebaseAfterLayout();
 
     [[nodiscard]] bool isRunning() const;
     [[nodiscard]] int targetValue() const;

@@ -108,6 +108,11 @@ impl Backend {
         presentation
     }
 
+    pub fn render_loaded_source(&mut self, path: &Path, source: &str) -> PresentationDocument {
+        self.load_count = self.load_count.saturating_add(1);
+        self.render_source(path, source)
+    }
+
     pub fn queue_image(&mut self, id: u32, max_width: u32) -> bool {
         let Some(request) = self.image_requests.get(&id) else {
             return false;

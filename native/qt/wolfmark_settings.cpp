@@ -79,6 +79,9 @@ UserSettings UserSettings::load(bool include_prereleases_default) {
         const auto root = document.object();
         const auto updates = root.value(QStringLiteral("updates")).toObject();
         const auto files = root.value(QStringLiteral("files")).toObject();
+        const auto editor = root.value(QStringLiteral("editor")).toObject();
+        if (editor.value(QStringLiteral("wordWrap")).isBool())
+            settings.editor_word_wrap_ = editor.value(QStringLiteral("wordWrap")).toBool();
         if (updates.value(QStringLiteral("checkOnStartup")).isBool())
             settings.updates_.check_on_startup = updates.value(QStringLiteral("checkOnStartup")).toBool();
         if (updates.value(QStringLiteral("includePrereleases")).isBool())
@@ -119,6 +122,7 @@ bool UserSettings::save(QString* error) const {
     root.insert(QStringLiteral("schemaVersion"), schema_version);
     root.insert(QStringLiteral("updates"), updates);
     root.insert(QStringLiteral("files"), files);
+    root.insert(QStringLiteral("editor"), QJsonObject{{QStringLiteral("wordWrap"), editor_word_wrap_}});
 
     QSaveFile file(file_path_);
     if (!file.open(QIODevice::WriteOnly)) {

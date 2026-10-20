@@ -70,8 +70,14 @@ pub struct NativeApiTable {
     pub window_set_mode: unsafe extern "C" fn(*mut WindowState, u8),
     pub window_enter_fullscreen: unsafe extern "C" fn(*mut WindowState) -> u8,
     pub window_leave_fullscreen: unsafe extern "C" fn(*mut WindowState) -> u8,
-    pub render_source:
-        unsafe extern "C" fn(*mut Backend, *const u8, usize, *const u8, usize) -> NativeBuffer,
+    pub render_source: unsafe extern "C" fn(
+        *mut Backend,
+        *const u8,
+        usize,
+        *const u8,
+        usize,
+        bool,
+    ) -> NativeBuffer,
     pub editor_decorations: unsafe extern "C" fn(*const u8, usize) -> NativeBuffer,
 }
 
@@ -126,14 +132,20 @@ pub unsafe extern "C" fn wolfmark_render_source(
     path_len: usize,
     source: *const u8,
     source_len: usize,
+    loaded_from_disk: bool,
 ) -> NativeBuffer {
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: the caller guarantees exclusive backend access and readable buffers.
         let backend = unsafe { backend.as_mut() }.ok_or("Document backend is unavailable")?;
         let path = unsafe { required_utf8(path, path_len)? };
         let source = unsafe { required_utf8(source, source_len)? };
-        serde_json::to_vec(&backend.render_source(std::path::Path::new(path), source))
-            .map_err(|_| "Could not encode the document preview")
+        let path = std::path::Path::new(path);
+        let document = if loaded_from_disk {
+            backend.render_loaded_source(path, source)
+        } else {
+            backend.render_source(path, source)
+        };
+        serde_json::to_vec(&document).map_err(|_| "Could not encode the document preview")
     }));
     match result {
         Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),

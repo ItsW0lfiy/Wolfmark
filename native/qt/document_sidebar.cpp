@@ -72,8 +72,11 @@ protected:
             wheel_fraction_ -= movement;
             const double distance = movement == 0.0 ? std::copysign(1.0, scaled) : movement;
             if (qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1")) {
-                scrolling_.moveDirectlyTo(verticalScrollBar()->value() +
-                                          static_cast<int>(std::lround(distance)));
+                const auto destination = std::clamp(
+                    static_cast<double>(verticalScrollBar()->value()) + distance,
+                    static_cast<double>(verticalScrollBar()->minimum()),
+                    static_cast<double>(verticalScrollBar()->maximum()));
+                scrolling_.moveDirectlyTo(static_cast<int>(std::lround(destination)));
             } else {
                 scrolling_.addWheelDistance(distance);
             }

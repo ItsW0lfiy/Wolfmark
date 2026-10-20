@@ -43,7 +43,7 @@ struct WolfmarkApiTable {
     std::uint8_t (*window_enter_fullscreen)(void*);
     std::uint8_t (*window_leave_fullscreen)(void*);
     WolfmarkBuffer (*render_source)(void*, const std::uint8_t*, std::size_t,
-                                   const std::uint8_t*, std::size_t);
+                                   const std::uint8_t*, std::size_t, bool);
     WolfmarkBuffer (*editor_decorations)(const std::uint8_t*, std::size_t);
 };
 

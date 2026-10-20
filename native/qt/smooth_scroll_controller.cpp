@@ -107,6 +107,14 @@ void SmoothScrollController::cancel() {
     }
 }
 
+void SmoothScrollController::rebaseAfterLayout() {
+    if (!slider_ || !running_) return;
+    const double remaining = target_ - position_;
+    position_ = slider_->value();
+    target_ = std::clamp(position_ + remaining, static_cast<double>(slider_->minimum()),
+                         static_cast<double>(slider_->maximum()));
+}
+
 bool SmoothScrollController::isRunning() const { return running_; }
 
 int SmoothScrollController::targetValue() const {

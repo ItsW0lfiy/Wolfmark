@@ -27,6 +27,8 @@ fn main() {
         "native/qt/wolf_style.h",
         "native/qt/wolf_style.cpp",
         "native/qt/document_zoom.h",
+        "native/qt/document_editor.h",
+        "native/qt/document_editor.cpp",
         "native/qt/document_zoom.cpp",
         "native/qt/document_sidebar.h",
         "native/qt/document_sidebar.cpp",
@@ -133,6 +135,7 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         .file(manifest.join("native/qt/wolfmark_updates.cpp"))
         .file(manifest.join("native/qt/wolf_style.cpp"))
         .file(manifest.join("native/qt/document_zoom.cpp"))
+        .file(manifest.join("native/qt/document_editor.cpp"))
         .file(manifest.join("native/qt/document_sidebar.cpp"))
         .file(manifest.join("native/qt/smooth_scroll_controller.cpp"))
         .file(manifest.join("native/qt/wolf_title_bar.cpp"))

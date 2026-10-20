@@ -104,6 +104,10 @@ void apply(QApplication& application) {
         QCheckBox:focus { color: #ffffff; }
         QLineEdit, QComboBox { background: #1b1b1b; border: 1px solid #404040; border-radius: 6px; padding: 7px 9px; color: #e9e7e6; selection-background-color: #69313c; selection-color: #ffffff; }
         QLineEdit:focus, QComboBox:focus { border-color: #d62d4e; }
+        QPlainTextEdit { background: #121212; color: #e9e7e6; border: none; selection-background-color: #69313c; selection-color: #ffffff; }
+        #documentToolbar { background: #161616; border-bottom: 1px solid #303030; }
+        QPushButton[documentMode="true"] { padding: 4px 10px; }
+        QPushButton[documentMode="true"]:checked { background: #342326; border-color: #d62d4e; color: #ffffff; }
         QSlider::groove:horizontal { height: 5px; border-radius: 2px; background: #343434; }
         QSlider::sub-page:horizontal { background: #d62d4e; border-radius: 2px; }
         QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: #f0edeb; border: 1px solid #d62d4e; }
