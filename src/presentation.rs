@@ -57,6 +57,7 @@ pub struct PresentationCommand {
     pub image_width: u32,
     pub image_height: u32,
     pub spans: Vec<CodeSpan>,
+    pub source_line: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -1,4 +1,5 @@
 pub mod convert;
+pub mod editor;
 mod highlight;
 pub mod model;
 pub mod parser;

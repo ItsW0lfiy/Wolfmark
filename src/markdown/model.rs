@@ -1,6 +1,7 @@
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DocumentModel {
     pub blocks: Vec<Block>,
+    pub source_lines: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

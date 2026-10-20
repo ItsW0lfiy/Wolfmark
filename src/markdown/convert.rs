@@ -67,7 +67,13 @@ pub fn to_presentation(
         toc: Vec::new(),
         heading_counts: HashMap::new(),
     };
-    output.blocks(&model.blocks);
+    for (index, block) in model.blocks.iter().enumerate() {
+        let command_index = output.commands.len();
+        output.block(block);
+        if let Some(command) = output.commands.get_mut(command_index) {
+            command.source_line = model.source_lines.get(index).copied().unwrap_or(0);
+        }
+    }
     let image_ids = output
         .commands
         .iter()
@@ -381,6 +387,7 @@ impl Converter<'_> {
         number: i64,
     ) {
         self.commands.push(PresentationCommand {
+            source_line: 0,
             kind,
             level,
             flags,

@@ -70,10 +70,13 @@ pub struct NativeApiTable {
     pub window_set_mode: unsafe extern "C" fn(*mut WindowState, u8),
     pub window_enter_fullscreen: unsafe extern "C" fn(*mut WindowState) -> u8,
     pub window_leave_fullscreen: unsafe extern "C" fn(*mut WindowState) -> u8,
+    pub render_source:
+        unsafe extern "C" fn(*mut Backend, *const u8, usize, *const u8, usize) -> NativeBuffer,
+    pub editor_decorations: unsafe extern "C" fn(*const u8, usize) -> NativeBuffer,
 }
 
 static NATIVE_API: NativeApiTable = NativeApiTable {
-    version: 3,
+    version: 4,
     backend_new: wolfmark_backend_new,
     backend_free: wolfmark_backend_free,
     open_document: wolfmark_open_document,
@@ -88,6 +91,8 @@ static NATIVE_API: NativeApiTable = NativeApiTable {
     window_set_mode: wolfmark_window_set_mode,
     window_enter_fullscreen: wolfmark_window_enter_fullscreen,
     window_leave_fullscreen: wolfmark_window_leave_fullscreen,
+    render_source: wolfmark_render_source,
+    editor_decorations: wolfmark_editor_decorations,
 };
 
 pub fn table_address() -> usize {
@@ -108,7 +113,56 @@ impl NativeImageResult {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn wolfmark_api_version() -> u32 {
-    3
+    4
+}
+
+/// # Safety
+/// `backend` must be live and exclusively borrowed for this call. Both byte
+/// pointers must remain readable for their corresponding lengths.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wolfmark_render_source(
+    backend: *mut Backend,
+    path: *const u8,
+    path_len: usize,
+    source: *const u8,
+    source_len: usize,
+) -> NativeBuffer {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the caller guarantees exclusive backend access and readable buffers.
+        let backend = unsafe { backend.as_mut() }.ok_or("Document backend is unavailable")?;
+        let path = unsafe { required_utf8(path, path_len)? };
+        let source = unsafe { required_utf8(source, source_len)? };
+        serde_json::to_vec(&backend.render_source(std::path::Path::new(path), source))
+            .map_err(|_| "Could not encode the document preview")
+    }));
+    match result {
+        Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
+        Ok(Err(message)) => error_document(message),
+        Err(_) => error_document("Wolfmark failed to render the in-memory source"),
+    }
+}
+
+/// # Safety
+/// `source` must reference `source_len` readable UTF-8 bytes for this call.
+/// This function has no backend or GUI state and may run on an analysis worker.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wolfmark_editor_decorations(
+    source: *const u8,
+    source_len: usize,
+) -> NativeBuffer {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the caller guarantees a readable source buffer.
+        let source = unsafe { required_utf8(source, source_len)? };
+        serde_json::to_vec(
+            &serde_json::json!({"spans": crate::markdown::editor::decorations(source)}),
+        )
+        .map_err(|_| "Could not encode source decorations")
+    }));
+    match result {
+        Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
+        Ok(Err(message)) => error_document(message),
+        Err(_) => error_document("Wolfmark failed to analyze source syntax"),
+    }
 }
 
 #[unsafe(no_mangle)]

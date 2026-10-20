@@ -7,6 +7,20 @@ use super::model::{Block, DocumentModel, Inline, ListItem, TableRow, plain_text}
 
 pub fn parse(source: &str) -> DocumentModel {
     let arena = Arena::new();
+    let options = options();
+    let compatible_source = normalize_literal_space_destinations(source);
+    let root = parse_document(&arena, &compatible_source, &options);
+    let (blocks, source_lines) = root
+        .children()
+        .filter_map(|node| parse_block(node).map(|block| (block, node.data().sourcepos.start.line)))
+        .unzip();
+    DocumentModel {
+        blocks,
+        source_lines,
+    }
+}
+
+pub(super) fn options() -> Options<'static> {
     let mut options = Options::default();
     options.extension.strikethrough = true;
     options.extension.table = true;
@@ -14,11 +28,7 @@ pub fn parse(source: &str) -> DocumentModel {
     options.extension.tasklist = true;
     options.extension.footnotes = true;
     options.extension.front_matter_delimiter = Some("---".into());
-    let compatible_source = normalize_literal_space_destinations(source);
-    let root = parse_document(&arena, &compatible_source, &options);
-    DocumentModel {
-        blocks: block_children(root),
-    }
+    options
 }
 
 /// CommonMark requires angle brackets around destinations containing spaces.

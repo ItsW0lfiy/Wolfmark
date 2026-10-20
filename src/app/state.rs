@@ -51,27 +51,32 @@ impl Backend {
             }
         };
         self.load_count = self.load_count.saturating_add(1);
+        let mut presentation = self.render_source(&canonical, &source);
+        presentation.metrics.read_us = read_us;
+        presentation
+    }
+
+    /// Render the session buffer without reading or requiring the file to exist.
+    /// The supplied absolute path remains the context for local resources.
+    pub fn render_source(&mut self, path: &Path, source: &str) -> PresentationDocument {
         self.revision = self.revision.saturating_add(1);
         self.image_pipeline.reset_requests();
 
-        if canonical
+        if path
             .extension()
             .and_then(|extension| extension.to_str())
             .is_some_and(|extension| extension.eq_ignore_ascii_case("txt"))
         {
             self.image_requests.clear();
             return PresentationDocument::plain_text(
-                canonical
-                    .file_name()
+                path.file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("Wolfmark")
                     .to_owned(),
-                source,
+                source.to_owned(),
                 PresentationMetrics {
                     revision: self.revision,
-                    source_bytes: std::fs::metadata(&canonical)
-                        .map_or(0, |metadata| metadata.len()),
-                    read_us,
+                    source_bytes: source.len() as u64,
                     parse_count: self.parse_count,
                     load_count: self.load_count,
                     ..PresentationMetrics::default()
@@ -80,16 +85,15 @@ impl Backend {
         }
 
         let parse_started = Instant::now();
-        let model = parse(&source);
+        let model = parse(source);
         let parse_us = elapsed_us(parse_started);
         self.parse_count = self.parse_count.saturating_add(1);
         let (mut presentation, requests) = to_presentation(
             &model,
-            &canonical,
+            path,
             PresentationMetrics {
                 revision: self.revision,
                 source_bytes: source.len() as u64,
-                read_us,
                 parse_us,
                 ..PresentationMetrics::default()
             },
@@ -148,6 +152,29 @@ fn elapsed_us(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::Backend;
+
+    #[test]
+    fn session_preview_uses_unsaved_source_without_disk_reads() {
+        let mut backend = Backend::default();
+        let path = std::env::temp_dir().join("wolfmark-unsaved-preview.md");
+        let presentation = backend.render_source(&path, "# Unsaved\n\nNew **content**.\n");
+        assert!(presentation.error.is_empty());
+        assert_eq!(backend.load_count(), 0);
+        assert_eq!(backend.parse_count(), 1);
+        assert_eq!(presentation.commands[0].source_line, 1);
+        assert!(
+            presentation
+                .commands
+                .iter()
+                .any(|command| command.source_line == 3)
+        );
+        assert!(
+            presentation
+                .commands
+                .iter()
+                .any(|command| command.text == "content")
+        );
+    }
 
     #[test]
     fn text_documents_bypass_markdown_and_preserve_source() {

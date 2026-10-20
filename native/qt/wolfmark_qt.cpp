@@ -159,6 +159,7 @@ struct Command {
     int image_width = 0;
     int image_height = 0;
     QJsonArray spans;
+    int source_line = 0;
 };
 
 struct ImageOccurrence {
@@ -227,7 +228,7 @@ Command parseCommand(const QJsonValue& value) {
                    object.value("number").toInteger(),
                    object.value("imageWidth").toInt(),
                    object.value("imageHeight").toInt(),
-                   object.value("spans").toArray()};
+                   object.value("spans").toArray(), object.value("sourceLine").toInt()};
 }
 
 QTextCharFormat baseCharacterFormat(double points = 12.75) {
@@ -527,6 +528,7 @@ public:
         code_frame_bounds_.clear();
         code_frame_bounds_dirty_ = true;
         anchor_positions_.clear();
+        source_positions_.clear();
         navigation_anchor_.clear();
         completed_navigation_anchor_.clear();
         navigation_target_clamped_ = false;
@@ -945,6 +947,27 @@ public:
     }
     [[nodiscard]] int viewportAnchorPosition() const {
         return captureViewportAnchor().position;
+    }
+    [[nodiscard]] int sourceLineAtViewport() const {
+        const int position = viewportAnchorPosition();
+        int line = 1;
+        for (const auto& item : source_positions_) {
+            if (item.first > position) break;
+            line = item.second;
+        }
+        return line;
+    }
+
+    void navigateToSourceLine(int line) {
+        cancelScrollMotion();
+        int position = 0;
+        for (const auto& item : source_positions_) {
+            if (item.second > line) break;
+            position = item.first;
+        }
+        QTextCursor cursor(document());
+        cursor.setPosition(std::clamp(position, 0, document()->characterCount() - 1));
+        verticalScrollBar()->setValue(verticalScrollBar()->value() + cursorRect(cursor).top() - 16);
     }
     std::function<void(int)> zoomChanged;
 
@@ -1419,6 +1442,8 @@ private:
     void buildBlocks(QTextCursor& cursor, std::size_t& index, int stop_kind, int depth) {
         while (index < commands_.size()) {
             const auto& command = commands_[index];
+            if (command.source_line > 0)
+                source_positions_.emplace_back(cursor.position(), command.source_line);
             if (command.kind == stop_kind) {
                 ++index;
                 return;
@@ -2236,6 +2261,7 @@ private:
     QJsonObject metrics_;
     QString title_ = QStringLiteral("Wolfmark");
     QHash<QString, int> anchor_positions_;
+    std::vector<std::pair<int, int>> source_positions_;
     QString navigation_anchor_;
     QString completed_navigation_anchor_;
     bool navigation_retarget_pending_ = false;
@@ -4373,7 +4399,7 @@ void applyWolfmarkStyle(QApplication& application) {
 } // namespace
 
 extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const WolfmarkApiTable* api) {
-    if (api == nullptr || api->version != 3) {
+    if (api == nullptr || api->version != 4) {
         return 2;
     }
     QCoreApplication::setOrganizationName(QStringLiteral("Wolfmark"));

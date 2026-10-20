@@ -42,6 +42,9 @@ struct WolfmarkApiTable {
     void (*window_set_mode)(void*, std::uint8_t);
     std::uint8_t (*window_enter_fullscreen)(void*);
     std::uint8_t (*window_leave_fullscreen)(void*);
+    WolfmarkBuffer (*render_source)(void*, const std::uint8_t*, std::size_t,
+                                   const std::uint8_t*, std::size_t);
+    WolfmarkBuffer (*editor_decorations)(const std::uint8_t*, std::size_t);
 };
 
 static_assert(sizeof(WolfmarkBuffer) == sizeof(void*) + sizeof(std::size_t) * 2);
