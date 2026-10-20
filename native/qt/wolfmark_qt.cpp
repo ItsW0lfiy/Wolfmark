@@ -2453,42 +2453,58 @@ public:
                 timer.start();
                 setDocumentMode(2);
                 const auto source_mode_us = timer.nsecsElapsed() / 1000;
-                editor->goToLine(editor->document()->blockCount() * 3 / 4);
-                const int line = editor->viewportLine();
-                const int characters = editor->document()->characterCount();
-                auto cursor = editor->textCursor();
-                timer.restart();
-                for (int index = 0; index < 64; ++index) cursor.insertText(QStringLiteral("x"));
-                const auto typing_us = timer.nsecsElapsed() / 1000;
-                editor->setTextCursor(cursor);
-                timer.restart();
-                for (int pass = 0; pass < 6; ++pass) setDocumentMode(pass % 2 == 0 ? 1 : 2);
-                const auto modes_us = timer.nsecsElapsed() / 1000;
-                bool anchored = std::abs(editor->viewportLine() - line) <= 2;
-                for (const int zoom : {80, 100, 125, 150, 100}) {
-                    const int start = editor->viewportLine();
-                    changeZoom(zoom - active_->zoom_percent);
-                    anchored &= std::abs(editor->viewportLine() - start) <= 2;
-                    anchored &= std::abs(editor->document()->defaultFont().pointSizeF() - 12.0 * zoom / 100.0) < 0.01;
-                }
-                auto* poll = new QTimer(this);
-                auto elapsed = std::make_shared<QElapsedTimer>(); elapsed->start();
-                QObject::connect(poll, &QTimer::timeout, this,
-                    [this, editor, poll, elapsed, before, constructions, source_mode_us, typing_us, modes_us, characters, anchored] {
-                    if (!editor->analysisReady() && elapsed->elapsed() < 30000) return;
-                    poll->stop();
-                    const auto after = api_->backend_counters(backend_);
-                    const bool stable = before.parse_count == after.parse_count && before.load_count == after.load_count &&
-                                        constructions == document_->constructionCount();
-                    const bool ok = stable && anchored && editor->analysisReady() &&
-                                    editor->document()->characterCount() == characters + 64;
-                    std::fprintf(stdout, "WOLFMARK_SMOKE editor_performance=%s chars=%d blocks=%d source_mode_us=%lld typing_64_us=%lld modes_6_us=%lld analysis_us=%llu anchor=%s reader_counters=%s\n",
-                        ok ? "ok" : "failed", characters, editor->document()->blockCount(),
-                        static_cast<long long>(source_mode_us), static_cast<long long>(typing_us), static_cast<long long>(modes_us),
-                        static_cast<unsigned long long>(editor->analysisMicros()), anchored ? "stable" : "changed", stable ? "stable" : "changed");
-                    std::fflush(stdout); qApp->exit(ok ? 0 : 20);
+                auto* ready = new QTimer(this);
+                auto waiting = std::make_shared<QElapsedTimer>(); waiting->start();
+                QObject::connect(ready, &QTimer::timeout, this, [this, ready, waiting, editor, before, constructions, source_mode_us] {
+                    if (!editor->analysisReady() && waiting->elapsed() < 30000) return;
+                    ready->stop();
+                    const bool decorated = editor->analysisReady();
+                    QElapsedTimer editing_timer;
+                    editor->goToLine(editor->document()->blockCount() * 3 / 4);
+                    const int line = editor->viewportLine();
+                    const int characters = editor->document()->characterCount();
+                    auto cursor = editor->textCursor();
+                    editing_timer.restart();
+                    for (int index = 0; index < 64; ++index) cursor.insertText(QStringLiteral("x"));
+                    const auto typing_us = editing_timer.nsecsElapsed() / 1000;
+                    editor->setTextCursor(cursor);
+                    setDocumentMode(1);
+                    cursor = editor->textCursor();
+                    editing_timer.restart();
+                    for (int index = 0; index < 64; ++index) cursor.insertText(QStringLiteral("y"));
+                    const auto live_typing_us = editing_timer.nsecsElapsed() / 1000;
+                    editor->setTextCursor(cursor);
+                    editing_timer.restart();
+                    for (int pass = 0; pass < 6; ++pass) setDocumentMode(pass % 2 == 0 ? 1 : 2);
+                    const auto modes_us = editing_timer.nsecsElapsed() / 1000;
+                    bool anchored = std::abs(editor->viewportLine() - line) <= 2;
+                    for (const int zoom : {80, 100, 125, 150, 100}) {
+                        const int start = editor->viewportLine();
+                        changeZoom(zoom - active_->zoom_percent);
+                        anchored &= std::abs(editor->viewportLine() - start) <= 2;
+                        anchored &= std::abs(editor->document()->defaultFont().pointSizeF() - 12.0 * zoom / 100.0) < 0.01;
+                        anchored &= zoom_label_->text() == QStringLiteral("%1%").arg(zoom);
+                    }
+                    auto* poll = new QTimer(this);
+                    auto elapsed = std::make_shared<QElapsedTimer>(); elapsed->start();
+                    QObject::connect(poll, &QTimer::timeout, this,
+                        [this, editor, poll, elapsed, before, constructions, source_mode_us, typing_us, live_typing_us, modes_us, characters, anchored, decorated] {
+                        if (!editor->analysisReady() && elapsed->elapsed() < 30000) return;
+                        poll->stop();
+                        const auto after = api_->backend_counters(backend_);
+                        const bool stable = before.parse_count == after.parse_count && before.load_count == after.load_count &&
+                                            constructions == document_->constructionCount();
+                        const bool ok = stable && anchored && decorated && editor->analysisReady() &&
+                                        editor->document()->characterCount() == characters + 128;
+                        std::fprintf(stdout, "WOLFMARK_SMOKE editor_performance=%s chars=%d blocks=%d source_mode_us=%lld typing_64_us=%lld live_typing_64_us=%lld modes_6_us=%lld analysis_us=%llu anchor=%s reader_counters=%s decorated_before_typing=%s\n",
+                            ok ? "ok" : "failed", characters, editor->document()->blockCount(),
+                            static_cast<long long>(source_mode_us), static_cast<long long>(typing_us), static_cast<long long>(live_typing_us), static_cast<long long>(modes_us),
+                            static_cast<unsigned long long>(editor->analysisMicros()), anchored ? "stable" : "changed", stable ? "stable" : "changed", decorated ? "yes" : "no");
+                        std::fflush(stdout); qApp->exit(ok ? 0 : 20);
+                    });
+                    poll->start(25);
                 });
-                poll->start(25);
+                ready->start(25);
             });
             return;
         }
@@ -2502,6 +2518,9 @@ public:
                 const auto before = api_->backend_counters(backend_);
                 setDocumentMode(2);
                 ok &= editor->hasFocus() && !editor->isReadOnly();
+                changeZoom(25);
+                ok &= active_->zoom_percent == 125 && zoom_label_->text() == QStringLiteral("125%");
+                changeZoom(-25);
                 auto cursor = editor->textCursor();
                 cursor.movePosition(QTextCursor::End);
                 cursor.insertText(QStringLiteral("\nUnsaved 月🐺 **addition**"));
@@ -2618,6 +2637,9 @@ public:
                 ok &= !editor->markerMinimizedAt(0);
                 editor->setLivePreview(false);
                 ok &= !editor->markerMinimizedAt(0) && editor->encodedBytes() == bytes;
+                auto* accessible = QAccessible::queryAccessibleInterface(editor);
+                ok &= accessible && accessible->textInterface() &&
+                      accessible->textInterface()->text(0, accessible->textInterface()->characterCount()).contains(QStringLiteral("**bold**"));
                 editor->setTextCursor(editor->document()->find(QStringLiteral("bold")));
                 QKeyEvent bold_key(QEvent::KeyPress, Qt::Key_B, Qt::ControlModifier);
                 QApplication::sendEvent(editor, &bold_key);
@@ -2753,12 +2775,14 @@ public:
 
                 user_settings_.setCheckOnStartup(false);
                 user_settings_.setIncludePrereleases(true);
+                user_settings_.setEditorWordWrap(false);
                 user_settings_.setLastOpenDirectory(QDir(root).filePath(QStringLiteral("new-documents")));
                 QString save_error;
                 const bool saved = user_settings_.save(&save_error);
                 const auto reloaded = wolfmark::qt::UserSettings::load(false);
                 const bool round_trip = saved && !reloaded.updates().check_on_startup &&
                     reloaded.updates().include_prereleases &&
+                    !reloaded.editorWordWrap() &&
                     reloaded.lastOpenDirectory() == user_settings_.lastOpenDirectory();
 
                 QFile malformed(user_settings_.filePath());
@@ -4636,7 +4660,7 @@ private:
             active_->editor->setZoomPercent(active_->zoom_percent);
             zoom_label_->setText(QStringLiteral("%1%").arg(active_->zoom_percent));
         }
-        zoom_label_->setText(QStringLiteral("%1%").arg(document_->zoomPercent()));
+        zoom_label_->setText(QStringLiteral("%1%").arg(active_->zoom_percent));
         updateStatus();
     }
 

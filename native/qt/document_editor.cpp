@@ -103,6 +103,7 @@ public:
         const int old_end = selection_end_;
         selection_start_ = std::min(anchor, position);
         selection_end_ = std::max(anchor, position);
+        if (!live_) return;
         // Only blocks containing markers whose contextual visibility changed
         // need a layout update. No source mutation or undo command is created.
         for (auto it = parts_.cbegin(); it != parts_.cend(); ++it) {
