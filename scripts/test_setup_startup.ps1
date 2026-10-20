@@ -11,7 +11,7 @@ $payload = Join-Path $projectRoot "out/package/staging/$version/Wolfmark"
 New-Item -ItemType Directory -Force $testRoot | Out-Null
 & (Join-Path $PSScriptRoot 'test_setup_ui_contract.ps1')
 
-function Invoke-Checked([string]$Executable, [string[]]$Arguments, [int]$Expected = 0) {
+function Invoke-Checked([string]$Executable, [string[]]$Arguments, [int]$Expected = 0, [switch]$PassThruId) {
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Executable
     $start.WorkingDirectory = $testRoot # Deliberately not the setup runtime.
@@ -26,6 +26,7 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments, [int]$Expecte
     if ($process.ExitCode -ne $Expected) {
         throw "Startup contract expected $Expected, got $($process.ExitCode): $Executable $($Arguments -join ' ')"
     }
+    if ($PassThruId) { return $process.Id }
 }
 
 function Assert-Log([string]$Path, [string[]]$Expected) {
@@ -133,10 +134,9 @@ try {
     }
     if ($calls.Contains('--cancel-file')) { throw 'Silent operations passed a cancellation file.' }
     $env:WOLFMARK_TEST_CORE_EXIT = '42'
-    Invoke-Checked $probeExe @('/DIAGNOSE') 42
-    $bootstrap = Get-ChildItem $env:TEMP -Filter 'Wolfmark-Setup-bootstrap-*.log' |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    $null = Assert-Log $bootstrap.FullName @('stage=bootstrap', 'stage=extracted', 'stage=launch cwd=',
+    $diagnosticProcessId = Invoke-Checked $probeExe @('/DIAGNOSE') 42 -PassThruId
+    $bootstrap = Join-Path $env:TEMP "Wolfmark-Setup-bootstrap-$diagnosticProcessId.log"
+    $null = Assert-Log $bootstrap @('stage=bootstrap', 'stage=extracted', 'stage=launch cwd=',
         'stage=host-entry', 'child-exit=42', 'stage=child-exit component=WolfmarkSetup exit=42')
 
     $failureSource = $source.Replace('StrCpy $SetupCommand ''"$PLUGINSDIR\setup\WolfmarkSetup.exe"',
@@ -146,10 +146,9 @@ try {
     Set-Content -LiteralPath $failureNsi -Value $failureSource -Encoding utf8NoBOM
     & $nsis /V2 /INPUTCHARSET UTF8 "/DOUTPUT_EXE=$failureExe" "/DSETUP_RUNTIME=$probeRuntime" "/DPAYLOAD_ROOT=$payload" "/DDISPLAY_VERSION=$version" /DWINDOWS_VERSION=0.1.7.0 $failureNsi
     if ($LASTEXITCODE -ne 0) { throw 'Failure-path NSIS compilation failed.' }
-    Invoke-Checked $failureExe @('/S') 1603
-    $bootstrap = Get-ChildItem $env:TEMP -Filter 'Wolfmark-Setup-bootstrap-*.log' |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    $null = Assert-Log $bootstrap.FullName @('stage=failure component=Wolfmark Setup UI (process creation failed) exit=1603')
+    $failureProcessId = Invoke-Checked $failureExe @('/S') 1603 -PassThruId
+    $bootstrap = Join-Path $env:TEMP "Wolfmark-Setup-bootstrap-$failureProcessId.log"
+    $null = Assert-Log $bootstrap @('stage=failure component=Wolfmark Setup UI (process creation failed) exit=1603')
     Write-Host 'Setup startup contract passed: real Qt/core detection, NSIS extraction/arguments, modes, Unicode/spaces, cancellation arguments, and exit propagation.'
 } finally {
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process') }
