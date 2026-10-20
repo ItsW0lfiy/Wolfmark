@@ -545,7 +545,9 @@ public:
         next->setDocumentMargin(0.0);
         next->setDefaultFont(baseCharacterFormat(settings_.value("bodyFontPoints").toDouble(12.75))
                                  .font());
+        QPointer<QTextDocument> previous = document();
         setDocument(next);
+        if (previous && previous->parent() == this) delete previous;
         QObject::connect(next->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged,
                          this, [this] {
             ++layout_generation_;
@@ -586,7 +588,6 @@ public:
         setTextCursor(start);
         verticalScrollBar()->setValue(0);
         QTimer::singleShot(0, this, [this] {
-            verticalScrollBar()->setValue(0);
             queueVisibleImages();
             invalidateCodeFrameBounds();
         });
@@ -1275,8 +1276,11 @@ protected:
             wheel_fraction_ -= movement;
             const double distance = movement == 0.0 ? std::copysign(1.0, scaled) : movement;
             if (reducedMotion()) {
-                scroll_controller_.moveDirectlyTo(verticalScrollBar()->value() +
-                                                  static_cast<int>(std::lround(distance)));
+                const double destination = std::clamp(
+                    static_cast<double>(verticalScrollBar()->value()) + distance,
+                    static_cast<double>(verticalScrollBar()->minimum()),
+                    static_cast<double>(verticalScrollBar()->maximum()));
+                scroll_controller_.moveDirectlyTo(static_cast<int>(std::lround(destination)));
             } else {
                 scroll_controller_.addWheelDistance(distance);
             }
@@ -2368,6 +2372,50 @@ public:
     }
 
     void runSmoke(const QString& mode) {
+        if (mode == QStringLiteral("scroll-stability")) {
+            QTimer::singleShot(250, this, [this] {
+                const auto before = api_->backend_counters(backend_);
+                document_->verticalScrollBar()->setValue(document_->verticalScrollBar()->maximum() * 3 / 4);
+                const auto state = document_->interactionState();
+                reloadSession(active_);
+                const int restored = document_->verticalScrollBar()->value();
+                QTimer::singleShot(0, this, [this, before, state, restored] {
+                    const int after = document_->verticalScrollBar()->value();
+                    bool ok = state.scroll > 0 && restored > 0 && after > 0;
+                    const auto constructions = document_->constructionCount();
+                    const QPointF position(80, 80);
+                    const auto wheel = [this, position](int angle, int pixel = 0) {
+                        QWheelEvent event(position, document_->viewport()->mapToGlobal(position.toPoint()),
+                                          QPoint(0, pixel), QPoint(0, angle), Qt::NoButton,
+                                          Qt::NoModifier, Qt::ScrollUpdate, false);
+                        QApplication::sendEvent(document_->viewport(), &event);
+                    };
+                    for (int pass = 0; pass < 200; ++pass) wheel(-12000);
+                    ok &= document_->verticalScrollBar()->value() == document_->verticalScrollBar()->maximum();
+                    wheel(std::numeric_limits<int>::max());
+                    ok &= document_->verticalScrollBar()->value() == 0;
+                    wheel(std::numeric_limits<int>::min());
+                    ok &= document_->verticalScrollBar()->value() == document_->verticalScrollBar()->maximum();
+                    wheel(0, 42);
+                    for (const int percent : {80, 100, 125, 150, 100}) {
+                        document_->changeZoom(percent - document_->zoomPercent());
+                        wheel(std::numeric_limits<int>::min());
+                        if (document_->verticalScrollBar()->maximum() > 0)
+                            ok &= document_->verticalScrollBar()->value() > 0;
+                    }
+                    const auto counters = api_->backend_counters(backend_);
+                    ok &= counters.load_count == before.load_count + 1 &&
+                          counters.parse_count == before.parse_count + 1 &&
+                          constructions == document_->constructionCount();
+                    std::fprintf(stdout, "WOLFMARK_SMOKE scroll_stability=%s before=%d restored=%d after=%d reloads=%llu\n",
+                                 ok ? "ok" : "failed", state.scroll, restored, after,
+                                 static_cast<unsigned long long>(counters.load_count - before.load_count));
+                    std::fflush(stdout);
+                    qApp->exit(ok ? 0 : 7);
+                });
+            });
+            return;
+        }
         if (mode == QStringLiteral("startup-arguments")) {
             QTimer::singleShot(0, this, [this] {
                 QStringList names;
@@ -4428,6 +4476,8 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
             smoke_mode = QStringLiteral("image-geometry");
         } else if (argument == QStringLiteral("--smoke-images")) {
             smoke_mode = QStringLiteral("images");
+        } else if (argument == QStringLiteral("--smoke-scroll-stability")) {
+            smoke_mode = QStringLiteral("scroll-stability");
         } else if (argument == QStringLiteral("--smoke-multidoc")) {
             smoke_mode = QStringLiteral("multidoc");
         } else if (argument == QStringLiteral("--smoke-plaintext")) {

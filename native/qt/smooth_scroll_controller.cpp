@@ -66,7 +66,7 @@ bool SmoothScrollController::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void SmoothScrollController::addWheelDistance(double distance) {
-    if (!slider_ || distance == 0.0) return;
+    if (!slider_ || !std::isfinite(distance) || distance == 0.0) return;
     const double minimum = slider_->minimum();
     const double maximum = slider_->maximum();
     if (!running_) {
@@ -135,6 +135,8 @@ void SmoothScrollController::tick() {
     const qint64 elapsed_ns = elapsed_.nsecsElapsed();
     elapsed_.restart();
     const double dt = std::max(0.000001, static_cast<double>(elapsed_ns) / 1'000'000'000.0);
+    target_ = std::clamp(target_, static_cast<double>(slider_->minimum()),
+                         static_cast<double>(slider_->maximum()));
 
     // Exact critically damped integration for a fixed target over dt. This is
     // stable across variable frame intervals and never imposes a px/frame cap.
@@ -150,8 +152,9 @@ void SmoothScrollController::tick() {
     if (timer_.interval() != cadence_ms) timer_.setInterval(cadence_ms);
 
     if (frame_sampled) frame_sampled(dt, position_, velocity_);
-    int next = std::clamp(static_cast<int>(std::lround(position_)), slider_->minimum(),
-                          slider_->maximum());
+    position_ = std::clamp(position_, static_cast<double>(slider_->minimum()),
+                            static_cast<double>(slider_->maximum()));
+    int next = static_cast<int>(std::lround(position_));
     if (std::abs(target_ - position_) <= stopped_distance &&
         std::abs(velocity_) <= stopped_velocity) {
         position_ = target_;

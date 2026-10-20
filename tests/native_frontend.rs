@@ -86,6 +86,12 @@ impl Drop for GeneratedTestDirectory {
 }
 
 #[test]
+fn background_relayout_cannot_erase_restored_reading_position() {
+    let output = run_smoke("--smoke-scroll-stability", "layout-transitions.md");
+    assert!(output.contains("scroll_stability=ok"), "{output}");
+}
+
+#[test]
 fn shell_startup_arguments_open_supported_documents_once() {
     let generated = GeneratedTestDirectory::recreate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
