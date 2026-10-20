@@ -4,7 +4,7 @@ Wolfmark is a single native process with Cargo as its top-level workflow. Rust a
 
 ```text
 ordinary Markdown file
-  -> Rust document session and Comrak parsing
+  -> native source session and Rust Comrak parsing
   -> Wolfmark semantic document model
   -> Wolfmark framework-neutral presentation commands
   -> versioned C ABI function table
@@ -14,7 +14,7 @@ ordinary Markdown file
 
 ## Rust ownership
 
-- file reads, document identity, reload counters, and source lifetime
+- headless file loading and rendering counters (native sessions read/save source buffers)
 - Comrak parsing and Markdown extension handling
 - semantic and presentation models
 - heading IDs and TOC targets
@@ -27,6 +27,7 @@ ordinary Markdown file
 ## C++/Qt ownership
 
 - QApplication and the Qt Widgets shell
+- authoritative source buffers, native undo, safe saving, tabs and editing modes ([details](document-editing.md))
 - custom title bar with contextual document actions, F12 diagnostics row, empty state, file dialog, drag/drop, and file watcher
 - collapsible document navigation using the existing framework-neutral TOC, with native tree accessibility and heading anchors
 - native QTextDocument construction through QTextCursor, QTextFrame, QTextTable, and native formats
@@ -37,7 +38,7 @@ ordinary Markdown file
 
 ## Interoperability
 
-`src/native_api.rs` constructs a versioned table of `extern "C"` functions and calls `wolfmark_qt_run`. `native/qt/wolfmark_api.h` mirrors plain-layout structures for buffers, image results, and counters. Rust-owned buffers are released only through the supplied Rust callbacks. The only handwritten unsafe Rust block is the documented call across this ABI.
+`src/native_api.rs` constructs a versioned table of `extern "C"` functions used by `wolfmark_qt_run`. `native/qt/wolfmark_api.h` mirrors plain-layout buffers, image results, counters and callbacks. Rust-owned buffers are released only through Rust callbacks. Unsafe Rust is confined to documented ABI ownership/pointer operations and the native entry-point call.
 
 This narrow C ABI was selected over CXX-Qt because the existing framework-neutral presentation model already serializes cleanly, the ABI keeps ownership explicit, it avoids generated framework glue, and it preserves one process with Cargo in control. JSON is used only as an in-process presentation-data encoding; it is not a network or browser protocol.
 
@@ -45,7 +46,7 @@ Qt types do not enter the semantic model. The current adapter is replaceable, wh
 
 ## Retained document sessions
 
-The desktop window owns an ordered set of open-document sessions. Each session has one canonical path, one Rust backend, one native `DocumentView`/`QTextDocument`, one outline, and one file watcher/debounce timer. The active session is only a `QStackedWidget` selection; switching it does not call the Rust open function or rebuild the native document. Closing a session releases its widget, watcher, native resources, and Rust image pipeline. Opening a canonically identical path activates the existing session.
+The desktop window owns an ordered set of open-document sessions. Each has one canonical path, Rust backend, Reader document, shared Source/Live Preview editor, outlines and file/directory watcher. The active tab selects retained widgets without disk reads or reparsing. Closing releases native resources and the Rust image pipeline and cancels source analysis delivery. Canonically identical paths activate the existing session. See [document editing](document-editing.md) for source ownership and saving.
 
 Markdown sessions follow the normal Comrak semantic path. `.txt` sessions are explicitly tagged `plainText` by the Rust presentation contract and carry exact source text; they do not create a Comrak AST, Markdown commands, TOC entries, links, or image requests.
 

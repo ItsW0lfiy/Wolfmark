@@ -270,11 +270,11 @@ These features should operate on ordinary Markdown files and selected folders/re
 
 # Integrated editor roadmap
 
-Wolfmark remains **viewer-first**, but a future editor is planned as an integrated optional capability inside the same application.
+Wolfmark remains **viewer-first**. The current checkout implements Reader, Source and contextual Live Preview with shared source/undo, explicit Save/Save As, dirty indicators, Find and external-conflict checks. See [document editing](docs/architecture/document-editing.md) for behavior and limitations; physical editing acceptance remains required.
 
 Read-only viewing must remain complete and valid without enabling editing.
 
-Planned editor directions include:
+Continuing editor directions and constraints include the existing foundation and later extensions:
 
 - raw/source Markdown editing
 - explicit viewer/editor switching
@@ -722,8 +722,7 @@ These should be decided when implementation is close enough to justify locking t
 
 - shell/file-association behavior when Wolfmark is already running
 - single-instance versus multi-instance policy
-- exact integrated editor widget/engine and buffer architecture
-- exact live-preview strategy
+- further Live Preview coverage beyond the current native source-document decorations
 - exact Markdown compatibility-profile definitions and persistence behavior
 - exact strategy for Wolfmark-specific syntax that is not directly supported by Comrak
 - exact math/diagram renderer strategy

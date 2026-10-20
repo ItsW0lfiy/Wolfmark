@@ -93,6 +93,19 @@ For a deterministic rendered client-area snapshot during UI review:
 cargo run -- fixtures\wolfmark-visual-test.md --smoke-snapshot
 ```
 
+Source and Live Preview snapshots use `WOLFMARK_SNAPSHOT_MODE=source` or `live`.
+For repeatable native editor probes after the existing fixture generators:
+
+```powershell
+pwsh -File tools/editor_performance.ps1
+```
+
+This probes the generated large Markdown/plain-text inputs and creates a 3.4 MB,
+10,000-paragraph fixture under ignored `out/tests/editor-performance`. It waits
+for source analysis before measuring Source/Live insertions, mode/zoom location,
+affected-block counts, Reader refresh, and sampled process memory. Timings are
+measurements, not pass/fail speed thresholds or claims about physical typing.
+
 Ignored snapshots are written below `out/visual/dev7/`. Run `pwsh -File tools/visual_snapshots.ps1` after a Debug build and fixture generation to capture inline code/wrapping/selection, image-gap regression, empty/prose/headings/tables/code/images/plain text/narrow/wide, sidebar, menu, and 80/100/125/150% zoom cases. Optional process variables `WOLFMARK_SNAPSHOT_NAME`, `WOLFMARK_SNAPSHOT_WIDTH`, `WOLFMARK_SNAPSHOT_HEIGHT`, and `WOLFMARK_SNAPSHOT_SCROLL` select the filename, client size, and vertical offset. `WOLFMARK_SNAPSHOT_ZOOM` sets actual document zoom; `WOLFMARK_SNAPSHOT_NO_SIDEBAR=1` collapses navigation. `WOLFMARK_SNAPSHOT_MENU=1` captures the real menu, and `WOLFMARK_SNAPSHOT_SELECTION=1` selects the native document before capture. Smoke sessions use reduced motion and put QSettings in project-local `out/tests/native-settings`, not the user's application settings. They supplement rather than replace physical taskbar, Alt+Tab, DPI, touchpad, and multi-monitor checks.
 
 Focused dev.6 checks:

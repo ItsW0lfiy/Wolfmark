@@ -4,6 +4,8 @@ foreach ($case in @(
     @('image-geometry', 'fixtures/image-layout-regression.md'),
     @('zoom', 'fixtures/wolfmark-visual-test.md'),
     @('zoom', 'fixtures/generated/large-text.md'),
+    @('editor-performance', 'fixtures/generated/large-text.md'),
+    @('editor-performance', 'fixtures/generated/large-literal.txt'),
     @('images', 'fixtures/generated/image-stress.md'),
     @('scroll-profile', 'fixtures/generated/large-text.md'),
     @('scroll-profile', 'fixtures/generated/image-stress-250.md'),

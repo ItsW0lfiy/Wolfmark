@@ -8,6 +8,12 @@ Wolfmark is free and open source. All first-party features are available without
 
 Current development milestone: `0.1.0-dev.7` — First Windows Release & Shell Integration.
 
+Document editing is available through **Reader | Live Preview | Source** on the
+document toolbar. Reader remains the default. Source and Live Preview share one
+buffer and undo history; Save/Save As are explicit and detect external conflicts.
+See [document sessions and editing](docs/architecture/document-editing.md) for
+source preservation, contextual syntax and current limitations.
+
 ## Quick start
 
 Install Rust with the MSVC target, PowerShell 7, and Visual Studio Build Tools with the C++ x64 workload and Windows SDK. Then, from the repository root:
@@ -42,7 +48,7 @@ Markdown source
   -> native QTextDocument
 ```
 
-Rust owns file loading, Comrak parsing, semantic/presentation models, syntax classification, image policy/decoding/cache, diagnostics, and framework-neutral window state. C++ owns the Qt widget shell, native QTextDocument construction, selection/clipboard interaction, document layout, and Windows presentation integration. The boundary transfers UTF-8 JSON, IDs, owned byte buffers, counters, and function pointers; it does not use a second process or network IPC.
+Rust owns Comrak parsing, semantic/presentation models, source decorations, syntax classification, image policy/decoding/cache, diagnostics, and framework-neutral window state. C++ owns native source sessions and file saving, the Qt shell, QTextDocument construction, selection/clipboard interaction, layout, and Windows presentation integration. The boundary transfers UTF-8 JSON, IDs, owned buffers, counters, and function pointers; it does not use a second process or network IPC.
 
 The locked Wolfmark presentation uses a layered charcoal/graphite shell, restrained crimson interaction accents, and a collapsible file-first sidebar with Open/Reload, compact open-document entries, and the active document's native heading outline. A quiet breadcrumb header with Windows captions frames a broad document canvas. Tables have graphite headers and restrained horizontal/vertical separators; inline code has subtle graphite backgrounds; fences remain one coherent native frame. True percentage zoom scales native document layout while retaining selection and decoded images. Syntax colors remain restrained and non-blue.
 
