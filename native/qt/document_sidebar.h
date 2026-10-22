@@ -18,6 +18,7 @@ public:
     explicit DocumentSidebar(QWidget* parent = nullptr);
     void setDocuments(const QStringList& filenames, int active_index);
     void setOutline(const QJsonArray& outline);
+    void resetOutlineContext();
     bool revealOutlineAnchor(const QString& anchor, bool animate = true);
     bool activateOutlineAnchorForTest(const QString& anchor);
     [[nodiscard]] bool outlineScrollRunning() const;
@@ -41,5 +42,6 @@ private:
     SmoothTreeWidget* documents_;
     SmoothTreeWidget* outline_;
     QHash<QString, QTreeWidgetItem*> outline_items_;
+    QJsonArray displayed_outline_;
 };
 } // namespace wolfmark::qt

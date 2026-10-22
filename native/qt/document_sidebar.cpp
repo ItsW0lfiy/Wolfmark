@@ -14,6 +14,7 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QScrollBar>
+#include <QSet>
 #include <QTreeWidget>
 #include <QWheelEvent>
 #include <algorithm>
@@ -214,9 +215,24 @@ void DocumentSidebar::setDocuments(const QStringList& filenames, int active_inde
     reload_->setEnabled(active_index >= 0);
 }
 
-void DocumentSidebar::setOutline(const QJsonArray& outline) {
+void DocumentSidebar::resetOutlineContext() {
+    // Collapsed headings and scroll offsets must not leak between different files.
     outline_->clear();
     outline_items_.clear();
+    displayed_outline_ = {};
+}
+
+void DocumentSidebar::setOutline(const QJsonArray& outline) {
+    // Switching modes or refreshing status must not reset the user's outline view.
+    if (outline == displayed_outline_) return;
+    QSet<QString> collapsed;
+    for (auto it = outline_items_.cbegin(); it != outline_items_.cend(); ++it) {
+        if (it.value()->childCount() > 0 && !it.value()->isExpanded()) collapsed.insert(it.key());
+    }
+    const int old_scroll = outline_->verticalScrollBar()->value();
+    outline_->clear();
+    outline_items_.clear();
+    displayed_outline_ = outline;
     std::vector<std::pair<int, QTreeWidgetItem*>> parents;
     for (const auto& value : outline) {
         const auto entry = value.toObject();
@@ -231,6 +247,11 @@ void DocumentSidebar::setOutline(const QJsonArray& outline) {
         parents.emplace_back(level, item);
     }
     outline_->expandAll();
+    for (const auto& anchor : collapsed) {
+        const auto item = outline_items_.constFind(anchor);
+        if (item != outline_items_.cend()) item.value()->setExpanded(false);
+    }
+    outline_->verticalScrollBar()->setValue(old_scroll);
 }
 
 bool DocumentSidebar::revealOutlineAnchor(const QString& anchor, bool animate) {

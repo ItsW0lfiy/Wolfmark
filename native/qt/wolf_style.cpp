@@ -105,14 +105,17 @@ void apply(QApplication& application) {
         QLineEdit, QComboBox { background: #1b1b1b; border: 1px solid #404040; border-radius: 6px; padding: 7px 9px; color: #e9e7e6; selection-background-color: #69313c; selection-color: #ffffff; }
         QLineEdit:focus, QComboBox:focus { border-color: #d62d4e; }
         QPlainTextEdit { background: #121212; color: #e9e7e6; border: none; selection-background-color: #69313c; selection-color: #ffffff; }
-        #documentToolbar { background: #161616; border-bottom: 1px solid #303030; }
-        QPushButton[documentMode="true"] { padding: 4px 10px; }
-        QPushButton[documentMode="true"]:checked { background: #342326; border-color: #d62d4e; color: #ffffff; }
+        #documentStatus { color: #c1bdbb; font-size: 11px; }
+        #documentStatus[attention="true"] { color: #e27680; }
+        #documentTabClose { color: #a6a19f; background: transparent; border: 0; border-radius: 4px; padding: 0; font-size: 15px; }
+        #documentTabClose:hover { color: #f4f1ef; background: #453034; }
+        #documentTabClose:pressed { color: #ffffff; background: #5a303a; }
         QSlider::groove:horizontal { height: 5px; border-radius: 2px; background: #343434; }
         QSlider::sub-page:horizontal { background: #d62d4e; border-radius: 2px; }
         QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: #f0edeb; border: 1px solid #d62d4e; }
-        QTabBar::tab { background: #191919; color: #aaa6a3; border: 1px solid #303030; padding: 7px 12px; }
-        QTabBar::tab:selected { background: #302629; color: #ffffff; border-bottom: 2px solid #d62d4e; }
+        #documentTabs { background: #141414; border-bottom: 1px solid #2b2b2b; }
+        #documentTabs::tab { background: #191919; color: #aaa6a3; border: 0; border-right: 1px solid #303030; padding: 5px 10px; }
+        #documentTabs::tab:selected { background: #252022; color: #ffffff; border-bottom: 2px solid #d62d4e; }
 
         #updateBanner { background: #1d1719; border-bottom: 1px solid #4a2930; }
         #updateLabel { color: #e1dedd; font-weight: 500; }

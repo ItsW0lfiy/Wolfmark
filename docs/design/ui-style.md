@@ -34,7 +34,7 @@ Wolfmark-controlled UI does not use blue, cyan, teal, navy, azure, indigo, blue-
 
 Centralized Qt styling covers push buttons, checkboxes, line edits, combo boxes, sliders, scrollbars, menus, tooltips, tabs, trees, focus, hover, pressed, and disabled states. Geometry is softly rounded but compact; controls do not become oversized pills. Primary controls are crimson; secondary controls remain graphite/silver.
 
-Settings uses a 218px left navigation rail with Updates, About and Reader & Editor pages. A permanent titlebar Settings button opens the existing dialog. Editor wrapping is a real persisted preference; new documents always begin in Reader. Compact tabs show dirty state, and the document toolbar exposes Save/Save As, Find and Reader/Live Preview/Source without replacing the native window controls.
+Settings uses a 218px left navigation rail with Updates, About and Reader & Editor pages. A permanent titlebar Settings button opens the existing dialog. Editor wrapping is a real persisted preference; new documents always begin in Reader. The original native titlebar remains the single permanent action surface: a compact Reader/Live Preview/Source menu appears alongside zoom, with Save shown when needed. Save As and Find remain available in the existing document-actions menu and through keyboard shortcuts. Tabs appear only when two or more documents are open, with restrained close controls; the sidebar's Open Documents list remains available as before.
 
 ## Windows corners and accessibility
 

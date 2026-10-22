@@ -8,9 +8,10 @@ Wolfmark is free and open source. All first-party features are available without
 
 Current development milestone: `0.1.0-dev.7` — First Windows Release & Shell Integration.
 
-Document editing is available through **Reader | Live Preview | Source** on the
-document toolbar. Reader remains the default. Source and Live Preview share one
-buffer and undo history; Save/Save As are explicit and detect external conflicts.
+Document editing is available through **Reader | Live Preview | Source** from a
+compact titlebar mode menu. Reader remains the default; the tab strip appears
+with multiple open documents. Source and Live Preview share one buffer and undo
+history; Save/Save As are explicit and detect external conflicts.
 See [document sessions and editing](docs/architecture/document-editing.md) for
 source preservation, contextual syntax and current limitations.
 

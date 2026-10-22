@@ -10,6 +10,7 @@
 #include "windows_window_frame.h"
 
 #include <QAbstractTextDocumentLayout>
+#include <QActionGroup>
 #include <QApplication>
 #include <QAccessible>
 #include <QBoxLayout>
@@ -76,6 +77,7 @@
 #include <QTextTableFormat>
 #include <QTextOption>
 #include <QTabBar>
+#include <QToolButton>
 #include <QTimer>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -314,6 +316,16 @@ private:
     }
 
     QString full_text_;
+};
+
+// A bounded native tab strip: long Markdown filenames should never consume the toolbar.
+class CompactDocumentTabs final : public QTabBar {
+protected:
+    QSize tabSizeHint(int index) const override {
+        QSize result = QTabBar::tabSizeHint(index);
+        result.setWidth(std::min(result.width(), 230));
+        return result;
+    }
 };
 
 class ScrollFrameTrace final {
@@ -2560,6 +2572,13 @@ public:
             QTimer::singleShot(250, this, [this, stage] {
                 *stage = QStringLiteral("modes");
                 bool ok = documents_.size() == 2 && active_->mode == OpenDocumentSession::Mode::Reader;
+                // UI contract: multi-document tabs are available, but the new editor
+                // features must not introduce a permanent full-width toolbar row.
+                ok &= tabs_->count() == 2 && !tabs_->isHidden() &&
+                      findChild<QWidget*>(QStringLiteral("documentToolbar")) == nullptr &&
+                      mode_group_->actions().size() == 3 &&
+                      mode_group_->checkedAction() != nullptr &&
+                      mode_group_->checkedAction()->data().toInt() == 0;
                 auto* session = active_;
                 auto* editor = session->editor;
                 const auto disk = editor->diskFingerprint();
@@ -2639,7 +2658,8 @@ public:
                 ok &= active_ == session && background->view->sourceLineAtViewport() == old_line;
                 const auto after = api_->backend_counters(session->backend);
                 ok &= after.parse_count == active_counters.parse_count && after.load_count == before.load_count;
-                ok &= tabs_->count() == 2 && mode_group_->checkedId() == 2;
+                ok &= tabs_->count() == 2 && mode_group_->checkedAction() != nullptr &&
+                      mode_group_->checkedAction()->data().toInt() == 2;
                 *stage = QStringLiteral("empty-outline");
                 auto heading = editor->textCursor();
                 heading.movePosition(QTextCursor::Start);
@@ -4160,7 +4180,47 @@ private:
         open_->setToolTip(QStringLiteral("Open Markdown or text file (Ctrl+O)"));
         QObject::connect(open_, &QPushButton::clicked, this, [this] { chooseDocument(); });
         actions->addWidget(open_);
-        actions->addSpacing(10);
+        actions->addSpacing(6);
+
+        // Keep the existing titlebar as Wolfmark's only permanent document toolbar.
+        // Editing capabilities remain available without adding two full-width rows.
+        mode_button_ = new WolfButton(QStringLiteral("Reader  ▾"));
+        mode_button_->setProperty("titleTool", true);
+        mode_button_->setAccessibleName(QStringLiteral("Choose document mode"));
+        mode_button_->setToolTip(QStringLiteral("Reader, Live Preview, or Source"));
+        auto* mode_menu = new QMenu(mode_button_);
+        mode_menu->setObjectName(QStringLiteral("documentModeMenu"));
+        mode_group_ = new QActionGroup(mode_menu);
+        mode_group_->setExclusive(true);
+        int mode_id = 0;
+        for (const auto& name : {QStringLiteral("Reader"), QStringLiteral("Live Preview"), QStringLiteral("Source")}) {
+            auto* action = mode_menu->addAction(name);
+            action->setCheckable(true);
+            action->setData(mode_id++);
+            mode_group_->addAction(action);
+        }
+        QObject::connect(mode_group_, &QActionGroup::triggered, this,
+                         [this](QAction* action) { setDocumentMode(action->data().toInt()); });
+        QObject::connect(mode_button_, &QPushButton::clicked, this, [this, mode_menu] {
+            mode_menu->popup(mode_button_->mapToGlobal(QPoint(0, mode_button_->height() + 4)));
+        });
+        actions->addWidget(mode_button_);
+
+        save_button_ = new WolfButton(QStringLiteral("Save"));
+        save_button_->setProperty("titleTool", true);
+        save_button_->setAccessibleName(QStringLiteral("Save current document"));
+        save_button_->setToolTip(QStringLiteral("Save changes (Ctrl+S)"));
+        QObject::connect(save_button_, &QPushButton::clicked, this, [this] { saveSession(active_, false); });
+        save_button_->hide();
+        actions->addWidget(save_button_);
+
+        document_status_ = new QLabel;
+        document_status_->setObjectName(QStringLiteral("documentStatus"));
+        document_status_->setAccessibleName(QStringLiteral("Document save status"));
+        document_status_->setMaximumWidth(115);
+        document_status_->hide();
+        actions->addWidget(document_status_);
+        actions->addSpacing(6);
         zoom_out_ = new WolfButton(QStringLiteral("−"));
         zoom_out_->setProperty("titleTool", true);
         zoom_out_->setFixedWidth(28);
@@ -4196,6 +4256,13 @@ private:
         more->setFixedWidth(32);
         auto* menu = new QMenu(more);
         menu->setObjectName(QStringLiteral("documentMenu"));
+        menu->addAction(QStringLiteral("Save\tCtrl+S"), this,
+                        [this] { saveSession(active_, false); });
+        menu->addAction(QStringLiteral("Save As…\tCtrl+Shift+S"), this,
+                        [this] { saveSession(active_, true); });
+        menu->addAction(QStringLiteral("Find…\tCtrl+F"), this,
+                        [this] { showFind(); });
+        menu->addSeparator();
         reload_action_ = menu->addAction(QStringLiteral("Reload\tF5"), this,
                                          [this] { reloadDocument(); });
         menu->addAction(QStringLiteral("Reset zoom"), this,
@@ -4244,10 +4311,11 @@ private:
         title_layout->addLayout(captions);
         root->addWidget(title_bar_);
 
-        tabs_ = new QTabBar;
+        tabs_ = new CompactDocumentTabs;
         tabs_->setObjectName(QStringLiteral("documentTabs"));
         tabs_->setAccessibleName(QStringLiteral("Open document tabs"));
-        tabs_->setTabsClosable(true);
+        // We supply a restrained close button instead of Fusion's bright red close box.
+        tabs_->setTabsClosable(false);
         tabs_->setExpanding(false);
         tabs_->setElideMode(Qt::ElideMiddle);
         tabs_->setUsesScrollButtons(true);
@@ -4255,40 +4323,6 @@ private:
         QObject::connect(tabs_, &QTabBar::currentChanged, this, [this](int index) { activateDocument(index); });
         QObject::connect(tabs_, &QTabBar::tabCloseRequested, this, [this](int index) { closeDocument(index); });
         root->addWidget(tabs_);
-
-        document_toolbar_ = new QWidget;
-        document_toolbar_->setObjectName(QStringLiteral("documentToolbar"));
-        auto* document_tools = new QHBoxLayout(document_toolbar_);
-        document_tools->setContentsMargins(12, 4, 12, 4);
-        document_tools->setSpacing(6);
-        save_button_ = new WolfButton(QStringLiteral("Save"));
-        save_button_->setToolTip(QStringLiteral("Save source (Ctrl+S)"));
-        QObject::connect(save_button_, &QPushButton::clicked, this, [this] { saveSession(active_, false); });
-        document_tools->addWidget(save_button_);
-        auto* save_as = new WolfButton(QStringLiteral("Save As"));
-        save_as->setToolTip(QStringLiteral("Save a copy with a new path (Ctrl+Shift+S)"));
-        QObject::connect(save_as, &QPushButton::clicked, this, [this] { saveSession(active_, true); });
-        document_tools->addWidget(save_as);
-        auto* find = new WolfButton(QStringLiteral("Find"));
-        QObject::connect(find, &QPushButton::clicked, this, [this] { showFind(); });
-        document_tools->addWidget(find);
-        document_status_ = new QLabel;
-        document_status_->setMinimumWidth(20);
-        document_status_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        document_tools->addWidget(document_status_, 1);
-        mode_group_ = new QButtonGroup(this);
-        int mode_id = 0;
-        for (const auto& name : {QStringLiteral("Reader"), QStringLiteral("Live Preview"), QStringLiteral("Source")}) {
-            auto* button = new WolfButton(name);
-            button->setCheckable(true);
-            button->setProperty("documentMode", true);
-            button->setAccessibleName(name + QStringLiteral(" document mode"));
-            mode_group_->addButton(button, mode_id++);
-            document_tools->addWidget(button);
-        }
-        QObject::connect(mode_group_, &QButtonGroup::idClicked, this, [this](int id) { setDocumentMode(id); });
-        document_toolbar_->hide();
-        root->addWidget(document_toolbar_);
 
         find_bar_ = new QWidget;
         auto* find_layout = new QHBoxLayout(find_bar_);
@@ -4758,7 +4792,6 @@ private:
         document_actions_->hide();
         diagnostics_bar_->hide();
         tabs_->hide();
-        document_toolbar_->hide();
         find_bar_->hide();
         showFullScreen();
     }
@@ -4770,8 +4803,7 @@ private:
         updateSidebarVisibility();
         document_actions_->setVisible(!current_path_.isEmpty());
         diagnostics_bar_->setVisible(diagnostics_);
-        tabs_->setVisible(!documents_.empty());
-        document_toolbar_->setVisible(active_ != nullptr);
+        tabs_->setVisible(documents_.size() > 1);
         if (restored == 1 || pre_fullscreen_maximized_) {
             showMaximized();
         } else {
@@ -4812,21 +4844,44 @@ private:
     }
 
     void updateDocumentControls() {
-        if (!document_toolbar_) return;
-        document_toolbar_->setVisible(active_ && !fullscreen_);
-        if (!active_) { find_bar_->hide(); return; }
-        if (auto* button = mode_group_->button(static_cast<int>(active_->mode))) button->setChecked(true);
+        if (!active_) {
+            find_bar_->hide();
+            return;
+        }
+        const int mode = static_cast<int>(active_->mode);
+        const auto mode_names = {QStringLiteral("Reader"), QStringLiteral("Live Preview"), QStringLiteral("Source")};
+        const auto name = *(mode_names.begin() + mode);
+        mode_button_->setText(name + QStringLiteral("  ▾"));
+        const auto mode_actions = mode_group_->actions();
+        if (mode < mode_actions.size()) mode_actions.at(mode)->setChecked(true);
+
         const bool dirty = active_->editor->document()->isModified();
+        const bool attention = active_->external_changed || !active_->file_error.isEmpty();
+        save_button_->setVisible(dirty || attention);
         save_button_->setEnabled(dirty || active_->external_changed);
         const auto cursor = active_->editor->textCursor();
-        auto status = dirty ? QStringLiteral("Unsaved") : QStringLiteral("Saved");
-        if (active_->external_changed) status += QStringLiteral(" · File changed externally — Reload or Save As");
-        if (!active_->file_error.isEmpty()) status = active_->file_error;
+        auto detail = dirty ? QStringLiteral("Unsaved changes") : QStringLiteral("Saved");
+        if (active_->external_changed)
+            detail += QStringLiteral(" · File changed externally — Reload or Save As");
+        if (!active_->file_error.isEmpty()) detail = active_->file_error;
         if (active_->mode != OpenDocumentSession::Mode::Reader)
-            status += QStringLiteral(" · Ln %1, Col %2").arg(cursor.blockNumber() + 1).arg(cursor.positionInBlock() + 1);
-        document_status_->setText(status);
-        document_status_->setToolTip(status);
-        setWindowTitle(QStringLiteral("%1%2 — Wolfmark").arg(QFileInfo(active_->canonical_path).fileName(), dirty ? QStringLiteral(" *") : QString()));
+            detail += QStringLiteral(" · Ln %1, Col %2").arg(cursor.blockNumber() + 1).arg(cursor.positionInBlock() + 1);
+        const bool editing = active_->mode != OpenDocumentSession::Mode::Reader;
+        document_status_->setText(!active_->file_error.isEmpty() ? QStringLiteral("Document error") :
+                                  active_->external_changed ? QStringLiteral("File changed") :
+                                  editing ? QStringLiteral("%1Ln %2:%3")
+                                      .arg(dirty ? QStringLiteral("● ") : QString())
+                                      .arg(cursor.blockNumber() + 1).arg(cursor.positionInBlock() + 1) :
+                                  QStringLiteral("Unsaved"));
+        document_status_->setVisible(editing || dirty || attention);
+        document_status_->setToolTip(detail);
+        if (document_status_->property("attention").toBool() != attention) {
+            document_status_->setProperty("attention", attention);
+            document_status_->style()->unpolish(document_status_);
+            document_status_->style()->polish(document_status_);
+        }
+        setWindowTitle(QStringLiteral("%1%2 — Wolfmark").arg(QFileInfo(active_->canonical_path).fileName(),
+                                                                dirty ? QStringLiteral(" *") : QString()));
     }
 
     void setDocumentMode(int id) {
@@ -5104,12 +5159,19 @@ private:
 
     void activateDocument(int index) {
         if (index < 0 || index >= static_cast<int>(documents_.size())) return;
-        active_ = documents_[static_cast<std::size_t>(index)].get();
+        auto* selected = documents_[static_cast<std::size_t>(index)].get();
+        if (active_ != selected) sidebar_->resetOutlineContext();
+        active_ = selected;
         backend_ = active_->backend;
         document_ = active_->view;
         current_path_ = active_->canonical_path;
         const QFileInfo file(current_path_);
-        title_label_->setFullText(file.dir().dirName() + QStringLiteral("   /   ") + file.fileName());
+        const auto directory_name = file.dir().dirName();
+        // A document stored inside its eponymous folder should not repeat the same
+        // long title in the already compact native frame.
+        const auto display_name = directory_name.compare(file.completeBaseName(), Qt::CaseInsensitive) == 0
+            ? file.fileName() : directory_name + QStringLiteral("   /   ") + file.fileName();
+        title_label_->setFullText(display_name);
         title_label_->setToolTip(current_path_);
         setWindowTitle(QStringLiteral("%1 — Wolfmark").arg(file.fileName()));
         stack_->setCurrentWidget(active_->page);
@@ -5176,12 +5238,34 @@ private:
             const QSignalBlocker blocker(tabs_);
             while (tabs_->count() > names.size()) tabs_->removeTab(tabs_->count() - 1);
             for (int index = 0; index < names.size(); ++index) {
-                if (index >= tabs_->count()) tabs_->addTab(names[index]);
-                else tabs_->setTabText(index, names[index]);
+                if (index >= tabs_->count()) {
+                    const int new_index = tabs_->addTab(names[index]);
+                    auto* closer = new QToolButton(tabs_);
+                    closer->setObjectName(QStringLiteral("documentTabClose"));
+                    closer->setText(QStringLiteral("×"));
+                    closer->setAutoRaise(true);
+                    closer->setCursor(Qt::PointingHandCursor);
+                    closer->setFixedSize(18, 18);
+                    QObject::connect(closer, &QToolButton::clicked, this, [this, closer] {
+                        // Resolve the current index: closing an earlier tab can shift indices.
+                        for (int tab = 0; tab < tabs_->count(); ++tab) {
+                            if (tabs_->tabButton(tab, QTabBar::RightSide) == closer) {
+                                closeDocument(tab);
+                                return;
+                            }
+                        }
+                    });
+                    tabs_->setTabButton(new_index, QTabBar::RightSide, closer);
+                } else tabs_->setTabText(index, names[index]);
+                if (auto* closer = tabs_->tabButton(index, QTabBar::RightSide)) {
+                    closer->setAccessibleName(QStringLiteral("Close %1").arg(names[index]));
+                    closer->setToolTip(QStringLiteral("Close document"));
+                }
                 tabs_->setTabToolTip(index, documents_[static_cast<std::size_t>(index)]->canonical_path);
             }
             tabs_->setCurrentIndex(activeDocumentIndex());
-            tabs_->setVisible(!documents_.empty() && !fullscreen_);
+            // A single document already has a title and a sidebar entry.
+            tabs_->setVisible(documents_.size() > 1 && !fullscreen_);
         }
     }
 
@@ -5197,8 +5281,8 @@ private:
     QWidget* document_actions_ = nullptr;
     QStackedWidget* stack_ = nullptr;
     QTabBar* tabs_ = nullptr;
-    QWidget* document_toolbar_ = nullptr;
-    QButtonGroup* mode_group_ = nullptr;
+    QActionGroup* mode_group_ = nullptr;
+    WolfButton* mode_button_ = nullptr;
     WolfButton* save_button_ = nullptr;
     QLabel* document_status_ = nullptr;
     QWidget* find_bar_ = nullptr;
