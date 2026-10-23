@@ -37,11 +37,14 @@ void apply(QApplication& application) {
         #sidebarSection { color: #939098; font-size: 10px; font-weight: 600; letter-spacing: 1px; padding: 0 7px; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
         #documentSidebar QPushButton:hover { background: #2a282c; }
-        #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; font-weight: 600; padding: 7px 12px; }
-        #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
-        #sidebarOpenButton:pressed { background: #5e1a2f; }
-        #sidebarReloadButton { background: #252529; border: 1px solid #34343a; border-radius: 8px; text-align: center; padding: 0; font-size: 20px; }
-        #sidebarReloadButton:hover { background: #303036; border-color: #55555c; }
+        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; font-weight: 600; padding: 7px 12px; text-align: left; }
+        #documentSidebar #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
+        #documentSidebar #sidebarOpenButton:pressed { background: #5e1a2f; }
+        #documentSidebar #sidebarReloadButton { background: #252529; border: 1px solid #34343a; border-radius: 8px; text-align: center; padding: 0; font-size: 20px; }
+        #documentSidebar #sidebarReloadButton:hover { background: #303036; border-color: #55555c; }
+        #sidebarFooter { background: transparent; border-top: 1px solid #34343a; }
+        #sidebarFooterName { color: #f1efed; font-size: 12px; font-weight: 600; }
+        #sidebarFooterVersion { color: #939098; font-size: 11px; }
 
         QTreeWidget { background: transparent; border: none; color: #bcb9bb; font-size: 13px; outline: 0; }
         QTreeWidget::item { padding: 7px 6px; border: 1px solid transparent; border-radius: 6px; }

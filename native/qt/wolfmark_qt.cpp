@@ -2478,6 +2478,32 @@ public:
     }
 
     void runSmoke(const QString& mode) {
+        if (mode == QStringLiteral("shell-controls")) {
+            QTimer::singleShot(300, this, [this] {
+                bool ok = active_ != nullptr && document_actions_->isVisible() &&
+                          title_search_->isEnabled() && mode_segments_.size() == 3 &&
+                          mode_segments_.at(0)->isChecked();
+                if (ok) {
+                    mode_segments_.at(2)->click();
+                    ok &= active_->mode == OpenDocumentSession::Mode::Source &&
+                          mode_segments_.at(2)->isChecked() &&
+                          mode_group_->checkedAction()->data().toInt() == 2;
+                    mode_segments_.at(1)->click();
+                    ok &= active_->mode == OpenDocumentSession::Mode::LivePreview &&
+                          mode_segments_.at(1)->isChecked();
+                    mode_segments_.at(0)->click();
+                    ok &= active_->mode == OpenDocumentSession::Mode::Reader &&
+                          mode_segments_.at(0)->isChecked();
+                    title_search_->click();
+                    ok &= find_bar_->isVisible() && find_input_->hasFocus();
+                }
+                std::fprintf(stdout, "WOLFMARK_SMOKE shell_controls=%s modes=checked find=checked\n",
+                             ok ? "ok" : "failed");
+                std::fflush(stdout);
+                QCoreApplication::exit(ok ? 0 : 37);
+            });
+            return;
+        }
         if (mode == QStringLiteral("editor-performance")) {
             QTimer::singleShot(250, this, [this] {
                 const auto before = api_->backend_counters(backend_);
@@ -4173,12 +4199,13 @@ private:
         title_label_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         title_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
         title_layout->addWidget(title_label_, 1);
-        title_search_ = new WolfButton(QStringLiteral("⌕  Find"));
+        title_search_ = new WolfButton(QStringLiteral("⌕  Search in document…   Ctrl+F"));
         title_search_->setObjectName(QStringLiteral("titleSearch"));
         title_search_->setProperty("titleTool", true);
         title_search_->setAccessibleName(QStringLiteral("Find in current document"));
         title_search_->setToolTip(QStringLiteral("Find in current document (Ctrl+F)"));
         title_search_->setEnabled(false);
+        title_search_->setFixedWidth(226);
         QObject::connect(title_search_, &QPushButton::clicked, this, [this] { showFind(); });
         title_layout->addWidget(title_search_);
 
@@ -5468,6 +5495,8 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
             smoke_mode = QStringLiteral("editor-core");
         } else if (argument == QStringLiteral("--smoke-editor-sessions")) {
             smoke_mode = QStringLiteral("editor-sessions");
+        } else if (argument == QStringLiteral("--smoke-shell-controls")) {
+            smoke_mode = QStringLiteral("shell-controls");
         } else if (argument == QStringLiteral("--smoke-editor-performance")) {
             smoke_mode = QStringLiteral("editor-performance");
         } else if (argument == QStringLiteral("--smoke-multidoc")) {

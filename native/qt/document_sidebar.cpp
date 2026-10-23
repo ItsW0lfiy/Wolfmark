@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QBoxLayout>
 #include <QColor>
+#include <QCoreApplication>
 #include <QHeaderView>
 #include <QIcon>
 #include <QJsonObject>
@@ -210,6 +211,29 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     connect(outline_, &QTreeWidget::itemClicked, this, activate);
     connect(outline_, &QTreeWidget::itemActivated, this, activate);
     layout->addWidget(outline_, 1);
+
+    auto* footer = new QWidget(this);
+    footer->setObjectName(QStringLiteral("sidebarFooter"));
+    footer->setAttribute(Qt::WA_StyledBackground);
+    auto* footer_layout = new QHBoxLayout(footer);
+    footer_layout->setContentsMargins(5, 12, 0, 2);
+    footer_layout->setSpacing(9);
+    auto* footer_symbol = new QLabel;
+    footer_symbol->setPixmap(QApplication::windowIcon().pixmap(28, 28));
+    footer_symbol->setFixedSize(30, 30);
+    footer_symbol->setAlignment(Qt::AlignCenter);
+    footer_layout->addWidget(footer_symbol);
+    auto* footer_copy = new QVBoxLayout;
+    footer_copy->setSpacing(1);
+    auto* footer_name = new QLabel(QStringLiteral("Wolfmark"));
+    footer_name->setObjectName(QStringLiteral("sidebarFooterName"));
+    auto* footer_version = new QLabel(QCoreApplication::applicationVersion());
+    footer_version->setObjectName(QStringLiteral("sidebarFooterVersion"));
+    footer_copy->addWidget(footer_name);
+    footer_copy->addWidget(footer_version);
+    footer_layout->addLayout(footer_copy);
+    footer_layout->addStretch();
+    layout->addWidget(footer);
 }
 
 void DocumentSidebar::setDocuments(const QStringList& filenames, int active_index) {

@@ -42,6 +42,11 @@ jobs:
         run: |
           timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-render
           timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-snapshot
+      - name: Exercise Crimson Graphite mode and Find controls
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-shell-controls
       - name: Capture Settings UI
         env:
           QT_QPA_PLATFORM: offscreen
