@@ -19,13 +19,14 @@ jobs:
   native-qt:
     name: Rust and Qt build / UI smoke
     runs-on: ubuntu-24.04
+    container: debian:trixie
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Install native Qt dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y g++ pkg-config qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins libgl1-mesa-dev
+          apt-get update
+          apt-get install -y ca-certificates curl git g++ pkg-config qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins libgl1-mesa-dev fonts-dejavu-core
       - uses: dtolnay/rust-toolchain@stable
       - name: Check application
         run: cargo check -p wolfmark --locked
