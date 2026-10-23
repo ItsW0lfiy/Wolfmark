@@ -76,7 +76,7 @@ void apply(QApplication& application) {
         #titleSearch:disabled { color: #77747a; background: #202024; border-color: #303036; }
         #documentCommandBar { background: #151518; border-bottom: 1px solid #34343a; }
         #documentModeGroup { background: #202024; border: 1px solid #34343a; border-radius: 9px; }
-        #documentModeGroup QPushButton[modeSegment="true"] { background: transparent; border: 1px solid transparent; border-radius: 7px; color: #bcb9bb; font-weight: 500; padding: 5px 13px; min-width: 58px; }
+        #documentModeGroup QPushButton[modeSegment="true"] { background: transparent; border: 1px solid transparent; border-radius: 7px; color: #bcb9bb; font-weight: 500; padding: 5px 13px; }
         #documentModeGroup QPushButton[modeSegment="true"]:hover { background: #303036; color: #f5f3f3; }
         #documentModeGroup QPushButton[modeSegment="true"]:checked { background: #712038; border-color: #a52b4b; color: #ffffff; font-weight: 600; }
         #documentModeGroup QPushButton[modeSegment="true"]:focus { border-color: #e0718b; }

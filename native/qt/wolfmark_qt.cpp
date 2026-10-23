@@ -62,6 +62,7 @@
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QStyleOptionButton>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCharFormat>
@@ -2355,6 +2356,36 @@ struct OpenDocumentSession {
     bool editing_outline_ready = false;
     QFileSystemWatcher* watcher = nullptr;
     QTimer* reload_delay = nullptr;
+};
+
+// Preserve Qt checkbox semantics while drawing a visible tick over the crimson indicator.
+class WolfSettingsCheckBox final : public QCheckBox {
+public:
+    explicit WolfSettingsCheckBox(const QString& label, QWidget* parent = nullptr)
+        : QCheckBox(label, parent) {}
+
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QCheckBox::paintEvent(event);
+        if (checkState() != Qt::Checked) return;
+        QStyleOptionButton option;
+        initStyleOption(&option);
+        const QRect indicator = style()->subElementRect(QStyle::SE_CheckBoxIndicator, &option, this);
+        if (indicator.isEmpty()) return;
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(QStringLiteral("#ffffff")), 2.0,
+                            Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        const QPointF a(indicator.left() + indicator.width() * 0.23,
+                        indicator.top() + indicator.height() * 0.52);
+        const QPointF b(indicator.left() + indicator.width() * 0.44,
+                        indicator.top() + indicator.height() * 0.73);
+        const QPointF c(indicator.left() + indicator.width() * 0.80,
+                        indicator.top() + indicator.height() * 0.32);
+        painter.drawLine(a, b);
+        painter.drawLine(b, c);
+    }
 };
 
 // A native Qt settings dialog with the same Windows-aware frame as the reader.
@@ -4705,7 +4736,7 @@ private:
         auto* preference_title = new QLabel(QStringLiteral("Update preferences"));
         preference_title->setObjectName(QStringLiteral("settingsSectionTitle"));
         preference_layout->addWidget(preference_title);
-        auto* startup = new QCheckBox(QStringLiteral("Check for updates automatically"));
+        auto* startup = new WolfSettingsCheckBox(QStringLiteral("Check for updates automatically"));
         startup->setChecked(user_settings_.updates().check_on_startup);
         startup->setAccessibleName(QStringLiteral("Check for updates automatically"));
         preference_layout->addWidget(startup);
@@ -4714,7 +4745,7 @@ private:
         startup_hint->setObjectName(QStringLiteral("settingsHint"));
         startup_hint->setWordWrap(true);
         preference_layout->addWidget(startup_hint);
-        auto* prereleases = new QCheckBox(QStringLiteral("Include pre-release versions"));
+        auto* prereleases = new WolfSettingsCheckBox(QStringLiteral("Include pre-release versions"));
         prereleases->setChecked(user_settings_.updates().include_prereleases);
         prereleases->setAccessibleName(QStringLiteral("Include pre-release versions"));
         preference_layout->addWidget(prereleases);
@@ -4801,7 +4832,7 @@ private:
         about_layout->addStretch();
         pages->addWidget(about_page);
 
-        auto* editor_nav = new QPushButton(QStringLiteral("Reader & Editor"));
+        auto* editor_nav = new QPushButton(QStringLiteral("Reader && Editor"));
         editor_nav->setProperty("nav", true);
         editor_nav->setCheckable(true);
         // Navigation order follows the reading/editing workflow, with About last.
@@ -4817,7 +4848,7 @@ private:
         reader_hint->setWordWrap(true);
         reader_hint->setObjectName(QStringLiteral("settingsHint"));
         editor_layout->addWidget(reader_hint);
-        auto* word_wrap = new QCheckBox(QStringLiteral("Wrap long source lines"));
+        auto* word_wrap = new WolfSettingsCheckBox(QStringLiteral("Wrap long source lines"));
         word_wrap->setChecked(user_settings_.editorWordWrap());
         editor_layout->addWidget(word_wrap);
         auto* syntax_hint = new QLabel(QStringLiteral("Live Preview reveals syntax around the cursor or selection. Tables, fences, task markers, raw HTML and unsupported constructs retain editable source syntax."));
@@ -4835,6 +4866,10 @@ private:
         QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         content_layout->addWidget(buttons);
+        // The modal keyboard focus should start in navigation, not on a caption button.
+        QTimer::singleShot(0, &dialog, [updates_nav] {
+            updates_nav->setFocus(Qt::OtherFocusReason);
+        });
         if (!snapshot_path.isEmpty()) {
             QDir().mkpath(QFileInfo(snapshot_path).absolutePath());
             QTimer::singleShot(120, &dialog, [&dialog, snapshot_path] {
