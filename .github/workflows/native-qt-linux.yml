@@ -23,11 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Archive source checkout
-        run: tar -czf wolfmark-source-snapshot.tar.gz --exclude=.git --exclude=wolfmark-source-snapshot.tar.gz .
+        run: tar -czf "$RUNNER_TEMP/wolfmark-source-snapshot.tar.gz" --exclude=.git .
       - uses: actions/upload-artifact@v4
         with:
           name: wolfmark-source-snapshot
-          path: wolfmark-source-snapshot.tar.gz
+          path: ${{ runner.temp }}/wolfmark-source-snapshot.tar.gz
           retention-days: 7
   native-qt:
     name: Rust and Qt build / UI smoke
