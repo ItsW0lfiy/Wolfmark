@@ -16,6 +16,19 @@ permissions:
   contents: read
 
 jobs:
+  source-snapshot:
+    name: Export verified source snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive source checkout
+        run: tar -czf wolfmark-source-snapshot.tar.gz --exclude=.git --exclude=wolfmark-source-snapshot.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-source-snapshot
+          path: wolfmark-source-snapshot.tar.gz
+          retention-days: 7
   native-qt:
     name: Rust and Qt build / UI smoke
     runs-on: ubuntu-24.04
