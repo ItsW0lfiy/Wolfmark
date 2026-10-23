@@ -4205,7 +4205,7 @@ private:
         title_search_->setAccessibleName(QStringLiteral("Find in current document"));
         title_search_->setToolTip(QStringLiteral("Find in current document (Ctrl+F)"));
         title_search_->setEnabled(false);
-        title_search_->setFixedWidth(226);
+        title_search_->setFixedWidth(258);
         QObject::connect(title_search_, &QPushButton::clicked, this, [this] { showFind(); });
         title_layout->addWidget(title_search_);
 
@@ -4282,6 +4282,12 @@ private:
         document_status_->hide();
         actions->addWidget(document_status_);
         actions->addSpacing(6);
+        auto* zoom_group = new QWidget(document_actions_);
+        zoom_group->setObjectName(QStringLiteral("documentZoomGroup"));
+        zoom_group->setAttribute(Qt::WA_StyledBackground);
+        auto* zoom_controls = new QHBoxLayout(zoom_group);
+        zoom_controls->setContentsMargins(3, 2, 3, 2);
+        zoom_controls->setSpacing(0);
         zoom_out_ = new WolfButton(QStringLiteral("−"));
         zoom_out_->setProperty("titleTool", true);
         zoom_out_->setFixedWidth(28);
@@ -4307,9 +4313,10 @@ private:
         zoom_in_->setAccessibleName(QStringLiteral("Zoom in"));
         QObject::connect(zoom_out_, &QPushButton::clicked, this, [this] { changeZoom(-10); });
         QObject::connect(zoom_in_, &QPushButton::clicked, this, [this] { changeZoom(10); });
-        actions->addWidget(zoom_out_);
-        actions->addWidget(zoom_label_);
-        actions->addWidget(zoom_in_);
+        zoom_controls->addWidget(zoom_out_);
+        zoom_controls->addWidget(zoom_label_);
+        zoom_controls->addWidget(zoom_in_);
+        actions->addWidget(zoom_group);
         auto* more = new WolfButton(QStringLiteral("⋯"));
         more->setProperty("titleTool", true);
         more->setAccessibleName(QStringLiteral("Document actions"));

@@ -80,6 +80,10 @@ void apply(QApplication& application) {
         #documentModeGroup QPushButton[modeSegment="true"]:hover { background: #303036; color: #f5f3f3; }
         #documentModeGroup QPushButton[modeSegment="true"]:checked { background: #712038; border-color: #a52b4b; color: #ffffff; font-weight: 600; }
         #documentModeGroup QPushButton[modeSegment="true"]:focus { border-color: #e0718b; }
+        #documentZoomGroup { background: #202024; border: 1px solid #34343a; border-radius: 8px; }
+        #documentZoomGroup QPushButton[titleTool="true"] { background: transparent; border: 1px solid transparent; border-radius: 6px; color: #bbb8b6; padding: 3px 2px; }
+        #documentZoomGroup QPushButton[titleTool="true"]:hover { background: #303036; color: #ffffff; }
+        #documentZoomGroup QPushButton[titleTool="true"]:focus { border-color: #c52a50; }
         #zoomValue { color: #9c9895; font-size: 12px; background: transparent; border-color: transparent; }
         #documentStack { background: #101012; }
         #emptyTitle { font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 23px; font-weight: 600; color: #ece9e6; }
