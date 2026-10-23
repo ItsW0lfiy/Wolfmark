@@ -11,6 +11,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QPixmap>
 #include <QScrollBar>
@@ -108,7 +109,7 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_StyledBackground);
     setFixedWidth(style::metric::sidebar_width);
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(18, 24, 18, 18);
+    layout->setContentsMargins(14, 18, 14, 14);
     layout->setSpacing(8);
     auto* identity = new QHBoxLayout;
     auto* symbol = new QLabel;
@@ -123,19 +124,37 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     identity->addWidget(name);
     identity->addStretch();
     layout->addLayout(identity);
-    layout->addSpacing(24);
+    layout->addSpacing(18);
+    auto* open_row = new QHBoxLayout;
+    open_row->setSpacing(6);
     auto* open_button = new QPushButton(QStringLiteral("Open document"));
-    open_button->setMinimumHeight(36);
+    open_button->setObjectName(QStringLiteral("sidebarOpenButton"));
+    QPixmap folder_icon(20, 20);
+    folder_icon.fill(Qt::transparent);
+    {
+        QPainter painter(&folder_icon);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(QStringLiteral("#f8eef1")), 1.5));
+        painter.drawLine(QPointF(2.5, 6.5), QPointF(7.0, 6.5));
+        painter.drawLine(QPointF(7.0, 6.5), QPointF(9.5, 8.0));
+        painter.drawRoundedRect(QRectF(2.5, 7.5, 15.0, 10.0), 2.0, 2.0);
+    }
+    open_button->setIcon(QIcon(folder_icon));
+    open_button->setIconSize(QSize(20, 20));
+    open_button->setMinimumHeight(40);
     open_button->setToolTip(QStringLiteral("Open Markdown or text file (Ctrl+O)"));
     connect(open_button, &QPushButton::clicked, this, [this] { if (open) open(); });
-    layout->addWidget(open_button);
-    reload_ = new QPushButton(QStringLiteral("Reload"));
-    reload_->setMinimumHeight(36);
+    open_row->addWidget(open_button, 1);
+    reload_ = new QPushButton(QStringLiteral("↻"));
+    reload_->setObjectName(QStringLiteral("sidebarReloadButton"));
+    reload_->setFixedSize(40, 40);
+    reload_->setAccessibleName(QStringLiteral("Reload current document"));
     reload_->setEnabled(false);
     reload_->setToolTip(QStringLiteral("Reload current document (F5)"));
     connect(reload_, &QPushButton::clicked, this, [this] { if (reload) reload(); });
-    layout->addWidget(reload_);
-    layout->addSpacing(28);
+    open_row->addWidget(reload_);
+    layout->addLayout(open_row);
+    layout->addSpacing(18);
     auto* label = new QLabel(QStringLiteral("OPEN DOCUMENTS"));
     label->setObjectName(QStringLiteral("sidebarSection"));
     layout->addWidget(label);
@@ -172,7 +191,7 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
             activate_document(item->data(0, Qt::UserRole).toInt());
     });
     layout->addWidget(documents_);
-    layout->addSpacing(20);
+    layout->addSpacing(14);
     auto* outline_label = new QLabel(QStringLiteral("OUTLINE"));
     outline_label->setObjectName(QStringLiteral("sidebarSection"));
     layout->addWidget(outline_label);

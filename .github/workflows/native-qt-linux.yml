@@ -1,0 +1,55 @@
+name: Wolfmark native Qt — Linux verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/qt/**"
+      - "src/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/native-qt-linux.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-qt:
+    name: Rust and Qt build / UI smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native Qt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ pkg-config qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins libgl1-mesa-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check application
+        run: cargo check -p wolfmark --locked
+      - name: Test Rust application
+        run: cargo test -p wolfmark --locked
+      - name: Link native Qt desktop application
+        run: cargo build -p wolfmark --locked
+      - name: Test Markdown render and capture Reader UI
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+          WOLFMARK_SNAPSHOT_NAME: "crimson-graphite"
+        run: |
+          timeout 45s ./target/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-render
+          timeout 45s ./target/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-snapshot
+      - name: Capture Settings UI
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: timeout 45s ./target/debug/wolfmark --smoke-settings-ui
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-native-ui
+          path: out/visual/dev7/*.png
+          if-no-files-found: warn

@@ -82,6 +82,7 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QVariantAnimation>
+#include <QVector>
 #include <QWindow>
 #include <QWheelEvent>
 #include <QTreeWidget>
@@ -2576,6 +2577,9 @@ public:
                 // features must not introduce a permanent full-width toolbar row.
                 ok &= tabs_->count() == 2 && !tabs_->isHidden() &&
                       findChild<QWidget*>(QStringLiteral("documentToolbar")) == nullptr &&
+                      findChild<QWidget*>(QStringLiteral("documentCommandBar")) != nullptr &&
+                      document_actions_->isVisible() && title_search_->isEnabled() &&
+                      mode_segments_.size() == 3 && mode_segments_.at(0)->isChecked() &&
                       mode_group_->actions().size() == 3 &&
                       mode_group_->checkedAction() != nullptr &&
                       mode_group_->checkedAction()->data().toInt() == 0;
@@ -4132,8 +4136,8 @@ private:
 
         title_bar_ = new wolfmark::qt::WolfTitleBar(this);
         auto* title_layout = new QHBoxLayout(title_bar_);
-        title_layout->setContentsMargins(14, 0, 0, 0);
-        title_layout->setSpacing(9);
+        title_layout->setContentsMargins(12, 0, 0, 0);
+        title_layout->setSpacing(8);
 
         auto* navigation = new WolfButton(QString());
         navigation->setProperty("titleTool", true);
@@ -4169,11 +4173,22 @@ private:
         title_label_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         title_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
         title_layout->addWidget(title_label_, 1);
+        title_search_ = new WolfButton(QStringLiteral("⌕  Find"));
+        title_search_->setObjectName(QStringLiteral("titleSearch"));
+        title_search_->setProperty("titleTool", true);
+        title_search_->setAccessibleName(QStringLiteral("Find in current document"));
+        title_search_->setToolTip(QStringLiteral("Find in current document (Ctrl+F)"));
+        title_search_->setEnabled(false);
+        QObject::connect(title_search_, &QPushButton::clicked, this, [this] { showFind(); });
+        title_layout->addWidget(title_search_);
 
         document_actions_ = new QWidget;
+        document_actions_->setObjectName(QStringLiteral("documentCommandBar"));
+        document_actions_->setAttribute(Qt::WA_StyledBackground);
+        document_actions_->setFixedHeight(48);
         auto* actions = new QHBoxLayout(document_actions_);
-        actions->setContentsMargins(0, 0, 6, 0);
-        actions->setSpacing(2);
+        actions->setContentsMargins(16, 4, 16, 4);
+        actions->setSpacing(6);
         open_ = new WolfButton(QStringLiteral("Open"));
         open_->setProperty("titleTool", true);
         open_->setAccessibleName(QStringLiteral("Open document"));
@@ -4182,29 +4197,48 @@ private:
         actions->addWidget(open_);
         actions->addSpacing(6);
 
-        // Keep the existing titlebar as Wolfmark's only permanent document toolbar.
-        // Editing capabilities remain available without adding two full-width rows.
-        mode_button_ = new WolfButton(QStringLiteral("Reader  ▾"));
-        mode_button_->setProperty("titleTool", true);
-        mode_button_->setAccessibleName(QStringLiteral("Choose document mode"));
-        mode_button_->setToolTip(QStringLiteral("Reader, Live Preview, or Source"));
-        auto* mode_menu = new QMenu(mode_button_);
-        mode_menu->setObjectName(QStringLiteral("documentModeMenu"));
-        mode_group_ = new QActionGroup(mode_menu);
+        // The visible command bar deliberately separates document modes from window chrome.
+        // All visible mode buttons trigger the same QActionGroup command path.
+        mode_group_ = new QActionGroup(this);
         mode_group_->setExclusive(true);
         int mode_id = 0;
-        for (const auto& name : {QStringLiteral("Reader"), QStringLiteral("Live Preview"), QStringLiteral("Source")}) {
-            auto* action = mode_menu->addAction(name);
+        for (const auto& name : {QStringLiteral("Reader"), QStringLiteral("Live Preview"),
+                                 QStringLiteral("Source")}) {
+            auto* action = new QAction(name, mode_group_);
             action->setCheckable(true);
             action->setData(mode_id++);
             mode_group_->addAction(action);
         }
         QObject::connect(mode_group_, &QActionGroup::triggered, this,
                          [this](QAction* action) { setDocumentMode(action->data().toInt()); });
-        QObject::connect(mode_button_, &QPushButton::clicked, this, [this, mode_menu] {
-            mode_menu->popup(mode_button_->mapToGlobal(QPoint(0, mode_button_->height() + 4)));
-        });
-        actions->addWidget(mode_button_);
+        auto* mode_switch = new QWidget(document_actions_);
+        mode_switch->setObjectName(QStringLiteral("documentModeGroup"));
+        mode_switch->setAttribute(Qt::WA_StyledBackground);
+        auto* mode_layout = new QHBoxLayout(mode_switch);
+        mode_layout->setContentsMargins(3, 3, 3, 3);
+        mode_layout->setSpacing(2);
+        auto* mode_buttons = new QButtonGroup(mode_switch);
+        mode_buttons->setExclusive(true);
+        int segment_index = 0;
+        for (const auto& mode_name : {QStringLiteral("Reader"),
+                                      QStringLiteral("Live Preview"),
+                                      QStringLiteral("Source")}) {
+            auto* segment = new WolfButton(mode_name, mode_switch);
+            segment->setObjectName(QStringLiteral("modeSegmentButton"));
+            segment->setProperty("modeSegment", true);
+            segment->setCheckable(true);
+            segment->setFixedHeight(32);
+            segment->setAccessibleName(QStringLiteral("%1 mode").arg(mode_name));
+            segment->setToolTip(QStringLiteral("Switch to %1 mode").arg(mode_name));
+            const int id = segment_index++;
+            mode_buttons->addButton(segment, id);
+            mode_segments_.push_back(segment);
+            QObject::connect(segment, &QPushButton::clicked, this,
+                             [this, id] { mode_group_->actions().at(id)->trigger(); });
+            mode_layout->addWidget(segment);
+        }
+        actions->addWidget(mode_switch);
+        actions->addStretch(1);
 
         save_button_ = new WolfButton(QStringLiteral("Save"));
         save_button_->setProperty("titleTool", true);
@@ -4286,7 +4320,6 @@ private:
         });
         actions->addSpacing(4);
         actions->addWidget(more);
-        title_layout->addWidget(document_actions_);
         document_actions_->hide();
         auto* settings_button = new WolfButton(QStringLiteral("Settings"));
         settings_button->setProperty("titleTool", true);
@@ -4323,6 +4356,7 @@ private:
         QObject::connect(tabs_, &QTabBar::currentChanged, this, [this](int index) { activateDocument(index); });
         QObject::connect(tabs_, &QTabBar::tabCloseRequested, this, [this](int index) { closeDocument(index); });
         root->addWidget(tabs_);
+        root->addWidget(document_actions_);
 
         find_bar_ = new QWidget;
         auto* find_layout = new QHBoxLayout(find_bar_);
@@ -4846,14 +4880,17 @@ private:
     void updateDocumentControls() {
         if (!active_) {
             find_bar_->hide();
+            title_search_->setEnabled(false);
             return;
         }
+        title_search_->setEnabled(true);
         const int mode = static_cast<int>(active_->mode);
-        const auto mode_names = {QStringLiteral("Reader"), QStringLiteral("Live Preview"), QStringLiteral("Source")};
-        const auto name = *(mode_names.begin() + mode);
-        mode_button_->setText(name + QStringLiteral("  ▾"));
         const auto mode_actions = mode_group_->actions();
         if (mode < mode_actions.size()) mode_actions.at(mode)->setChecked(true);
+        for (int index = 0; index < mode_segments_.size(); ++index) {
+            QSignalBlocker blocker(mode_segments_.at(index));
+            mode_segments_.at(index)->setChecked(index == mode);
+        }
 
         const bool dirty = active_->editor->document()->isModified();
         const bool attention = active_->external_changed || !active_->file_error.isEmpty();
@@ -5279,10 +5316,11 @@ private:
     bool sidebar_explicit_ = false;
     wolfmark::qt::WolfTitleBar* title_bar_ = nullptr;
     QWidget* document_actions_ = nullptr;
+    WolfButton* title_search_ = nullptr;
+    QVector<WolfButton*> mode_segments_;
     QStackedWidget* stack_ = nullptr;
     QTabBar* tabs_ = nullptr;
     QActionGroup* mode_group_ = nullptr;
-    WolfButton* mode_button_ = nullptr;
     WolfButton* save_button_ = nullptr;
     QLabel* document_status_ = nullptr;
     QWidget* find_bar_ = nullptr;

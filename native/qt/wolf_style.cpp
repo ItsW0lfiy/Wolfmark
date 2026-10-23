@@ -30,22 +30,28 @@ void apply(QApplication& application) {
         QWidget#contentShell { background: #101012; }
         QLabel { background: transparent; }
 
-        #titleBar { background: #101012; border-bottom: 1px solid #2c2c2c; }
+        #titleBar { background: #19191c; border-bottom: 1px solid #34343a; }
         #documentSidebar { background: #19191c; border-right: 1px solid #34343a; }
         #brandSymbol { background: #282828; border: 1px solid #3a3a3a; border-radius: 7px; }
         #sidebarIdentity { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 18px; font-weight: 600; }
         #sidebarSection { color: #939098; font-size: 10px; font-weight: 600; letter-spacing: 1px; padding: 0 7px; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
-        #documentSidebar QPushButton:hover { background: #252525; }
+        #documentSidebar QPushButton:hover { background: #2a282c; }
+        #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; font-weight: 600; padding: 7px 12px; }
+        #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
+        #sidebarOpenButton:pressed { background: #5e1a2f; }
+        #sidebarReloadButton { background: #252529; border: 1px solid #34343a; border-radius: 8px; text-align: center; padding: 0; font-size: 20px; }
+        #sidebarReloadButton:hover { background: #303036; border-color: #55555c; }
 
         QTreeWidget { background: transparent; border: none; color: #bcb9bb; font-size: 13px; outline: 0; }
         QTreeWidget::item { padding: 7px 6px; border: 1px solid transparent; border-radius: 6px; }
         QTreeWidget::item:hover { background: #252525; color: #f5f3f3; }
         QTreeWidget::item:selected { background: #302629; color: #f5f3f3; border-left: 3px solid #c52a50; }
         QTreeWidget::item:focus { border-color: #c52a50; }
-        #openDocuments { background: #202024; border: 1px solid #303036; border-radius: 8px; padding: 3px; }
-        #openDocuments::item { padding: 6px 5px; }
-        #openDocuments::item:selected { background: #3a2029; color: #f5f3f3; }
+        #openDocuments { background: transparent; border: none; padding: 1px; }
+        #openDocuments::item { padding: 6px 5px; border: none; border-radius: 6px; }
+        #openDocuments::item:hover { background: #252529; }
+        #openDocuments::item:selected { background: #3a2029; color: #f5f3f3; border-left: 3px solid #c52a50; }
 
         QPushButton { background: #1d1d1d; border: 1px solid #353535; border-radius: 6px; padding: 5px 11px; color: #d5d2d3; }
         QPushButton:hover { background: #303036; border-color: #55555c; color: #f5f3f3; }
@@ -62,6 +68,15 @@ void apply(QApplication& application) {
         QPushButton[titleTool="true"]:pressed { background: #3a2029; border-color: #c52a50; }
 
         #documentTitle { color: #c9c6c3; font-size: 13px; font-weight: 500; }
+        #titleSearch { color: #bbb8b6; background: #242428; border: 1px solid #34343a; border-radius: 7px; padding: 5px 13px; }
+        #titleSearch:hover { color: #f5f3f3; background: #303036; border-color: #55555c; }
+        #titleSearch:disabled { color: #77747a; background: #202024; border-color: #303036; }
+        #documentCommandBar { background: #151518; border-bottom: 1px solid #34343a; }
+        #documentModeGroup { background: #202024; border: 1px solid #34343a; border-radius: 9px; }
+        #documentModeGroup QPushButton[modeSegment="true"] { background: transparent; border: 1px solid transparent; border-radius: 7px; color: #bcb9bb; font-weight: 500; padding: 5px 13px; min-width: 58px; }
+        #documentModeGroup QPushButton[modeSegment="true"]:hover { background: #303036; color: #f5f3f3; }
+        #documentModeGroup QPushButton[modeSegment="true"]:checked { background: #712038; border-color: #a52b4b; color: #ffffff; font-weight: 600; }
+        #documentModeGroup QPushButton[modeSegment="true"]:focus { border-color: #e0718b; }
         #zoomValue { color: #9c9895; font-size: 12px; background: transparent; border-color: transparent; }
         #documentStack { background: #101012; }
         #emptyTitle { font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 23px; font-weight: 600; color: #ece9e6; }
@@ -113,9 +128,10 @@ void apply(QApplication& application) {
         QSlider::groove:horizontal { height: 5px; border-radius: 2px; background: #34343a; }
         QSlider::sub-page:horizontal { background: #c52a50; border-radius: 2px; }
         QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: #f0edeb; border: 1px solid #c52a50; }
-        #documentTabs { background: #141414; border-bottom: 1px solid #34343a; }
-        #documentTabs::tab { background: #242428; color: #aaa6a3; border: 0; border-right: 1px solid #34343a; padding: 5px 10px; }
-        #documentTabs::tab:selected { background: #252022; color: #ffffff; border-bottom: 2px solid #c52a50; }
+        #documentTabs { background: #17171b; border-bottom: 1px solid #34343a; min-height: 42px; }
+        #documentTabs::tab { background: #1d1d21; color: #aaa6a3; border: 1px solid #34343a; border-bottom: 0; border-radius: 7px 7px 0 0; margin: 5px 3px 0 0; padding: 8px 15px; min-height: 25px; }
+        #documentTabs::tab:hover { background: #27272d; color: #f5f3f3; }
+        #documentTabs::tab:selected { background: #242428; color: #ffffff; border-top: 2px solid #c52a50; }
 
         #updateBanner { background: #1d1719; border-bottom: 1px solid #4a2930; }
         #updateLabel { color: #e1dedd; font-weight: 500; }
