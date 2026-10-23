@@ -59,3 +59,19 @@ is not a complete implementation of the approved visual concept; Markdown presen
 secondary dialogs and installer chrome remain separate design milestones. The application
 continues to default newly opened documents to Reader. Do not implement visually convincing
 but nonfunctional controls to imitate the reference image.
+
+
+## October 2026 — dialog frame and mode-width validation
+
+Settings now uses a dedicated modal Qt dialog frame with Wolfmark's own
+48px graphite titlebar, actual caption buttons, and Windows native-frame
+hit testing. Accepted/rejected dialog behavior, settings persistence, and
+normal keyboard navigation remain unchanged. The top-level Windows border
+is not left to the operating system accent color. On Windows, window
+drag, caption controls, resize and Snap interactions require physical
+verification in addition to Linux offscreen screenshot tests.
+
+Reader / Live Preview / Source segments use font-metric-derived minimum
+widths so Live Preview cannot be clipped by a fixed narrow control at
+larger DPI scales. The automated shell control test asserts visible
+caption widths and exercises all three modes, then Find.

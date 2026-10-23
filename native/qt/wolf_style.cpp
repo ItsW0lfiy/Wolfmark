@@ -109,15 +109,23 @@ void apply(QApplication& application) {
         QMenu::separator { height: 1px; background: #34343a; margin: 6px 9px; }
 
         QDialog { background: #151518; }
-        #settingsDialog { background: #151518; }
+        #settingsDialog { background: #101012; }
+        #settingsChrome { background: #19191c; border-bottom: 1px solid #34343a; }
+        #settingsChromeTitle { color: #ebe9e8; font-size: 13px; font-weight: 600; }
+        #settingsBody { background: #101012; }
         #settingsNavigation { background: #19191c; border-right: 1px solid #34343a; }
+        #settingsNavigation QPushButton[nav="true"] { border-radius: 8px; min-height: 34px; margin: 1px 0; }
+        #settingsNavigation QPushButton[nav="true"]:checked { background: #3a2029; border-left: 3px solid #c52a50; padding-left: 9px; }
         #settingsContent { background: #101012; }
         #settingsBrand { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 20px; font-weight: 600; }
         #settingsTitle { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 25px; font-weight: 600; }
         #settingsSectionTitle { color: #ebe9e8; font-size: 14px; font-weight: 600; }
         #settingsHint { color: #9c9895; }
         #settingsResult { color: #d5d2d3; padding: 8px 0; }
-        #settingsCard { background: #202024; border: 1px solid #363636; border-radius: 9px; }
+        #settingsCard { background: #202024; border: 1px solid #34343a; border-radius: 11px; }
+        #settingsCard:hover { border-color: #48484f; }
+        #settingsDialog QDialogButtonBox { background: transparent; }
+        #settingsDialog QDialogButtonBox QPushButton { min-width: 78px; min-height: 28px; border-radius: 7px; }
 
         QCheckBox { color: #d5d2d3; spacing: 9px; min-height: 25px; }
         QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #595959; border-radius: 5px; background: #1a1a1a; }

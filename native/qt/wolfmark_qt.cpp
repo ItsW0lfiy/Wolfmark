@@ -57,6 +57,7 @@
 #include <QScreen>
 #include <QScrollBar>
 #include <QSettings>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -2356,6 +2357,95 @@ struct OpenDocumentSession {
     QTimer* reload_delay = nullptr;
 };
 
+// A native Qt settings dialog with the same Windows-aware frame as the reader.
+// Keeps the existing modal QDialog button contract and settings persistence.
+class WolfSettingsDialog final : public QDialog {
+public:
+    explicit WolfSettingsDialog(QWidget* parent) : QDialog(parent) {
+        setObjectName(QStringLiteral("settingsDialog"));
+        setWindowTitle(QStringLiteral("Wolfmark Settings"));
+        setWindowIcon(QApplication::windowIcon());
+        setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowSystemMenuHint |
+                       Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+        setAttribute(Qt::WA_NativeWindow);
+        setModal(true);
+        setMinimumSize(760, 500);
+        resize(880, 580);
+
+        auto* outer = new QVBoxLayout(this);
+        outer->setContentsMargins(0, 0, 0, 0);
+        outer->setSpacing(0);
+
+        chrome_ = new wolfmark::qt::WolfTitleBar(this);
+        chrome_->setObjectName(QStringLiteral("settingsChrome"));
+        auto* header = new QHBoxLayout(chrome_);
+        header->setContentsMargins(16, 0, 0, 0);
+        header->setSpacing(10);
+        auto* symbol = new QLabel(chrome_);
+        symbol->setPixmap(QApplication::windowIcon().pixmap(23, 23));
+        symbol->setFixedSize(26, 26);
+        symbol->setAlignment(Qt::AlignCenter);
+        header->addWidget(symbol);
+
+        auto* title = new QLabel(QStringLiteral("Wolfmark  /  Settings"), chrome_);
+        title->setObjectName(QStringLiteral("settingsChromeTitle"));
+        title->setAttribute(Qt::WA_TransparentForMouseEvents);
+        header->addWidget(title);
+        header->addStretch();
+        using Caption = wolfmark::qt::CaptionButton;
+        minimize_ = new Caption(Caption::Action::Minimize, chrome_);
+        maximize_ = new Caption(Caption::Action::Maximize, chrome_);
+        close_ = new Caption(Caption::Action::Close, chrome_);
+        QObject::connect(minimize_, &QAbstractButton::clicked, this, &QWidget::showMinimized);
+        QObject::connect(maximize_, &QAbstractButton::clicked, this, [this] {
+            isMaximized() ? showNormal() : showMaximized();
+        });
+        QObject::connect(close_, &QAbstractButton::clicked, this, &QDialog::reject);
+        header->addWidget(minimize_);
+        header->addWidget(maximize_);
+        header->addWidget(close_);
+        outer->addWidget(chrome_);
+
+        auto* body = new QWidget(this);
+        body->setObjectName(QStringLiteral("settingsBody"));
+        body->setAttribute(Qt::WA_StyledBackground);
+        contents_ = new QHBoxLayout(body);
+        contents_->setContentsMargins(0, 0, 0, 0);
+        contents_->setSpacing(0);
+        outer->addWidget(body, 1);
+    }
+
+    [[nodiscard]] QHBoxLayout* contentsLayout() const { return contents_; }
+
+protected:
+    void showEvent(QShowEvent* event) override {
+        QDialog::showEvent(event);
+        wolfmark::qt::windows::installNativeFrame(this);
+    }
+
+    void changeEvent(QEvent* event) override {
+        QDialog::changeEvent(event);
+        if (event->type() == QEvent::WindowStateChange && maximize_)
+            maximize_->setMaximized(isMaximized());
+    }
+
+#ifdef _WIN32
+    bool nativeEvent(const QByteArray& event_type, void* message, qintptr* result) override {
+        if (wolfmark::qt::windows::handleNativeFrameEvent(
+                this, chrome_, minimize_, maximize_, close_, false, message, result))
+            return true;
+        return QDialog::nativeEvent(event_type, message, result);
+    }
+#endif
+
+private:
+    wolfmark::qt::WolfTitleBar* chrome_ = nullptr;
+    wolfmark::qt::CaptionButton* minimize_ = nullptr;
+    wolfmark::qt::CaptionButton* maximize_ = nullptr;
+    wolfmark::qt::CaptionButton* close_ = nullptr;
+    QHBoxLayout* contents_ = nullptr;
+};
+
 class WolfmarkWindow final : public QWidget {
 public:
     explicit WolfmarkWindow(const WolfmarkApiTable* api)
@@ -2483,6 +2573,10 @@ public:
                 bool ok = active_ != nullptr && document_actions_->isVisible() &&
                           title_search_->isEnabled() && mode_segments_.size() == 3 &&
                           mode_segments_.at(0)->isChecked();
+                if (ok) {
+                    for (const auto* button : mode_segments_)
+                        ok &= button->width() >= button->fontMetrics().horizontalAdvance(button->text()) + 30;
+                }
                 if (ok) {
                     mode_segments_.at(2)->click();
                     ok &= active_->mode == OpenDocumentSession::Mode::Source &&
@@ -4255,6 +4349,11 @@ private:
             segment->setProperty("modeSegment", true);
             segment->setCheckable(true);
             segment->setFixedHeight(32);
+            // Reserve actual glyph width plus horizontal padding at every DPI.
+            // A QSS min-width of 58px alone truncates "Live Preview".
+            segment->setMinimumWidth(
+                std::max(96, segment->fontMetrics().horizontalAdvance(mode_name) + 42));
+            segment->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
             segment->setAccessibleName(QStringLiteral("%1 mode").arg(mode_name));
             segment->setToolTip(QStringLiteral("Switch to %1 mode").arg(mode_name));
             const int id = segment_index++;
@@ -4522,15 +4621,8 @@ private:
     }
 
     void showSettings(const QString& snapshot_path = {}) {
-        QDialog dialog(this);
-        dialog.setObjectName(QStringLiteral("settingsDialog"));
-        dialog.setWindowTitle(QStringLiteral("Wolfmark Settings"));
-        dialog.setModal(true);
-        dialog.setMinimumSize(760, 500);
-        dialog.resize(840, 540);
-        auto* shell = new QHBoxLayout(&dialog);
-        shell->setContentsMargins(0, 0, 0, 0);
-        shell->setSpacing(0);
+        WolfSettingsDialog dialog(this);
+        auto* shell = dialog.contentsLayout();
 
         auto* navigation = new QWidget;
         navigation->setObjectName(QStringLiteral("settingsNavigation"));
