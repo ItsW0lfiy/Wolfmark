@@ -126,7 +126,12 @@ jobs:
           @('#define WOLFMARK_SETUP_VERSION_COMMAS 0,1,0,7', '#define WOLFMARK_SETUP_VERSION_STRING "0.1.0-dev.7"') |
             Set-Content "$out/generated/wolfmark_setup_version.h" -Encoding ascii
           $project = Join-Path $root 'packaging/windows/setup-ui/WolfmarkSetup.vcxproj'
-          & msbuild.exe $project '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' `
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path $vswhere)) { throw 'Visual Studio discovery tool is missing.' }
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/MSBuild.exe' |
+            Select-Object -First 1
+          if (!$msbuild) { throw 'MSBuild was not found on the Windows runner.' }
+          & "$msbuild" $project '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' `
             "/p:QtRoot=$env:QT_ROOT_DIR" "/p:ProjectRoot=$root" "/p:WolfmarkGeneratedDir=$out/generated" `
             "/p:WolfmarkOutputDir=$out/bin" "/p:WolfmarkIntermediateDir=$out/obj" `
             '/m:1' '/nr:false' '/v:minimal'
