@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QDir>
 #include <QPushButton>
 #include <QPixmap>
 #include <QScrollBar>
@@ -112,20 +113,9 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(14, 18, 14, 14);
     layout->setSpacing(8);
-    auto* identity = new QHBoxLayout;
-    auto* symbol = new QLabel;
-    symbol->setObjectName(QStringLiteral("brandSymbol"));
-    symbol->setFixedSize(34, 34);
-    symbol->setAlignment(Qt::AlignCenter);
-    symbol->setPixmap(QApplication::windowIcon().pixmap(28, 28));
-    auto* name = new QLabel(QStringLiteral("Wolfmark"));
-    name->setObjectName(QStringLiteral("sidebarIdentity"));
-    identity->addWidget(symbol);
-    identity->addSpacing(6);
-    identity->addWidget(name);
-    identity->addStretch();
-    layout->addLayout(identity);
-    layout->addSpacing(18);
+    // Branding is now above the sidebar in the single global titlebar.
+    // Avoid the duplicate paw and product name from the legacy side rail.
+    layout->addSpacing(3);
     auto* open_row = new QHBoxLayout;
     open_row->setSpacing(6);
     auto* open_button = new QPushButton(QStringLiteral("Open document"));
@@ -155,7 +145,7 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     connect(reload_, &QPushButton::clicked, this, [this] { if (reload) reload(); });
     open_row->addWidget(reload_);
     layout->addLayout(open_row);
-    layout->addSpacing(18);
+    layout->addSpacing(22);
     auto* label = new QLabel(QStringLiteral("OPEN DOCUMENTS"));
     label->setObjectName(QStringLiteral("sidebarSection"));
     layout->addWidget(label);
@@ -219,7 +209,9 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     footer_layout->setContentsMargins(5, 12, 0, 2);
     footer_layout->setSpacing(9);
     auto* footer_symbol = new QLabel;
-    footer_symbol->setPixmap(QApplication::windowIcon().pixmap(28, 28));
+    QIcon footer_icon(QDir::current().filePath(QStringLiteral("assets/icons/wolfmark-32x32.png")));
+    if (footer_icon.isNull()) footer_icon = QApplication::windowIcon();
+    footer_symbol->setPixmap(footer_icon.pixmap(28, 28));
     footer_symbol->setFixedSize(30, 30);
     footer_symbol->setAlignment(Qt::AlignCenter);
     footer_layout->addWidget(footer_symbol);
@@ -236,20 +228,37 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     layout->addWidget(footer);
 }
 
+namespace {
+QIcon documentIcon(const QString& name) {
+    // Reuse the approved application file icons. Never redraw or recolor the
+    // locked wolfmark-markdown / wolfmark-text artwork for navigation states.
+    const auto filename = name.endsWith(QStringLiteral(".txt"), Qt::CaseInsensitive)
+        ? QStringLiteral("wolfmark-text.ico") : QStringLiteral("wolfmark-markdown.ico");
+    for (const auto& root : {QCoreApplication::applicationDirPath(), QDir::currentPath()}) {
+        QIcon icon(QDir(root).filePath(QStringLiteral("assets/icons/") + filename));
+        // Qt builds without an ICO decoder can return an icon handle which
+        // still produces an empty pixmap. Always validate usable pixels.
+        if (!icon.isNull() && !icon.pixmap(20, 20).isNull()) return icon;
+    }
+    return QApplication::windowIcon();
+}
+} // namespace
+
 void DocumentSidebar::setDocuments(const QStringList& filenames, int active_index) {
     documents_->clear();
     for (int index = 0; index < filenames.size(); ++index) {
         auto* item = new QTreeWidgetItem(documents_);
         item->setText(0, filenames.at(index));
+        item->setIcon(0, documentIcon(filenames.at(index)));
+        item->setToolTip(0, filenames.at(index));
         item->setText(1, QStringLiteral("×"));
         item->setTextAlignment(1, Qt::AlignCenter);
-        item->setToolTip(0, filenames.at(index));
         item->setToolTip(1, QStringLiteral("Close document"));
         item->setData(0, Qt::UserRole, index);
         if (index == active_index) {
-            QPixmap marker(3, 20);
-            marker.fill(QColor(style::colour::crimson));
-            item->setIcon(0, QIcon(marker));
+            // Selection already paints a crimson left marker via the shared
+            // QTreeWidget style. Do not replace the real file icon with a
+            // three-pixel swatch when activating a document.
             documents_->setCurrentItem(item);
         }
     }

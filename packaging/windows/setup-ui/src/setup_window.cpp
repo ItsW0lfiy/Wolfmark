@@ -12,6 +12,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <QWindow>
 #include <QPainter>
 #include <QPixmap>
 #include <QProcess>
@@ -19,12 +21,28 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QStyle>
+#include <QStyleOptionButton>
 #include <QVBoxLayout>
 #include <QUrl>
 
 #include "bootstrap_log.h"
 
 namespace {
+// Fixed-size installer needs a moveable system titlebar, not a second Qt frame.
+// startSystemMove delegates caption dragging to Windows rather than simulating
+// mouse coordinates; close() still passes through SetupWindow::closeEvent.
+class SetupTitleBar final : public QWidget {
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton && window()->windowHandle() &&
+            window()->windowHandle()->startSystemMove()) {
+            event->accept();
+            return;
+        }
+        QWidget::mousePressEvent(event);
+    }
+};
+
 class WolfmarkSymbol final : public QWidget {
 public:
     explicit WolfmarkSymbol(const QString& sourcePath, int size = 44, QWidget* parent = nullptr) : QWidget(parent) {
@@ -44,6 +62,32 @@ protected:
 
 private:
     QPixmap source_;
+};
+
+class SetupCheckBox final : public QCheckBox {
+public:
+    explicit SetupCheckBox(const QString& text, QWidget* parent = nullptr)
+        : QCheckBox(text, parent) {}
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QCheckBox::paintEvent(event);
+        if (checkState() != Qt::Checked) return;
+        QStyleOptionButton option;
+        initStyleOption(&option);
+        const QRect rect = style()->subElementRect(QStyle::SE_CheckBoxIndicator, &option, this);
+        if (!rect.isValid()) return;
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(Qt::white, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawLine(QPointF(rect.left() + rect.width() * 0.24,
+                                 rect.top() + rect.height() * 0.52),
+                         QPointF(rect.left() + rect.width() * 0.44,
+                                 rect.top() + rect.height() * 0.72));
+        painter.drawLine(QPointF(rect.left() + rect.width() * 0.44,
+                                 rect.top() + rect.height() * 0.72),
+                         QPointF(rect.left() + rect.width() * 0.80,
+                                 rect.top() + rect.height() * 0.30));
+    }
 };
 
 QPushButton* makeButton(const QString& text, bool primary = false) {
@@ -67,8 +111,10 @@ QFrame* separator() {
 SetupWindow::SetupWindow(InstallerHost* host, const QString& resourceRoot) : host_(host) {
     setObjectName(QStringLiteral("setupWindow"));
     setWindowTitle(QStringLiteral("Wolfmark Setup"));
-    setFixedSize(820, 560);
-    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    setFixedSize(900, 640);
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint |
+                   Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint |
+                   Qt::WindowCloseButtonHint);
     setAccessibleName(QStringLiteral("Wolfmark Setup"));
 
     pages_ = new QStackedWidget(this);
@@ -82,13 +128,52 @@ SetupWindow::SetupWindow(InstallerHost* host, const QString& resourceRoot) : hos
         pages_->addWidget(page);
     }
 
-    auto* root = new QHBoxLayout(this);
+    auto* window_layout = new QVBoxLayout(this);
+    window_layout->setContentsMargins(0, 0, 0, 0);
+    window_layout->setSpacing(0);
+    auto* topbar = new SetupTitleBar;
+    topbar->setObjectName(QStringLiteral("setupTitleBar"));
+    topbar->setAttribute(Qt::WA_StyledBackground);
+    topbar->setFixedHeight(44);
+    auto* top_layout = new QHBoxLayout(topbar);
+    top_layout->setContentsMargins(17, 0, 0, 0);
+    top_layout->setSpacing(9);
+    auto* top_icon = new QLabel;
+    top_icon->setPixmap(windowIcon().pixmap(21, 21));
+    top_icon->setFixedSize(23, 23);
+    top_icon->setAlignment(Qt::AlignCenter);
+    top_icon->setAttribute(Qt::WA_TransparentForMouseEvents);
+    top_layout->addWidget(top_icon);
+    auto* top_title = new QLabel(QStringLiteral("Wolfmark  /  Setup"));
+    top_title->setObjectName(QStringLiteral("setupTitleText"));
+    top_title->setAttribute(Qt::WA_TransparentForMouseEvents);
+    top_layout->addWidget(top_title);
+    top_layout->addStretch();
+    auto* minimize = new QPushButton(QStringLiteral("−"));
+    minimize->setObjectName(QStringLiteral("setupMinimize"));
+    minimize->setFixedSize(42, 43);
+    minimize->setAccessibleName(QStringLiteral("Minimize setup"));
+    connect(minimize, &QPushButton::clicked, this, &QWidget::showMinimized);
+    top_layout->addWidget(minimize);
+    auto* close = new QPushButton(QStringLiteral("×"));
+    close->setObjectName(QStringLiteral("setupClose"));
+    close->setFixedSize(45, 43);
+    close->setAccessibleName(QStringLiteral("Close setup"));
+    connect(close, &QPushButton::clicked, this, &QWidget::close);
+    top_layout->addWidget(close);
+    window_layout->addWidget(topbar);
+
+    auto* body = new QWidget;
+    body->setObjectName(QStringLiteral("setupBody"));
+    body->setAttribute(Qt::WA_StyledBackground);
+    auto* root = new QHBoxLayout(body);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
+    window_layout->addWidget(body, 1);
     auto* brand_panel = new QWidget;
     brand_panel->setObjectName(QStringLiteral("brandPanel"));
     brand_panel->setAttribute(Qt::WA_StyledBackground);
-    brand_panel->setFixedWidth(205);
+    brand_panel->setFixedWidth(222);
     auto* brand_layout = new QVBoxLayout(brand_panel);
     brand_layout->setContentsMargins(26, 38, 26, 28);
     brand_layout->setSpacing(12);
@@ -172,8 +257,8 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
-    associationsCheck_ = new QCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"));
-    desktopCheck_ = new QCheckBox(QStringLiteral("Create a desktop shortcut"));
+    associationsCheck_ = new SetupCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"));
+    desktopCheck_ = new SetupCheckBox(QStringLiteral("Create a desktop shortcut"));
     associationsCheck_->setAccessibleName(QStringLiteral("Register for Open With and Windows Default Apps"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
     layout->addWidget(associationsCheck_);
@@ -316,7 +401,7 @@ QWidget* SetupWindow::createCompletePage() {
     completeDetail_ = labels.at(2);
     layout->addWidget(header);
     layout->addWidget(separator());
-    launchCheck_ = new QCheckBox(QStringLiteral("Launch Wolfmark"));
+    launchCheck_ = new SetupCheckBox(QStringLiteral("Launch Wolfmark"));
     launchCheck_->setChecked(true);
     layout->addWidget(launchCheck_);
     completeDefaults_ = makeButton(QStringLiteral("Choose Windows defaults"));
@@ -638,36 +723,43 @@ QString SetupWindow::actionProgressDetail(InstallerAction action) const {
 
 void SetupWindow::applyStyle() {
     qApp->setStyleSheet(QStringLiteral(R"(
-        QWidget#setupWindow { background: #101010; color: #e9e7e6; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; }
-        QWidget#brandPanel { background: #171717; border-right: 1px solid #343434; }
-        QStackedWidget#setupPages { background: #101010; }
+        QWidget#setupWindow { background: #121010; color: #ebe9e8; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; border: 1px solid #3a3434; border-radius: 9px; }
+        QWidget#setupBody { background: #121010; }
+        QWidget#setupTitleBar { background: #1c1919; border-bottom: 1px solid #3a3434; }
+        QLabel#setupTitleText { color: #ebe9e8; font-size: 11pt; font-weight: 600; }
+        QPushButton#setupMinimize, QPushButton#setupClose { background: transparent; border: none; border-radius: 0; color: #bcb9bb; font-size: 18px; padding: 0; }
+        QPushButton#setupMinimize:hover { background: #363030; color: #ffffff; }
+        QPushButton#setupClose:hover { background: #8a1f3f; color: #ffffff; }
+        QPushButton#setupMinimize:focus, QPushButton#setupClose:focus { border: 1px solid #c52a50; }
+        QWidget#brandPanel { background: #1c1919; border-right: 1px solid #3a3434; }
+        QStackedWidget#setupPages { background: #121010; }
         QLabel#brandName { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 23pt; font-weight: 600; }
         QLabel#brandDetail { color: #9c9895; font-size: 9pt; }
         QLabel#eyebrow { color: #a09c99; font-size: 8pt; font-weight: 600; letter-spacing: 2px; }
         QLabel#pageTitle { color: #f2efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 24pt; font-weight: 600; }
         QLabel#pageDetail { color: #aaa6a3; font-size: 10pt; }
-        QLabel#sectionLabel { color: #d0cdca; font-weight: 600; }
+        QLabel#sectionLabel { color: #d5d2d3; font-weight: 600; }
         QLabel#metadata { color: #9c9895; padding: 5px 0; }
-        QLabel#assurance, QLabel#errorDetails { background: #1b1b1b; border: 1px solid #3b3b3b; border-radius: 9px; padding: 15px; color: #c5c1be; }
-        QFrame#separator { background: #343434; border: none; }
-        QLineEdit { background: #1b1b1b; border: 1px solid #414141; border-radius: 7px; padding: 9px 11px; color: #e9e7e6; selection-background-color: #69313c; selection-color: #ffffff; }
-        QLineEdit:focus { border-color: #d62d4e; }
-        QPushButton { background: #202020; border: 1px solid #414141; border-radius: 7px; color: #d8d4d1; padding: 8px 16px; }
-        QPushButton:hover { background: #2b2b2b; border-color: #5c5c5c; }
-        QPushButton:pressed { background: #342326; border-color: #b8213f; }
-        QPushButton:focus { border: 2px solid #d62d4e; padding: 7px 15px; }
-        QPushButton[primary="true"] { background: #d62d4e; color: #ffffff; border-color: #d62d4e; font-weight: 600; }
-        QPushButton[primary="true"]:hover { background: #ea3d5f; border-color: #ea3d5f; }
-        QPushButton[primary="true"]:pressed { background: #b8213f; border-color: #b8213f; }
+        QLabel#assurance, QLabel#errorDetails { background: #242020; border: 1px solid #3a3434; border-radius: 9px; padding: 15px; color: #c5c1be; }
+        QFrame#separator { background: #3a3434; border: none; }
+        QLineEdit { background: #242020; border: 1px solid #4b4545; border-radius: 7px; padding: 9px 11px; color: #ebe9e8; selection-background-color: #653040; selection-color: #ffffff; }
+        QLineEdit:focus { border-color: #c52a50; }
+        QPushButton { background: #282424; border: 1px solid #4b4545; border-radius: 7px; color: #d8d4d1; padding: 8px 16px; }
+        QPushButton:hover { background: #363030; border-color: #5c5c5c; }
+        QPushButton:pressed { background: #3a2029; border-color: #a51e41; }
+        QPushButton:focus { border: 2px solid #c52a50; padding: 7px 15px; }
+        QPushButton[primary="true"] { background: #c52a50; color: #ffffff; border-color: #c52a50; font-weight: 600; }
+        QPushButton[primary="true"]:hover { background: #d83a61; border-color: #d83a61; }
+        QPushButton[primary="true"]:pressed { background: #a51e41; border-color: #a51e41; }
         QPushButton[danger="true"] { color: #e8909c; }
         QPushButton[danger="true"]:hover { background: #422127; border-color: #d45a64; }
-        QCheckBox { spacing: 9px; color: #d0cdca; }
+        QCheckBox { spacing: 9px; color: #d5d2d3; }
         QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #5b5b5b; border-radius: 5px; background: #1a1a1a; }
-        QCheckBox::indicator:hover { border-color: #d62d4e; }
-        QCheckBox::indicator:checked { background: #d62d4e; border-color: #ea3d5f; }
+        QCheckBox::indicator:hover { border-color: #c52a50; }
+        QCheckBox::indicator:checked { background: #c52a50; border-color: #d83a61; }
         QCheckBox:focus { outline: none; color: #ffffff; }
-        QProgressBar { background: #1b1b1b; border: 1px solid #3c3c3c; border-radius: 5px; min-height: 11px; max-height: 11px; }
-        QProgressBar::chunk { background: #d62d4e; border-radius: 4px; }
-        QMessageBox { background: #101010; }
+        QProgressBar { background: #242020; border: 1px solid #3c3c3c; border-radius: 5px; min-height: 11px; max-height: 11px; }
+        QProgressBar::chunk { background: #c52a50; border-radius: 4px; }
+        QMessageBox { background: #121010; }
     )"));
 }

@@ -224,7 +224,12 @@ QIcon applicationIcon() {
         return icon;
     }
 #endif
-    return QIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark.ico")));
+    QIcon icon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark.ico")));
+    // Qt on Linux does not necessarily ship the ICO decoder. The same approved
+    // paw artwork is also bundled as PNG for native icon resolution.
+    if (icon.isNull() || icon.pixmap(32, 32).isNull())
+        icon = QIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark-32x32.png")));
+    return icon;
 }
 
 Command parseCommand(const QJsonValue& value) {
@@ -813,22 +818,34 @@ public:
             auto* table = qobject_cast<QTextTable*>(frame);
             if (table == nullptr) continue;
             ++tables;
-            if (table->format().border() > 1) return false;
+            if (table->format().border() > 1) {
+                std::fprintf(stderr, "STYLE_DIAG table_border=%f\n", table->format().border());
+                return false;
+            }
             for (int row = 0; row < table->rows(); ++row) {
                 for (int column = 0; column < table->columns(); ++column) {
                     const auto cell = table->cellAt(row, column);
                     const auto format = cell.format().toTableCellFormat();
                     if (format.leftBorder() != (column == 0 ? 0 : 0.75) || format.rightBorder() != 0 ||
-                        format.topBorder() != 0) return false;
-                    if (row == 0 && format.background().color() != QColor(colour::table_header))
+                        format.topBorder() != 0) {
+                        std::fprintf(stderr, "STYLE_DIAG cell_border row=%d col=%d left=%f right=%f top=%f\n",
+                                     row, column, format.leftBorder(), format.rightBorder(), format.topBorder());
                         return false;
+                    }
+                    if (row == 0 && format.background().color() != QColor(colour::table_header)) {
+                        std::fprintf(stderr, "STYLE_DIAG table_header mismatch\n");
+                        return false;
+                    }
                     right_aligned |= cell.firstCursorPosition().blockFormat().alignment() ==
                                      Qt::AlignRight;
                     const auto block = cell.firstCursorPosition().block();
                     for (auto it = block.begin(); !it.atEnd(); ++it) {
                         const auto background = it.fragment().charFormat().background();
-                        if (background.style() != Qt::NoBrush && background.color() != QColor(colour::inline_code))
+                        if (background.style() != Qt::NoBrush && background.color() != QColor(colour::inline_code)) {
+                            std::fprintf(stderr, "STYLE_DIAG inline background mismatch: %s\n",
+                                         qUtf8Printable(background.color().name()));
                             return false;
+                        }
                     }
                 }
             }
@@ -838,11 +855,19 @@ public:
             for (const auto role : {QPalette::Accent, QPalette::Highlight, QPalette::Link,
                                     QPalette::Text, QPalette::Button, QPalette::ButtonText}) {
                 const auto color = palette.color(group, role);
-                if (color.blue() > color.red() && color.blue() > color.green()) return false;
+                if (color.blue() > color.red() && color.blue() > color.green()) {
+                    std::fprintf(stderr, "STYLE_DIAG blue role=%d group=%d color=%s\n",
+                                 static_cast<int>(role), static_cast<int>(group),
+                                 qUtf8Printable(color.name()));
+                    return false;
+                }
             }
         }
         auto* accessible = QAccessible::queryAccessibleInterface(
             const_cast<DocumentView*>(this));
+        std::fprintf(stderr, "STYLE_DIAG tables=%d right_aligned=%d accessible=%d interface=%d readonly=%d\n",
+                     tables, right_aligned, accessible != nullptr,
+                     accessible && accessible->textInterface() != nullptr, isReadOnly());
         return tables > 0 && right_aligned && accessible != nullptr &&
                accessible->textInterface() != nullptr && isReadOnly();
     }
@@ -1073,9 +1098,11 @@ public:
         ok &= before.parse_count == after.parse_count && before.load_count == after.load_count &&
               before.image_request_count == after.image_request_count && constructions == constructionCount();
         std::fprintf(stdout, "WOLFMARK_SMOKE zoom=%s parse_delta=%llu load_delta=%llu construction_delta=%llu image_request_delta=%llu\n",
-                     ok ? "ok" : "failed", after.parse_count - before.parse_count,
-                     after.load_count - before.load_count, constructionCount() - constructions,
-                     after.image_request_count - before.image_request_count);
+                     ok ? "ok" : "failed",
+                     static_cast<unsigned long long>(after.parse_count - before.parse_count),
+                     static_cast<unsigned long long>(after.load_count - before.load_count),
+                     static_cast<unsigned long long>(constructionCount() - constructions),
+                     static_cast<unsigned long long>(after.image_request_count - before.image_request_count));
         return ok;
     }
 
@@ -1151,7 +1178,7 @@ protected:
                             QPointF(horizontalScrollBar()->value(), verticalScrollBar()->value());
         const auto selection = textCursor();
         const double padding = 3.5 * zoom_percent_ / 100.0;
-        const double radius = 1.0 * zoom_percent_ / 100.0;
+        const double radius = 4.5 * zoom_percent_ / 100.0;
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
@@ -1210,7 +1237,7 @@ protected:
         painter.setBrush(QColor(colour::document));
         painter.setClipRect(viewport()->rect());
         const QPointF scroll(horizontalScrollBar()->value(), verticalScrollBar()->value());
-        const qreal radius = 7.0 * zoom_percent_ / 100.0;
+        const qreal radius = 10.0 * zoom_percent_ / 100.0;
         const qreal visible_top = verticalScrollBar()->value();
         const qreal visible_bottom = visible_top + viewport()->height();
         auto frame = std::lower_bound(code_frame_bounds_.cbegin(), code_frame_bounds_.cend(),
@@ -1226,6 +1253,14 @@ protected:
             QPainterPath rounded;
             rounded.addRoundedRect(bounds, radius, radius);
             painter.drawPath(square.subtracted(rounded));
+            // The text and selection are still painted by QTextEdit. A subdued
+            // native overlay supplies the missing rounded border without changing
+            // QTextFrame geometry, selection offsets, or editable Markdown source.
+            painter.save();
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(colour::code_separator), 1.0));
+            painter.drawRoundedRect(bounds.adjusted(.5, .5, -.5, -.5), radius, radius);
+            painter.restore();
         }
         painter.restore();
     }
@@ -2400,8 +2435,8 @@ public:
                        Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
         setAttribute(Qt::WA_NativeWindow);
         setModal(true);
-        setMinimumSize(760, 500);
-        resize(880, 580);
+        setMinimumSize(780, 520);
+        resize(920, 620);
 
         auto* outer = new QVBoxLayout(this);
         outer->setContentsMargins(0, 0, 0, 0);
@@ -2413,7 +2448,7 @@ public:
         header->setContentsMargins(16, 0, 0, 0);
         header->setSpacing(10);
         auto* symbol = new QLabel(chrome_);
-        symbol->setPixmap(QApplication::windowIcon().pixmap(23, 23));
+        symbol->setPixmap(applicationIcon().pixmap(23, 23));
         symbol->setFixedSize(26, 26);
         symbol->setAlignment(Qt::AlignCenter);
         header->addWidget(symbol);
@@ -2627,6 +2662,16 @@ public:
                     mode_segments_.at(0)->click();
                     ok &= active_->mode == OpenDocumentSession::Mode::Reader &&
                           mode_segments_.at(0)->isChecked();
+                    if (documents_.size() > 1) {
+                        auto* original = active_;
+                        previous_tab_->click();
+                        ok &= active_ != original && previous_tab_->isEnabled();
+                        next_tab_->click();
+                        ok &= active_ == original && next_tab_->isEnabled();
+                        ok &= tab_row_->isVisible() && tabs_->count() == static_cast<int>(documents_.size());
+                        auto* add = findChild<QPushButton*>(QStringLiteral("newDocumentTab"));
+                        ok &= add != nullptr && add->isVisible() && add->isEnabled();
+                    }
                     title_search_->click();
                     ok &= find_bar_->isVisible() && find_input_->hasFocus();
                 }
@@ -3096,8 +3141,11 @@ public:
         }
         if (mode == QStringLiteral("settings-ui")) {
             QTimer::singleShot(0, this, [this] {
+                auto page = qEnvironmentVariable("WOLFMARK_SNAPSHOT_SETTINGS_PAGE");
+                if (page != QStringLiteral("about") && page != QStringLiteral("editor"))
+                    page = QStringLiteral("updates");
                 const auto path = QDir::current().absoluteFilePath(
-                    QStringLiteral("out/visual/dev7/settings.png"));
+                    QStringLiteral("out/visual/dev7/settings-%1.png").arg(page));
                 showSettings(path);
                 const bool ok = QFileInfo::exists(path);
                 std::fprintf(stdout, "WOLFMARK_SMOKE settings_ui=%s path=%s\n",
@@ -3718,7 +3766,7 @@ public:
                         std::fprintf(stdout,
                             "WOLFMARK_SMOKE motion=%s counters=%s image_request_delta=%llu\n",
                             final_ok ? "ok" : "failed", counters ? "stable" : "changed",
-                            after.image_request_count - before.image_request_count);
+                            static_cast<unsigned long long>(after.image_request_count - before.image_request_count));
                         std::fflush(stdout);
                         QCoreApplication::exit(final_ok ? 0 : 16);
                     });
@@ -4124,6 +4172,10 @@ protected:
     void resizeEvent(QResizeEvent* event) override {
         QWidget::resizeEvent(event);
         updateSidebarVisibility();
+        // Keep the document breadcrumb legible when constrained. Ctrl+F remains
+        // available even when the decorative search entry cannot fit safely.
+        if (title_search_)
+            title_search_->setVisible(width() >= 960);
     }
 
     void closeEvent(QCloseEvent* event) override {
@@ -4219,7 +4271,7 @@ private:
             sidebar_->setFixedWidth(visible ? wolfmark::style::metric::sidebar_width : 0);
             sidebar_->setVisible(visible);
             if (open_ != nullptr) open_->setVisible(!visible);
-            if (title_symbol_ != nullptr) title_symbol_->setVisible(!visible);
+            // Branding stays visible in the global titlebar during sidebar changes.
             return;
         }
         if (sidebar_animation_.state() == QAbstractAnimation::Running &&
@@ -4232,7 +4284,7 @@ private:
             sidebar_->setFixedWidth(current);
             sidebar_->show();
             if (open_ != nullptr) open_->hide();
-            if (title_symbol_ != nullptr) title_symbol_->hide();
+            // Header identity no longer depends on animation progress.
             const int full_duration = visible ? 170 : 150;
             const int remaining = std::abs(target - current);
             sidebar_animation_.setStartValue(current);
@@ -4244,13 +4296,23 @@ private:
             return;
         }
         if (open_ != nullptr) open_->setVisible(!visible);
-        if (title_symbol_ != nullptr) title_symbol_->setVisible(!visible);
+        // Header brand is independent from navigation visibility.
     }
 
     void buildUi() {
-        auto* shell = new QHBoxLayout(this);
+        // One top-level titlebar now spans the entire app, including the sidebar.
+        // This matches the approved desktop structure without shifting document
+        // state or changing any native hit-test ownership.
+        auto* window_root = new QVBoxLayout(this);
+        window_root->setContentsMargins(0, 0, 0, 0);
+        window_root->setSpacing(0);
+        auto* body = new QWidget(this);
+        body->setObjectName(QStringLiteral("windowBody"));
+        body->setAttribute(Qt::WA_StyledBackground);
+        auto* shell = new QHBoxLayout(body);
         shell->setContentsMargins(0, 0, 0, 0);
         shell->setSpacing(0);
+        window_root->addWidget(body, 1);
         sidebar_ = new wolfmark::qt::DocumentSidebar;
         QObject::connect(&sidebar_animation_, &QVariantAnimation::valueChanged, this,
                          [this](const QVariant& width) {
@@ -4262,7 +4324,7 @@ private:
             sidebar_->setFixedWidth(sidebar_target_visible_ ? wolfmark::style::metric::sidebar_width : 0);
             sidebar_->setVisible(sidebar_target_visible_);
             if (open_ != nullptr) open_->setVisible(!sidebar_target_visible_);
-            if (title_symbol_ != nullptr) title_symbol_->setVisible(!sidebar_target_visible_);
+            // Global titlebar branding remains visible.
         });
         sidebar_->open = [this] { chooseDocument(); };
         sidebar_->reload = [this] { reloadDocument(); };
@@ -4295,8 +4357,27 @@ private:
 
         title_bar_ = new wolfmark::qt::WolfTitleBar(this);
         auto* title_layout = new QHBoxLayout(title_bar_);
-        title_layout->setContentsMargins(12, 0, 0, 0);
+        title_layout->setContentsMargins(14, 0, 0, 0);
         title_layout->setSpacing(8);
+
+        title_symbol_ = new QLabel(title_bar_);
+        title_symbol_->setObjectName(QStringLiteral("headerBrandSymbol"));
+        title_symbol_->setFixedSize(30, 30);
+        title_symbol_->setAlignment(Qt::AlignCenter);
+        title_symbol_->setPixmap(applicationIcon().pixmap(24, 24));
+        title_symbol_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        title_layout->addWidget(title_symbol_);
+        auto* brand_title = new QLabel(QStringLiteral("Wolfmark"));
+        brand_title->setObjectName(QStringLiteral("headerBrandTitle"));
+        brand_title->setAttribute(Qt::WA_TransparentForMouseEvents);
+        brand_title->setMinimumWidth(88);
+        title_layout->addWidget(brand_title);
+        auto* brand_separator = new QFrame;
+        brand_separator->setObjectName(QStringLiteral("headerSeparator"));
+        brand_separator->setFixedSize(1, 22);
+        title_layout->addSpacing(12);
+        title_layout->addWidget(brand_separator);
+        title_layout->addSpacing(7);
 
         auto* navigation = new WolfButton(QString());
         navigation->setProperty("titleTool", true);
@@ -4317,15 +4398,8 @@ private:
             updateSidebarVisibility();
         });
         title_layout->addWidget(navigation);
-        title_symbol_ = new QLabel;
-        title_symbol_->setObjectName(QStringLiteral("brandSymbol"));
-        title_symbol_->setFixedSize(30, 30);
-        title_symbol_->setAlignment(Qt::AlignCenter);
-        title_symbol_->setPixmap(QApplication::windowIcon().pixmap(22, 22));
-        title_symbol_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        title_layout->addWidget(title_symbol_);
 
-        title_label_ = new ElidingLabel(QStringLiteral("Wolfmark"));
+        title_label_ = new ElidingLabel(QStringLiteral("Documents"));
         title_label_->setObjectName(QStringLiteral("documentTitle"));
         title_label_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
         title_label_->setMinimumWidth(60);
@@ -4356,6 +4430,30 @@ private:
         QObject::connect(open_, &QPushButton::clicked, this, [this] { chooseDocument(); });
         actions->addWidget(open_);
         actions->addSpacing(6);
+
+        // Navigation arrows are real actions over the currently opened tabs.
+        // No invented document history or placeholder controls.
+        previous_tab_ = new WolfButton(QStringLiteral("←"), document_actions_);
+        previous_tab_->setObjectName(QStringLiteral("documentNavigationButton"));
+        previous_tab_->setFixedSize(32, 32);
+        previous_tab_->setAccessibleName(QStringLiteral("Previous open document"));
+        previous_tab_->setToolTip(QStringLiteral("Previous open document (Alt+Left)"));
+        QObject::connect(previous_tab_, &QPushButton::clicked, this, [this] {
+            const int count = static_cast<int>(documents_.size());
+            if (count > 1) activateDocument((activeDocumentIndex() + count - 1) % count);
+        });
+        next_tab_ = new WolfButton(QStringLiteral("→"), document_actions_);
+        next_tab_->setObjectName(QStringLiteral("documentNavigationButton"));
+        next_tab_->setFixedSize(32, 32);
+        next_tab_->setAccessibleName(QStringLiteral("Next open document"));
+        next_tab_->setToolTip(QStringLiteral("Next open document (Alt+Right)"));
+        QObject::connect(next_tab_, &QPushButton::clicked, this, [this] {
+            const int count = static_cast<int>(documents_.size());
+            if (count > 1) activateDocument((activeDocumentIndex() + 1) % count);
+        });
+        actions->addWidget(previous_tab_);
+        actions->addWidget(next_tab_);
+        actions->addSpacing(8);
 
         // The visible command bar deliberately separates document modes from window chrome.
         // All visible mode buttons trigger the same QActionGroup command path.
@@ -4493,7 +4591,7 @@ private:
         actions->addSpacing(4);
         actions->addWidget(more);
         document_actions_->hide();
-        auto* settings_button = new WolfButton(QStringLiteral("Settings"));
+        auto* settings_button = new WolfButton(QStringLiteral("⚙  Settings"));
         settings_button->setProperty("titleTool", true);
         settings_button->setAccessibleName(QStringLiteral("Open Wolfmark Settings"));
         QObject::connect(settings_button, &QPushButton::clicked, this, [this] { showSettings(); });
@@ -4514,7 +4612,7 @@ private:
         captions->addWidget(maximize_);
         captions->addWidget(close_);
         title_layout->addLayout(captions);
-        root->addWidget(title_bar_);
+        window_root->insertWidget(0, title_bar_);
 
         tabs_ = new CompactDocumentTabs;
         tabs_->setObjectName(QStringLiteral("documentTabs"));
@@ -4527,7 +4625,23 @@ private:
         tabs_->hide();
         QObject::connect(tabs_, &QTabBar::currentChanged, this, [this](int index) { activateDocument(index); });
         QObject::connect(tabs_, &QTabBar::tabCloseRequested, this, [this](int index) { closeDocument(index); });
-        root->addWidget(tabs_);
+        tab_row_ = new QWidget;
+        tab_row_->setObjectName(QStringLiteral("documentTabRow"));
+        tab_row_->setAttribute(Qt::WA_StyledBackground);
+        auto* tab_layout = new QHBoxLayout(tab_row_);
+        tab_layout->setContentsMargins(4, 0, 12, 0);
+        tab_layout->setSpacing(3);
+        tab_layout->addWidget(tabs_, 0);
+        auto* new_tab = new WolfButton(QStringLiteral("+"), tab_row_);
+        new_tab->setObjectName(QStringLiteral("newDocumentTab"));
+        new_tab->setFixedSize(30, 30);
+        new_tab->setAccessibleName(QStringLiteral("Open another document"));
+        new_tab->setToolTip(QStringLiteral("Open another document (Ctrl+O)"));
+        QObject::connect(new_tab, &QPushButton::clicked, this, [this] { chooseDocument(); });
+        tab_layout->addWidget(new_tab);
+        tab_layout->addStretch(1);
+        tab_row_->hide();
+        root->addWidget(tab_row_);
         root->addWidget(document_actions_);
 
         find_bar_ = new QWidget;
@@ -4561,6 +4675,12 @@ private:
         add_shortcut(QKeySequence::Find, [this] { showFind(); });
         add_shortcut(QKeySequence::FindNext, [this] { findNext(false); });
         add_shortcut(QKeySequence::FindPrevious, [this] { findNext(true); });
+        add_shortcut(QKeySequence(QStringLiteral("Alt+Left")), [this] {
+            if (previous_tab_ && previous_tab_->isEnabled()) previous_tab_->click();
+        });
+        add_shortcut(QKeySequence(QStringLiteral("Alt+Right")), [this] {
+            if (next_tab_ && next_tab_->isEnabled()) next_tab_->click();
+        });
 
         update_banner_ = new QWidget;
         update_banner_->setObjectName(QStringLiteral("updateBanner"));
@@ -4603,7 +4723,7 @@ private:
         auto* identity = new QHBoxLayout;
         identity->setSpacing(12);
         auto* empty_symbol = new QLabel;
-        empty_symbol->setPixmap(QApplication::windowIcon().pixmap(32, 32));
+        empty_symbol->setPixmap(applicationIcon().pixmap(32, 32));
         auto* empty_title = new QLabel(QStringLiteral("Ready to read"));
         empty_title->setObjectName(QStringLiteral("emptyTitle"));
         identity->addWidget(empty_symbol);
@@ -4675,7 +4795,7 @@ private:
         symbol->setObjectName(QStringLiteral("brandSymbol"));
         symbol->setFixedSize(38, 38);
         symbol->setAlignment(Qt::AlignCenter);
-        symbol->setPixmap(QApplication::windowIcon().pixmap(30, 30));
+        symbol->setPixmap(applicationIcon().pixmap(30, 30));
         auto* brand = new QLabel(QStringLiteral("Wolfmark"));
         brand->setObjectName(QStringLiteral("settingsBrand"));
         identity->addWidget(symbol);
@@ -4708,17 +4828,36 @@ private:
         content->setObjectName(QStringLiteral("settingsContent"));
         content->setAttribute(Qt::WA_StyledBackground);
         auto* content_layout = new QVBoxLayout(content);
-        content_layout->setContentsMargins(28, 24, 28, 20);
-        content_layout->setSpacing(16);
+        content_layout->setContentsMargins(32, 28, 32, 24);
+        content_layout->setSpacing(18);
         auto* pages = new QStackedWidget;
         pages->setObjectName(QStringLiteral("settingsPages"));
         content_layout->addWidget(pages, 1);
         shell->addWidget(content, 1);
 
+        // All Settings pages share the same restrained editorial hierarchy.
+        const auto addPageEyebrow = [](QVBoxLayout* target, const QString& name) {
+            auto* label = new QLabel(name);
+            label->setObjectName(QStringLiteral("settingsEyebrow"));
+            target->addWidget(label);
+        };
+        const auto addOption = [](QVBoxLayout* target, QCheckBox* checkbox, QLabel* description) {
+            auto* row = new QFrame;
+            row->setObjectName(QStringLiteral("settingsOption"));
+            row->setAttribute(Qt::WA_StyledBackground);
+            auto* body = new QVBoxLayout(row);
+            body->setContentsMargins(14, 10, 14, 12);
+            body->setSpacing(4);
+            body->addWidget(checkbox);
+            body->addWidget(description);
+            target->addWidget(row);
+        };
+
         auto* updates_page = new QWidget;
         auto* layout = new QVBoxLayout(updates_page);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(14);
+        addPageEyebrow(layout, QStringLiteral("WOLFMARK  /  PREFERENCES"));
 
         auto* title = new QLabel(QStringLiteral("Updates"));
         title->setObjectName(QStringLiteral("settingsTitle"));
@@ -4733,29 +4872,27 @@ private:
         preferences->setObjectName(QStringLiteral("settingsCard"));
         preferences->setAttribute(Qt::WA_StyledBackground);
         auto* preference_layout = new QVBoxLayout(preferences);
-        preference_layout->setContentsMargins(18, 16, 18, 16);
-        preference_layout->setSpacing(9);
+        preference_layout->setContentsMargins(20, 19, 20, 20);
+        preference_layout->setSpacing(8);
         auto* preference_title = new QLabel(QStringLiteral("Update preferences"));
         preference_title->setObjectName(QStringLiteral("settingsSectionTitle"));
         preference_layout->addWidget(preference_title);
         auto* startup = new WolfSettingsCheckBox(QStringLiteral("Check for updates automatically"));
         startup->setChecked(user_settings_.updates().check_on_startup);
         startup->setAccessibleName(QStringLiteral("Check for updates automatically"));
-        preference_layout->addWidget(startup);
         auto* startup_hint = new QLabel(QStringLiteral(
             "Checks quietly after Wolfmark opens. No account or telemetry is used."));
         startup_hint->setObjectName(QStringLiteral("settingsHint"));
         startup_hint->setWordWrap(true);
-        preference_layout->addWidget(startup_hint);
+        addOption(preference_layout, startup, startup_hint);
         auto* prereleases = new WolfSettingsCheckBox(QStringLiteral("Include pre-release versions"));
         prereleases->setChecked(user_settings_.updates().include_prereleases);
         prereleases->setAccessibleName(QStringLiteral("Include pre-release versions"));
-        preference_layout->addWidget(prereleases);
         auto* prerelease_hint = new QLabel(QStringLiteral(
             "Development builds can be less stable than regular releases."));
         prerelease_hint->setObjectName(QStringLiteral("settingsHint"));
         prerelease_hint->setWordWrap(true);
-        preference_layout->addWidget(prerelease_hint);
+        addOption(preference_layout, prereleases, prerelease_hint);
         layout->addWidget(preferences);
 
         auto* version_card = new QFrame;
@@ -4797,6 +4934,7 @@ private:
         auto* about_layout = new QVBoxLayout(about_page);
         about_layout->setContentsMargins(0, 0, 0, 0);
         about_layout->setSpacing(14);
+        addPageEyebrow(about_layout, QStringLiteral("WOLFMARK  /  INFORMATION"));
         auto* about_title = new QLabel(QStringLiteral("About Wolfmark"));
         about_title->setObjectName(QStringLiteral("settingsTitle"));
         about_layout->addWidget(about_title);
@@ -4843,6 +4981,8 @@ private:
         auto* editor_page = new QWidget;
         auto* editor_layout = new QVBoxLayout(editor_page);
         editor_layout->setContentsMargins(0, 0, 0, 0);
+        editor_layout->setSpacing(14);
+        addPageEyebrow(editor_layout, QStringLiteral("WOLFMARK  /  DOCUMENTS"));
         auto* editor_title = new QLabel(QStringLiteral("Reader & Editor"));
         editor_title->setObjectName(QStringLiteral("settingsTitle"));
         editor_layout->addWidget(editor_title);
@@ -4850,13 +4990,22 @@ private:
         reader_hint->setWordWrap(true);
         reader_hint->setObjectName(QStringLiteral("settingsHint"));
         editor_layout->addWidget(reader_hint);
+        auto* editor_card = new QFrame;
+        editor_card->setObjectName(QStringLiteral("settingsCard"));
+        editor_card->setAttribute(Qt::WA_StyledBackground);
+        auto* editor_card_layout = new QVBoxLayout(editor_card);
+        editor_card_layout->setContentsMargins(20, 19, 20, 20);
+        editor_card_layout->setSpacing(8);
+        auto* editor_card_heading = new QLabel(QStringLiteral("Source editing"));
+        editor_card_heading->setObjectName(QStringLiteral("settingsSectionTitle"));
+        editor_card_layout->addWidget(editor_card_heading);
         auto* word_wrap = new WolfSettingsCheckBox(QStringLiteral("Wrap long source lines"));
         word_wrap->setChecked(user_settings_.editorWordWrap());
-        editor_layout->addWidget(word_wrap);
-        auto* syntax_hint = new QLabel(QStringLiteral("Live Preview reveals syntax around the cursor or selection. Tables, fences, task markers, raw HTML and unsupported constructs retain editable source syntax."));
+        auto* syntax_hint = new QLabel(QStringLiteral("Live Preview reveals syntax around your cursor. Complex Markdown remains fully editable; source text is never silently rewritten."));
         syntax_hint->setWordWrap(true);
         syntax_hint->setObjectName(QStringLiteral("settingsHint"));
-        editor_layout->addWidget(syntax_hint);
+        addOption(editor_card_layout, word_wrap, syntax_hint);
+        editor_layout->addWidget(editor_card);
         editor_layout->addStretch();
         pages->addWidget(editor_page);
 
@@ -4867,12 +5016,30 @@ private:
         if (auto* save = buttons->button(QDialogButtonBox::Save)) save->setProperty("primary", true);
         QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        content_layout->addWidget(buttons);
+        auto* settings_footer = new QWidget;
+        settings_footer->setObjectName(QStringLiteral("settingsFooter"));
+        settings_footer->setAttribute(Qt::WA_StyledBackground);
+        auto* footer_layout = new QHBoxLayout(settings_footer);
+        footer_layout->setContentsMargins(12, 12, 0, 0);
+        footer_layout->setSpacing(12);
+        auto* footer_note = new QLabel(QStringLiteral("Changes are saved only when you select Save"));
+        footer_note->setObjectName(QStringLiteral("settingsHint"));
+        footer_layout->addWidget(footer_note, 1);
+        footer_layout->addWidget(buttons);
+        content_layout->addWidget(settings_footer);
         // The modal keyboard focus should start in navigation, not on a caption button.
         QTimer::singleShot(0, &dialog, [updates_nav] {
             updates_nav->setFocus(Qt::OtherFocusReason);
         });
         if (!snapshot_path.isEmpty()) {
+            const auto requested_page = qEnvironmentVariable("WOLFMARK_SNAPSHOT_SETTINGS_PAGE");
+            if (requested_page == QStringLiteral("editor")) {
+                pages->setCurrentIndex(2);
+                editor_nav->setChecked(true);
+            } else if (requested_page == QStringLiteral("about")) {
+                pages->setCurrentIndex(1);
+                about_nav->setChecked(true);
+            }
             QDir().mkpath(QFileInfo(snapshot_path).absolutePath());
             QTimer::singleShot(120, &dialog, [&dialog, snapshot_path] {
                 dialog.grab().save(snapshot_path);
@@ -4996,6 +5163,7 @@ private:
         document_actions_->hide();
         diagnostics_bar_->hide();
         tabs_->hide();
+        tab_row_->hide();
         find_bar_->hide();
         showFullScreen();
     }
@@ -5008,6 +5176,7 @@ private:
         document_actions_->setVisible(!current_path_.isEmpty());
         diagnostics_bar_->setVisible(diagnostics_);
         tabs_->setVisible(documents_.size() > 1);
+        tab_row_->setVisible(documents_.size() > 1);
         if (restored == 1 || pre_fullscreen_maximized_) {
             showMaximized();
         } else {
@@ -5415,7 +5584,7 @@ private:
         document_ = nullptr;
         current_path_.clear();
         stack_->setCurrentIndex(0);
-        title_label_->setFullText(QStringLiteral("Wolfmark"));
+        title_label_->setFullText(QStringLiteral("Documents"));
         title_label_->setToolTip({});
         setWindowTitle(QStringLiteral("Wolfmark"));
         reload_action_->setEnabled(false);
@@ -5473,7 +5642,10 @@ private:
             tabs_->setCurrentIndex(activeDocumentIndex());
             // A single document already has a title and a sidebar entry.
             tabs_->setVisible(documents_.size() > 1 && !fullscreen_);
+            tab_row_->setVisible(documents_.size() > 1 && !fullscreen_);
         }
+        if (previous_tab_) previous_tab_->setEnabled(documents_.size() > 1);
+        if (next_tab_) next_tab_->setEnabled(documents_.size() > 1);
     }
 
     const WolfmarkApiTable* api_ = nullptr;
@@ -5490,6 +5662,9 @@ private:
     QVector<WolfButton*> mode_segments_;
     QStackedWidget* stack_ = nullptr;
     QTabBar* tabs_ = nullptr;
+    QWidget* tab_row_ = nullptr;
+    WolfButton* previous_tab_ = nullptr;
+    WolfButton* next_tab_ = nullptr;
     QActionGroup* mode_group_ = nullptr;
     WolfButton* save_button_ = nullptr;
     QLabel* document_status_ = nullptr;

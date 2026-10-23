@@ -48,6 +48,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
     QMimeData* createMimeDataFromSelection() const override;
     void showEvent(QShowEvent* event) override;

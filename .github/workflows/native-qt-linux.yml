@@ -78,10 +78,77 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
         run: timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-shell-controls
+      - name: Verify actual multi-document navigation and controls
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md fixtures/code-block-quality.md --smoke-shell-controls
+      - name: Verify reader styling, copy and scroll stability
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: |
+          timeout 45s ./out/cargo/debug/wolfmark fixtures/document-tables.md --smoke-style
+          timeout 45s ./out/cargo/debug/wolfmark fixtures/layout-transitions.md --smoke-scroll-stability
+      - name: Capture Settings editor and About pages
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: |
+          WOLFMARK_SNAPSHOT_SETTINGS_PAGE=editor timeout 45s ./out/cargo/debug/wolfmark --smoke-settings-ui
+          WOLFMARK_SNAPSHOT_SETTINGS_PAGE=about timeout 45s ./out/cargo/debug/wolfmark --smoke-settings-ui
       - name: Upload UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wolfmark-native-ui
           path: out/visual/dev7/*.png
+          if-no-files-found: warn
+
+  windows-installer-ui:
+    name: Windows NSIS setup host — compile and capture
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          arch: win64_msvc2022_64
+          modules: ''
+      - name: Compile native C++ setup host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $PWD.Path
+          $out = Join-Path $root 'out/setup-qa'
+          New-Item -ItemType Directory -Force -Path "$out/generated", "$out/bin", "$out/obj" | Out-Null
+          @('#define WOLFMARK_SETUP_VERSION_COMMAS 0,1,0,7', '#define WOLFMARK_SETUP_VERSION_STRING "0.1.0-dev.7"') |
+            Set-Content "$out/generated/wolfmark_setup_version.h" -Encoding ascii
+          $project = Join-Path $root 'packaging/windows/setup-ui/WolfmarkSetup.vcxproj'
+          & msbuild.exe $project '/t:Build' '/p:Configuration=Release' '/p:Platform=x64' `
+            "/p:QtRoot=$env:QT_ROOT_DIR" "/p:ProjectRoot=$root" "/p:WolfmarkGeneratedDir=$out/generated" `
+            "/p:WolfmarkOutputDir=$out/bin" "/p:WolfmarkIntermediateDir=$out/obj" `
+            '/m:1' '/nr:false' '/v:minimal'
+          if ($LASTEXITCODE -ne 0) { throw 'Native setup host build failed.' }
+      - name: Run non-elevated setup UI screenshots
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = Join-Path $PWD.Path 'out/setup-qa/bin/WolfmarkSetup.exe'
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --no-translations "$app"
+          if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed.' }
+          New-Item -Force -ItemType Directory 'out/setup-qa/bin/assets/branding' | Out-Null
+          Copy-Item 'assets/branding/wolfmark-symbol.png' 'out/setup-qa/bin/assets/branding/'
+          foreach ($screen in @('install','maintenance','update','repair','progress','complete','error')) {
+            $image = Join-Path $PWD.Path "out/setup-qa/$screen.png"
+            & $app "--ui-smoke=$screen" "--ui-screenshot=$image"
+            if ($LASTEXITCODE -ne 0 -or !(Test-Path $image)) { throw "Setup UI $screen failed" }
+          }
+      - name: Upload native Windows setup UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-windows-setup-ui
+          path: out/setup-qa/*.png
           if-no-files-found: warn

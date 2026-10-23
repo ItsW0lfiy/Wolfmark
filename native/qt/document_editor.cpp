@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QSaveFile>
 #include <QScrollBar>
+#include <QSet>
 #include <QStringDecoder>
 #include <QSyntaxHighlighter>
 #include <QTextBlock>
@@ -174,8 +175,15 @@ protected:
                 } else if (part.kind == QStringLiteral("strike")) {
                     fmt.setFontStrikeOut(true);
                 } else if (part.kind == QStringLiteral("code") || part.kind == QStringLiteral("fence")) {
-                    fmt.setBackground(QColor(colour::code));
-                    fmt.setForeground(QColor(QStringLiteral("#d6b688")));
+                    // Inline code follows Reader's raised-graphite treatment; fenced
+                    // source remains editable and uses a separate quieter surface.
+                    if (part.kind == QStringLiteral("code"))
+                        fmt.setBackground(QColor(colour::inline_code));
+                    // Source/live fenced constructs keep real Markdown markers.
+                    // Per-token opaque backgrounds made the editable code look
+                    // like disconnected rectangles whenever syntax spans changed.
+                    // Do not paint separate square fills for fenced tokens.
+                    fmt.setForeground(QColor(QStringLiteral("#dfc59e")));
                     fmt.setFontFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
                 } else if (part.kind == QStringLiteral("link")) {
                     fmt.setForeground(QColor(colour::crimson_hover));
@@ -609,6 +617,71 @@ void DocumentEditor::keyPressEvent(QKeyEvent* event) {
         }
     }
     QPlainTextEdit::keyPressEvent(event);
+}
+
+void DocumentEditor::paintEvent(QPaintEvent* event) {
+    QPlainTextEdit::paintEvent(event);
+    if (!markdown_) return;
+    // Native QTextLayout retains glyph painting, hit testing, selection and the
+    // common Source/Live Preview undo stack. Paint only a quiet rounded outline
+    // around visible inline code decorations; no rich-text replacements.
+    QPainter painter(viewport());
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(QStringLiteral("#51414d")), 1));
+    const auto selection = textCursor();
+    QSet<QPair<int, int>> rendered_fences;
+    for (auto block = firstVisibleBlock(); block.isValid(); block = block.next()) {
+        const QPointF origin = blockBoundingGeometry(block).translated(contentOffset()).topLeft();
+        if (origin.y() > viewport()->height()) break;
+        if (origin.y() + blockBoundingRect(block).height() < 0) continue;
+        const auto* decoration = dynamic_cast<BlockDecorations*>(block.userData());
+        const auto* layout = block.layout();
+        if (!decoration || !layout) continue;
+        for (const auto& part : decoration->parts) {
+            if (!part.marker && part.kind == QStringLiteral("fence")) {
+                // Keep the editable fence as one visually cohesive native region,
+                // even when Qt lays out syntax spans across many QTextBlocks.
+                const QPair<int, int> interval(block.position() + part.element_start,
+                                               block.position() + part.element_end);
+                if (interval.second > interval.first && !rendered_fences.contains(interval)) {
+                    rendered_fences.insert(interval);
+                    const auto first = document()->findBlock(interval.first);
+                    const auto last = document()->findBlock(interval.second - 1);
+                    if (first.isValid() && last.isValid()) {
+                        const auto top = blockBoundingGeometry(first).translated(contentOffset()).top();
+                        const auto bottom = blockBoundingGeometry(last).translated(contentOffset()).bottom();
+                        const QRectF bounds(6, top - 5, viewport()->width() - 13, bottom - top + 10);
+                        if (bounds.intersects(QRectF(viewport()->rect()))) {
+                            painter.setPen(QPen(QColor(QStringLiteral("#55464b")), 1));
+                            painter.drawRoundedRect(bounds, 8.0, 8.0);
+                            painter.setPen(QPen(QColor(QStringLiteral("#51414d")), 1));
+                        }
+                    }
+                }
+            }
+            if (part.marker || part.kind != QStringLiteral("code")) continue;
+            const int global_start = block.position() + part.start;
+            const int global_end = global_start + part.length;
+            if (selection.hasSelection() && selection.selectionStart() < global_end &&
+                selection.selectionEnd() > global_start) continue;
+            for (int line_index = 0; line_index < layout->lineCount(); ++line_index) {
+                const auto line = layout->lineAt(line_index);
+                const int first = std::max(part.start, line.textStart());
+                const int last = std::min(part.start + part.length,
+                                          line.textStart() + line.textLength());
+                if (first >= last) continue;
+                const qreal x1 = line.cursorToX(first);
+                const qreal x2 = line.cursorToX(last);
+                QRectF rect(origin.x() + std::min(x1, x2) - 3,
+                            origin.y() + line.y() + 1,
+                            std::abs(x2 - x1) + 6,
+                            std::max(8.0, line.height() - 2.0));
+                if (rect.intersects(QRectF(viewport()->rect())))
+                    painter.drawRoundedRect(rect, 4.0, 4.0);
+            }
+        }
+    }
 }
 
 void DocumentEditor::wheelEvent(QWheelEvent* event) {

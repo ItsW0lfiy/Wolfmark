@@ -75,3 +75,13 @@ Reader / Live Preview / Source segments use font-metric-derived minimum
 widths so Live Preview cannot be clipped by a fixed narrow control at
 larger DPI scales. The automated shell control test asserts visible
 caption widths and exercises all three modes, then Find.
+
+
+## Crimson Graphite full redesign
+
+See [Crimson Graphite implementation and acceptance](crimson-graphite-2026-10.md) for the
+concrete Qt layout contract, interaction rules, rendering constraints, Rust/C++ ownership,
+and platform-specific verification matrix. The redesigned Settings option rows, native
+code decorations, real multi-document actions, and installer chrome follow the same
+graphite/crimson system. The mockup is a visual target, not permission to add inert
+controls or invent user state.
