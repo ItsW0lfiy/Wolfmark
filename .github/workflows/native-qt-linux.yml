@@ -147,13 +147,21 @@ jobs:
           Copy-Item 'assets/branding/wolfmark-symbol.png' 'out/setup-qa/bin/assets/branding/'
           foreach ($screen in @('install','maintenance','update','repair','progress','complete','error')) {
             $image = Join-Path $PWD.Path "out/setup-qa/$screen.png"
-            & $app "--ui-smoke=$screen" "--ui-screenshot=$image"
-            if ($LASTEXITCODE -ne 0 -or !(Test-Path $image)) { throw "Setup UI $screen failed" }
+            $startupLog = Join-Path $PWD.Path "out/setup-qa/bootstrap-$screen.log"
+            & $app "--bootstrap-log=$startupLog" "--ui-smoke=$screen" "--ui-screenshot=$image"
+            $code = $LASTEXITCODE
+            Write-Host "Setup UI state=$screen exit=$code screenshot=$([bool](Test-Path $image))"
+            if (Test-Path $startupLog) {
+              Get-Content $startupLog | Select-Object -Last 30 | ForEach-Object { Write-Host $_ }
+            }
+            if ($code -ne 0 -or !(Test-Path $image)) { throw "Setup UI $screen failed (exit $code)" }
           }
       - name: Upload native Windows setup UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wolfmark-windows-setup-ui
-          path: out/setup-qa/*.png
+          path: |
+            out/setup-qa/*.png
+            out/setup-qa/bootstrap-*.log
           if-no-files-found: warn
