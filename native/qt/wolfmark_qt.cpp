@@ -2574,8 +2574,14 @@ public:
                           title_search_->isEnabled() && mode_segments_.size() == 3 &&
                           mode_segments_.at(0)->isChecked();
                 if (ok) {
-                    for (const auto* button : mode_segments_)
-                        ok &= button->width() >= button->fontMetrics().horizontalAdvance(button->text()) + 30;
+                    for (const auto* button : mode_segments_) {
+                        const int text_width = button->fontMetrics().horizontalAdvance(button->text());
+                        const int available = button->width();
+                        std::fprintf(stdout, "SHELL_BUTTON text=%s width=%d minimum=%d text_width=%d hint=%d\n",
+                                     qUtf8Printable(button->text()), available,
+                                     button->minimumWidth(), text_width, button->sizeHint().width());
+                        ok &= available >= text_width + 36;
+                    }
                 }
                 if (ok) {
                     mode_segments_.at(2)->click();
@@ -4351,9 +4357,9 @@ private:
             segment->setFixedHeight(32);
             // Reserve actual glyph width plus horizontal padding at every DPI.
             // A QSS min-width of 58px alone truncates "Live Preview".
-            segment->setMinimumWidth(
-                std::max(96, segment->fontMetrics().horizontalAdvance(mode_name) + 42));
-            segment->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+            segment->setFixedWidth(
+                std::max(112, segment->fontMetrics().horizontalAdvance(mode_name) + 54));
+            segment->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             segment->setAccessibleName(QStringLiteral("%1 mode").arg(mode_name));
             segment->setToolTip(QStringLiteral("Switch to %1 mode").arg(mode_name));
             const int id = segment_index++;
@@ -4798,7 +4804,8 @@ private:
         auto* editor_nav = new QPushButton(QStringLiteral("Reader & Editor"));
         editor_nav->setProperty("nav", true);
         editor_nav->setCheckable(true);
-        navigation_layout->insertWidget(4, editor_nav);
+        // Navigation order follows the reading/editing workflow, with About last.
+        navigation_layout->insertWidget(navigation_layout->indexOf(about_nav), editor_nav);
         navigation_group->addButton(editor_nav, 2);
         auto* editor_page = new QWidget;
         auto* editor_layout = new QVBoxLayout(editor_page);
