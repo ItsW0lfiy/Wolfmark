@@ -2620,8 +2620,10 @@ public:
                           mode_segments_.at(2)->isChecked() &&
                           mode_group_->checkedAction()->data().toInt() == 2;
                     mode_segments_.at(1)->click();
+                    const auto* live = mode_segments_.at(1);
                     ok &= active_->mode == OpenDocumentSession::Mode::LivePreview &&
-                          mode_segments_.at(1)->isChecked();
+                          live->isChecked() &&
+                          live->width() >= live->fontMetrics().horizontalAdvance(live->text()) + 36;
                     mode_segments_.at(0)->click();
                     ok &= active_->mode == OpenDocumentSession::Mode::Reader &&
                           mode_segments_.at(0)->isChecked();
