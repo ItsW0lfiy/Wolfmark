@@ -2062,7 +2062,10 @@ private:
                 const bool header = (row_command.flags & text_style::header) != 0;
                 cell_format.setTopPadding(7);
                 cell_format.setBottomPadding(7);
-                cell_format.setLeftPadding(14);
+                // Right-aligned numeric headers use a wider serif face than
+                // the body cells. Release some *left* padding without moving
+                // the right edge, so short labels do not wrap on Linux fonts.
+                cell_format.setLeftPadding(header && cell_command.number == 2 ? 6 : 14);
                 cell_format.setRightPadding(14);
                 if (header) cell_format.setBackground(QColor(colour::table_header));
                 if (column > 0) {

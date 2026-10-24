@@ -113,7 +113,7 @@ Focused dev.6 checks:
 ```powershell
 cargo run -- --smoke-plaintext fixtures\text\literal.txt
 cargo run -- --smoke-multidoc fixtures\code-block-quality.md fixtures\text\literal.txt
-cargo run -- --smoke-motion fixtures\compatibility\all-features.md
+cargo run -- --smoke-motion fixtures\navigation-motion.md
 cargo run -- --smoke-navigation fixtures\compatibility\all-features.md
 ```
 

@@ -92,6 +92,11 @@ jobs:
             WOLFMARK_SNAPSHOT_NAME="table-corners-$percent" \
               timeout 45s ./out/cargo/debug/wolfmark fixtures/table-corner-quality.md --smoke-snapshot
           done
+      - name: Verify smooth wheel motion and direct anchor navigation
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: timeout 60s ./out/cargo/debug/wolfmark fixtures/navigation-motion.md --smoke-motion
       - name: Capture Settings UI
         env:
           QT_QPA_PLATFORM: offscreen
