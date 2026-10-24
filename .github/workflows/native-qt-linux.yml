@@ -180,6 +180,34 @@ jobs:
             try { Write-Host "Windows $mode screenshot: $($bitmap.Width)x$($bitmap.Height)" }
             finally { $bitmap.Dispose() }
           }
+
+          # GitHub's virtual Windows display can clamp native windows to
+          # 1044x788. Capture an additional Windows-font/layout reference at
+          # the approved 1648x928 using Qt's offscreen platform, while retaining
+          # the actual native-window screenshots above for interaction review.
+          $offscreenPlugin = Join-Path $env:QT_ROOT_DIR 'plugins/platforms/qoffscreen.dll'
+          if (!(Test-Path $offscreenPlugin)) { throw 'Qt Windows offscreen plugin is missing.' }
+          Copy-Item $offscreenPlugin 'out/cargo/debug/platforms/qoffscreen.dll' -Force
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          try {
+            foreach ($mode in @('reader', 'live')) {
+              $env:WOLFMARK_SNAPSHOT_MODE = if ($mode -eq 'live') { 'live' } else { '' }
+              $env:WOLFMARK_SNAPSHOT_NAME = "crimson-graphite-windows-offscreen-$mode"
+              & $runSmoke -arguments @('fixtures/wolfmark-visual-test.md',
+                'fixtures/crimson-graphite-visual-reference.md', '--smoke-snapshot')
+              $image = Join-Path $PWD.Path "out/visual/dev7/$env:WOLFMARK_SNAPSHOT_NAME.png"
+              if (!(Test-Path $image)) { throw "Windows offscreen $mode screenshot is missing." }
+              $bitmap = [System.Drawing.Image]::FromFile($image)
+              try {
+                Write-Host "Windows offscreen $mode: $($bitmap.Width)x$($bitmap.Height)"
+                if ($bitmap.Width -ne 1648 -or $bitmap.Height -ne 928) {
+                  throw 'Windows offscreen reference did not preserve the approved viewport.'
+                }
+              }
+              finally { $bitmap.Dispose() }
+            }
+          }
+          finally { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
       - name: Upload native Windows application UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
