@@ -65,6 +65,38 @@ public:
     void cancelSmoothScroll() { scrolling_.cancel(); }
 
 protected:
+    void drawBranches(QPainter* painter, const QRect& rect,
+                      const QModelIndex& index) const override {
+        // Native tree navigation stays intact. The outline alone gets subtle
+        // structural guides; the open-documents list is intentionally flat.
+        if (objectName() == QStringLiteral("documentOutline") && index.parent().isValid()) {
+            painter->save();
+            painter->setRenderHint(QPainter::Antialiasing, false);
+            painter->setPen(QPen(QColor(QStringLiteral("#49464d")), 1));
+            const int step = indentation();
+            const int center_x = rect.right() - step / 2;
+            const int center_y = rect.center().y();
+            if (center_x >= rect.left()) {
+                painter->drawLine(center_x, rect.top(), center_x, center_y);
+                if (index.row() + 1 < model()->rowCount(index.parent()))
+                    painter->drawLine(center_x, center_y, center_x, rect.bottom());
+                painter->drawLine(center_x, center_y, rect.right(), center_y);
+            }
+            // Carry the ancestor guide through grandchildren only while that
+            // ancestor has a following sibling; no dangling guide below a leaf.
+            auto ancestor = index.parent();
+            int ancestor_x = center_x - step;
+            while (ancestor.parent().isValid() && ancestor_x >= rect.left()) {
+                if (ancestor.row() + 1 < model()->rowCount(ancestor.parent()))
+                    painter->drawLine(ancestor_x, rect.top(), ancestor_x, rect.bottom());
+                ancestor = ancestor.parent();
+                ancestor_x -= step;
+            }
+            painter->restore();
+        }
+        QTreeWidget::drawBranches(painter, rect, index);
+    }
+
     void wheelEvent(QWheelEvent* event) override {
         if (!event->pixelDelta().isNull()) {
             scrolling_.cancel();
