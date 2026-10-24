@@ -1590,12 +1590,14 @@ private:
         auto block = bodyBlockFormat(settings_.value("lineHeightPercent").toInt(150));
         double points = settings_.value("bodyFontPoints").toDouble(12.75);
         if (heading) {
-            static constexpr double scales[] = {2.05, 1.60, 1.34, 1.18, 1.08, 1.0};
+            static constexpr double scales[] = {2.65, 1.78, 1.36, 1.18, 1.08, 1.0};
             block.setHeadingLevel(std::clamp(level, 1, 6));
             points *= scales[std::clamp(level, 1, 6) - 1];
-            block.setTopMargin(level == 1 ? 21.0 : (level == 2 ? 17.0 : 13.0));
-            block.setBottomMargin(level <= 2 ? 9.0 : 6.0);
-            block.setLineHeight(132, QTextBlockFormat::ProportionalHeight);
+            // Large editorial headings should not create a massive blank gap
+            // before the document lead on dense desktop layouts.
+            block.setTopMargin(level == 1 ? 8.0 : (level == 2 ? 13.0 : 11.0));
+            block.setBottomMargin(level == 1 ? 3.0 : (level == 2 ? 8.0 : 6.0));
+            block.setLineHeight(level == 1 ? 108 : 126, QTextBlockFormat::ProportionalHeight);
         }
         beginBlock(cursor, block, depth);
         if (!anchor.isEmpty()) {
@@ -4523,6 +4525,31 @@ private:
                                       QStringLiteral("Live Preview"),
                                       QStringLiteral("Source")}) {
             auto* segment = new WolfButton(mode_name, mode_switch);
+            QPixmap mode_pixmap(19, 19);
+            mode_pixmap.fill(Qt::transparent);
+            {
+                QPainter paint(&mode_pixmap);
+                paint.setRenderHint(QPainter::Antialiasing);
+                paint.setPen(QPen(QColor(colour::bright), 1.5, Qt::SolidLine,
+                                  Qt::RoundCap, Qt::RoundJoin));
+                if (mode_name == QStringLiteral("Reader")) {
+                    paint.drawLine(QPointF(9.5, 4.5), QPointF(9.5, 16));
+                    paint.drawRoundedRect(QRectF(2.5, 3.5, 7, 12), 1.8, 1.8);
+                    paint.drawRoundedRect(QRectF(9.5, 3.5, 7, 12), 1.8, 1.8);
+                } else if (mode_name == QStringLiteral("Live Preview")) {
+                    paint.drawRoundedRect(QRectF(2.5, 3.5, 14, 10), 1.5, 1.5);
+                    paint.drawLine(QPointF(9.5, 13.5), QPointF(9.5, 16));
+                    paint.drawLine(QPointF(5.8, 16), QPointF(13.2, 16));
+                } else {
+                    paint.drawLine(QPointF(7.0, 4.5), QPointF(3.0, 9.5));
+                    paint.drawLine(QPointF(3.0, 9.5), QPointF(7.0, 14.5));
+                    paint.drawLine(QPointF(12.0, 4.5), QPointF(16.0, 9.5));
+                    paint.drawLine(QPointF(16.0, 9.5), QPointF(12.0, 14.5));
+                    paint.drawLine(QPointF(11.0, 3), QPointF(8.0, 16));
+                }
+            }
+            segment->setIcon(QIcon(mode_pixmap));
+            segment->setIconSize(QSize(19, 19));
             segment->setObjectName(QStringLiteral("modeSegmentButton"));
             segment->setProperty("modeSegment", true);
             segment->setCheckable(true);
@@ -4530,7 +4557,9 @@ private:
             // Reserve actual glyph width plus horizontal padding at every DPI.
             // A QSS min-width of 58px alone truncates "Live Preview".
             segment->setFixedWidth(
-                std::max(112, segment->fontMetrics().horizontalAdvance(mode_name) + 54));
+                std::max(mode_name == QStringLiteral("Reader") ? 145 :
+                         mode_name == QStringLiteral("Live Preview") ? 170 : 132,
+                         segment->fontMetrics().horizontalAdvance(mode_name) + 54));
             segment->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             segment->setAccessibleName(QStringLiteral("%1 mode").arg(mode_name));
             segment->setToolTip(QStringLiteral("Switch to %1 mode").arg(mode_name));

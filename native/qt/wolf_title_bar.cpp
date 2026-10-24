@@ -40,10 +40,13 @@ void CaptionButton::setNativeInteraction(bool hovered, bool pressed) {
 
 void CaptionButton::paintEvent(QPaintEvent*) {
     QPainter painter(this);
-    if (underMouse() || isDown() || native_hovered_ || native_pressed_) {
-        painter.fillRect(rect(), QColor(action_ == Action::Close ? "#612f2f" :
-                                       isDown() || native_pressed_ ? style::colour::active :
-                                                                   style::colour::hover));
+    const bool activated = underMouse() || isDown() || native_hovered_ || native_pressed_;
+    if (action_ == Action::Close) {
+        // Match the Crimson Graphite chrome even without pointer hover.
+        painter.fillRect(rect(), QColor(activated ? "#a51e41" : "#691d36"));
+    } else if (activated) {
+        painter.fillRect(rect(), QColor(isDown() || native_pressed_
+                                           ? style::colour::active : style::colour::hover));
     }
     if (hasFocus()) {
         painter.setPen(QColor(style::colour::silver));

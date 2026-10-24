@@ -33,7 +33,7 @@ void apply(QApplication& application) {
         #windowBody { background: #101012; }
         #titleBar { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #202025, stop:1 #19191c); border-bottom: 1px solid #34343a; }
         #headerBrandSymbol { background: transparent; border: none; }
-        #headerBrandTitle { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 15px; font-weight: 700; }
+        #headerBrandTitle { color: #f1efed; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 15px; font-weight: 700; }
         #headerSeparator { background: #35353c; border: 0; }
         #settingsEyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1.3px; color: #d76b88; }
         #settingsOption { background: #27272d; border: 1px solid #34343a; border-radius: 9px; }
