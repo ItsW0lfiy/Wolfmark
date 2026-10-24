@@ -1,5 +1,7 @@
 # Document sessions and editing
 
+> **Architecture status:** This document describes the currently shipped native editor behavior, **not** an exception to the [Rust ownership contract](overview.md). Qt's current authority over source buffers, save policy and session registry is legacy boundary debt slated for measured Rust-controller migration. Preserve tested data safety while moving ownership.
+
 New files open in **Reader**. Each session owns its canonical path, Rust
 rendering/image backend, Reader document, one native source document, watcher,
 mode, source/render revisions and SHA-256 file fingerprint. Reopening a canonical
