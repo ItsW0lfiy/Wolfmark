@@ -78,7 +78,7 @@ jobs:
           WOLFMARK_SNAPSHOT_WIDTH: "1648"
           WOLFMARK_SNAPSHOT_HEIGHT: "928"
           WOLFMARK_SNAPSHOT_NAME: crimson-graphite-reference-comparison
-        run: timeout 45s ./out/cargo/debug/wolfmark fixtures/crimson-graphite-visual-reference.md --smoke-snapshot
+        run: timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md fixtures/crimson-graphite-visual-reference.md --smoke-snapshot
       - name: Capture Settings UI
         env:
           QT_QPA_PLATFORM: offscreen
