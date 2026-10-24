@@ -1,10 +1,43 @@
-# Crimson Graphite — implemented design rules and acceptance
+# Crimson Graphite — approved reference and acceptance (implementation rejected)
+
+> **Design acceptance: REJECTED (October 24, 2026).** The current source is a
+> functional intermediate implementation, not an approved completion of the
+> Crimson Graphite redesign. Do not describe it as visually finished because
+> Linux/Windows CI passes. The approved concept screenshot is the comparison
+> target, and the user specifically rejected missing smoothness, insufficient
+> rounded corner treatment, and incomplete visual fidelity.
 
 This working specification describes the October 2026 redesign of Wolfmark's
 native Qt desktop UI. It is a design implementation document, not a new product
 architecture or permission to fabricate controls absent from the application.
 The user-approved concept is the visual target. The canonical product icon and
 file icons in `assets/design-reference/wolfmark/` remain authoritative.
+
+## Required visual match before acceptance
+
+- Compare actual Qt screenshots at the **same canvas size and DPI** as the
+  approved reference, using an equivalent Markdown document. Do not confuse
+  different fixture content with differences in UI rendering.
+- The global header must match the reference's integrated branding,
+  breadcrumbs, search, settings and caption-control alignment, not merely have
+  the same dark background.
+- Sidebar: correct hierarchical outline connectors, document file icons,
+  selection treatment, spacing, rounded hover/selected rows and footer.
+- Tabs and toolbar: crisp joined geometry, real icons, visually continuous
+  segmented modes, smooth radius joins, restrained separators and no clipping.
+- Reader: editorial typography, clear hierarchy, soft graphite layers, rounded
+  inline-code pills, full-width rounded code frames with an integrated
+  language header and a **functional Copy button on the right**, accurately
+  rounded tables, and refined callout/block quote surfaces.
+- Settings and setup: consistent custom chrome, rounded containers and
+  controls, typography, paddings and hover/focus states matching the main UI.
+- Smoothness is not an aesthetic adjective: validate input-to-paint latency,
+  transition continuity, resize responsiveness, fast-wheel stability, focus
+  response and reduced-motion behavior in actual interaction.
+- No dead buttons, fake paths, or features invented solely to match the
+  concept image. Preserve Rust ownership and existing document contracts.
+- Completion needs human review **after** side-by-side screenshot inspection,
+  not just a green build, CI job, or code review.
 
 ## Architecture and ownership
 
