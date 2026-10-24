@@ -491,6 +491,9 @@ public:
         setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         setFocusPolicy(Qt::StrongFocus);
+        // Reader supports keyboard selection and navigation, but must never
+        // paint an insertion caret: text is read-only, not an editor surface.
+        setCursorWidth(0);
         setAccessibleName(QStringLiteral("Wolfmark Markdown document"));
         viewport()->setMouseTracking(true);
         document()->setDefaultStyleSheet({});
@@ -576,6 +579,9 @@ public:
                                  .font());
         QPointer<QTextDocument> previous = document();
         setDocument(next);
+        // QTextEdit::setDocument resets cursorWidth to the default (1px).
+        // Reapply the Reader-only no-caret policy after every document load.
+        setCursorWidth(0);
         if (previous && previous->parent() == this) delete previous;
         QObject::connect(next->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged,
                          this, [this] {
@@ -902,7 +908,8 @@ public:
                      tables, right_aligned, accessible != nullptr,
                      accessible && accessible->textInterface() != nullptr, isReadOnly());
         return tables > 0 && right_aligned && accessible != nullptr &&
-               accessible->textInterface() != nullptr && isReadOnly();
+               accessible->textInterface() != nullptr && isReadOnly() &&
+               cursorWidth() == 0;
     }
 
     void queueAllImagesForSmoke() {
