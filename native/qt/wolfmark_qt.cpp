@@ -1548,13 +1548,40 @@ private:
                 buildRule(cursor, depth);
                 ++index;
                 break;
-            case command_kind::begin_quote:
+            case command_kind::begin_quote: {
                 ++index;
+                // A QTextFrame supplies a continuous quote surface across every
+                // paragraph. Qt still owns selectable text and native layout.
+                if (cursor.position() != 0 && !cursor.block().text().isEmpty())
+                    cursor.insertBlock();
+                auto spacer = bodyBlockFormat(100);
+                spacer.setLineHeight(1, QTextBlockFormat::FixedHeight);
+                spacer.setTopMargin(0);
+                spacer.setBottomMargin(0);
+                cursor.setBlockFormat(spacer);
+                QTextFrameFormat quote_format;
+                quote_format.setBackground(QColor(QStringLiteral("#231a20")));
+                quote_format.setPadding(9.0);
+                quote_format.setTopMargin(2.0);
+                quote_format.setBottomMargin(6.0);
+                quote_format.setLeftMargin(depth * 22.0);
+                auto* frame = cursor.insertFrame(quote_format);
+                QTextCursor inside(frame);
                 ++quote_depth_;
-                buildBlocks(cursor, index, command_kind::end_quote, depth + 1);
+                buildBlocks(inside, index, command_kind::end_quote, depth);
                 --quote_depth_;
+                // The trailing structural paragraph created by QTextCursor is
+                // not visible content and must not add a body-height gap.
+                auto trailing = inside.blockFormat();
+                trailing.setLineHeight(1, QTextBlockFormat::FixedHeight);
+                trailing.setTopMargin(0);
+                trailing.setBottomMargin(0);
+                inside.setBlockFormat(trailing);
+                cursor = QTextCursor(frame->lastCursorPosition());
+                cursor.movePosition(QTextCursor::End);
                 cursor.setBlockFormat(bodyBlockFormat());
                 break;
+            }
             case command_kind::begin_table:
                 buildTable(cursor, index, depth);
                 break;
@@ -1589,6 +1616,11 @@ private:
                         const QString& anchor = {}) {
         auto block = bodyBlockFormat(settings_.value("lineHeightPercent").toInt(150));
         double points = settings_.value("bodyFontPoints").toDouble(12.75);
+        if (quote_depth_ > 0 && !heading) {
+            block.setLineHeight(128, QTextBlockFormat::ProportionalHeight);
+            block.setTopMargin(0);
+            block.setBottomMargin(4);
+        }
         if (heading) {
             static constexpr double scales[] = {2.65, 1.78, 1.36, 1.18, 1.08, 1.0};
             block.setHeadingLevel(std::clamp(level, 1, 6));
