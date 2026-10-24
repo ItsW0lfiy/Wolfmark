@@ -556,6 +556,8 @@ public:
         code_frame_bounds_.clear();
         quote_frames_.clear();
         quote_frame_bounds_.clear();
+        table_frames_.clear();
+        table_frame_bounds_.clear();
         decorative_frame_bounds_dirty_ = true;
         anchor_positions_.clear();
         source_positions_.clear();
@@ -830,9 +832,11 @@ public:
     [[nodiscard]] bool testDocumentStyle() const {
         int tables = 0;
         bool right_aligned = false;
-        for (auto* frame : document()->rootFrame()->childFrames()) {
-            auto* table = qobject_cast<QTextTable*>(frame);
-            if (table == nullptr) continue;
+        // Test every table built from Rust's presentation commands, including
+        // those nested inside a quotation frame (not just root-frame children).
+        for (const auto& tracked : table_frames_) {
+            auto* table = tracked.frame.data();
+            if (table == nullptr) return false;
             ++tables;
             if (table->format().border() > 1) {
                 std::fprintf(stderr, "STYLE_DIAG table_border=%f\n", table->format().border());
@@ -863,6 +867,19 @@ public:
                             return false;
                         }
                     }
+                }
+            }
+        }
+        if (!table_frames_.empty()) {
+            if (decorative_frame_bounds_dirty_ ||
+                table_frame_bounds_.size() != table_frames_.size()) {
+                std::fprintf(stderr, "STYLE_DIAG table corner geometry cache is not ready\n");
+                return false;
+            }
+            for (const auto& table : table_frame_bounds_) {
+                if (!table.frame || table.bounds.isEmpty()) {
+                    std::fprintf(stderr, "STYLE_DIAG table corner geometry is invalid\n");
+                    return false;
                 }
             }
         }
@@ -1184,6 +1201,7 @@ protected:
             navigation_first_paint_us_ = navigation_request_elapsed_.nsecsElapsed() / 1000;
         }
         QPainter painter(viewport());
+        paintTableCorners(painter);
         paintCodeFrameCorners(painter);
         paintQuoteFrameCorners(painter);
         // Inline-code edges are native viewport decoration. Quote accents are
@@ -1289,6 +1307,42 @@ protected:
             painter.setPen(QPen(QColor(colour::code_separator), 1.0));
             painter.drawRoundedRect(bounds.adjusted(.5, .5, -.5, -.5), radius, radius);
             painter.restore();
+        }
+        painter.restore();
+    }
+
+    void paintTableCorners(QPainter& painter) const {
+        if (decorative_frame_bounds_dirty_) return;
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setClipRect(viewport()->rect());
+        const QPointF scroll(horizontalScrollBar()->value(), verticalScrollBar()->value());
+        const qreal radius = 9.0 * zoom_percent_ / 100.0;
+        const qreal visible_top = verticalScrollBar()->value();
+        const qreal visible_bottom = visible_top + viewport()->height();
+        auto frame = std::lower_bound(table_frame_bounds_.cbegin(), table_frame_bounds_.cend(),
+                                      visible_top,
+                                      [](const TableFrameBounds& item, qreal top) {
+                                          return item.bounds.bottom() < top;
+                                      });
+        for (; frame != table_frame_bounds_.cend() && frame->bounds.top() <= visible_bottom;
+             ++frame) {
+            const QRectF bounds = frame->bounds.translated(-scroll);
+            if (bounds.isEmpty()) continue;
+            QPainterPath square;
+            square.addRect(bounds);
+            QPainterPath rounded;
+            rounded.addRoundedRect(bounds, radius, radius);
+            // Qt's QTextTable draws square header cells. Mask only the four
+            // outer corners, preserving native cell borders, selectable text,
+            // keyboard focus, and the table's actual layout geometry.
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(frame->in_quote ? QColor(QStringLiteral("#231a20"))
+                                             : QColor(colour::document));
+            painter.drawPath(square.subtracted(rounded));
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(colour::table_outer), 1.0));
+            painter.drawRoundedRect(bounds.adjusted(.5, .5, -.5, -.5), radius, radius);
         }
         painter.restore();
     }
@@ -1990,6 +2044,7 @@ private:
         }
         table_format.setColumnWidthConstraints(widths);
         auto* table = cursor.insertTable(std::max(1, rows), columns, table_format);
+        table_frames_.push_back({table, quote_depth_ > 0});
         int row = 0;
         while (index < commands_.size() && commands_[index].kind != command_kind::end_table) {
             const auto row_command = commands_[index++];
@@ -2356,6 +2411,17 @@ private:
         bool nested = false;
     };
 
+    struct TableFrame {
+        QPointer<QTextTable> frame;
+        bool in_quote = false;
+    };
+
+    struct TableFrameBounds {
+        QPointer<QTextTable> frame;
+        QRectF bounds;
+        bool in_quote = false;
+    };
+
     [[nodiscard]] ViewportAnchor captureViewportAnchor() const {
         if (document() == nullptr) return {};
         const auto cursor = cursorForPosition(QPoint(0, 0));
@@ -2404,6 +2470,32 @@ private:
             }
             std::sort(quote_frame_bounds_.begin(), quote_frame_bounds_.end(),
                       [](const QuoteFrameBounds& left, const QuoteFrameBounds& right) {
+                          return left.bounds.bottom() < right.bounds.bottom();
+                      });
+            table_frame_bounds_.clear();
+            table_frame_bounds_.reserve(table_frames_.size());
+            for (const auto& table : table_frames_) {
+                if (!table.frame) continue;
+                // QTextDocumentLayout reports a table's text-frame envelope,
+                // which is offset from the painted cell border by padding and
+                // trailing table margin. Decorate the visible cell perimeter,
+                // not that oversized envelope (otherwise the rounded stroke
+                // floats outside the table and crosses the next paragraph).
+                const auto first = table.frame->cellAt(0, 0).format().toTableCellFormat();
+                const auto last = table.frame->cellAt(table.frame->rows() - 1,
+                                                       table.frame->columns() - 1)
+                                      .format().toTableCellFormat();
+                const qreal edge = 2.0 * zoom_percent_ / 100.0;
+                const QRectF envelope = document()->documentLayout()->frameBoundingRect(table.frame);
+                const QRectF visible = envelope.adjusted(
+                    -first.leftPadding(), -first.topPadding() - edge,
+                    -last.rightPadding() - edge,
+                    -table.frame->format().bottomMargin() - last.bottomPadding() -
+                        first.topPadding());
+                table_frame_bounds_.push_back({table.frame, visible, table.in_quote});
+            }
+            std::sort(table_frame_bounds_.begin(), table_frame_bounds_.end(),
+                      [](const TableFrameBounds& left, const TableFrameBounds& right) {
                           return left.bounds.bottom() < right.bounds.bottom();
                       });
             decorative_frame_bounds_dirty_ = false;
@@ -2479,6 +2571,8 @@ private:
     std::vector<CodeFrameBounds> code_frame_bounds_;
     std::vector<QuoteFrame> quote_frames_;
     std::vector<QuoteFrameBounds> quote_frame_bounds_;
+    std::vector<TableFrame> table_frames_;
+    std::vector<TableFrameBounds> table_frame_bounds_;
     bool decorative_frame_bounds_dirty_ = true;
     bool decorative_frame_bounds_rebuild_pending_ = false;
     QJsonObject settings_;

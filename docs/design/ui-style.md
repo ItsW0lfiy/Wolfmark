@@ -25,7 +25,7 @@ Wolfmark-controlled UI does not use blue, cyan, teal, navy, azure, indigo, blue-
 
 - Broad responsive canvas, no article-width cap; 20–48px side padding at 100%.
 - Body text stays clean and highly readable. H1/H2 use an editorial Georgia/Cambria/system-serif preference with strong but restrained hierarchy; H3–H6 remain distinct and retain native heading metadata.
-- Tables use a graphite header, visible horizontal structure, quieter vertical separators, compact native cells, and native selection.
+- Tables use a graphite header, visible horizontal structure, quieter vertical separators, compact native cells, and native selection. Their outer corners receive a viewport-only rounded mask and border based on cached Qt table geometry; nested tables reveal their quote surface rather than the document canvas.
 - Inline code keeps native selectable text over a compact graphite surface. The existing narrow paint decoration supplies horizontal breathing room without inserted source characters or replacement text objects.
 - Fences remain one continuous native QTextFrame with restrained graphite depth, language metadata, separator, Copy action, syntax spans, and preserved whitespace. Long lines use the viewport's horizontal scrollbar.
 - Quotes use a narrow crimson marker and muted text without becoming a large card. Lists/tasks remain compact; rules stay understated. Images remain native document resources rather than UI cards.
