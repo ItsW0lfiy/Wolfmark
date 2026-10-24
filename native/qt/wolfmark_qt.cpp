@@ -606,6 +606,7 @@ public:
             buildBlocks(cursor, index, -1, 0);
         }
         cursor.endEditBlock();
+        alignCodeCopyHeaders();
         zoom_layout_.capture(next);
         if (zoom_percent_ != 100) zoom_layout_.apply(zoom_percent_);
         applyDocumentWidth();
@@ -729,6 +730,10 @@ public:
                 setTextCursor(cursor);
                 ensureCursorVisible();
                 const auto point = cursorRect(cursor).center();
+                const auto frame_bounds = document()->documentLayout()->frameBoundingRect(
+                    code_frames_.front());
+                const bool right_aligned = point.x() + horizontalScrollBar()->value() >
+                    frame_bounds.left() + frame_bounds.width() * 0.70;
                 auto* previous = snapshotClipboard();
                 QMouseEvent press(QEvent::MouseButtonPress, point, viewport()->mapToGlobal(point),
                                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
@@ -737,15 +742,18 @@ public:
                 QApplication::sendEvent(viewport(), &press);
                 QApplication::sendEvent(viewport(), &release);
                 const bool copied = last_copy_text_ == code_sources_.front();
-                if (!copied) {
+                if (!copied || !right_aligned) {
                     std::fprintf(stdout, "COPY_DIAGNOSTIC press=%d cursor=%d selected=%d anchor=%s clipboard_length=%lld expected_length=%lld\n",
                                  press_position_, textCursor().position(), textCursor().hasSelection(),
                                  cursorForPosition(point).charFormat().anchorHref().toUtf8().constData(),
                                  static_cast<long long>(QGuiApplication::clipboard()->text().size()),
                                  static_cast<long long>(code_sources_.front().size()));
+                    std::fprintf(stdout, "COPY_DIAGNOSTIC right_aligned=%d frame_left=%.1f frame_width=%.1f click_x=%d\n",
+                                 right_aligned, frame_bounds.left(), frame_bounds.width(),
+                                 point.x() + horizontalScrollBar()->value());
                 }
                 QGuiApplication::clipboard()->setMimeData(previous);
-                return copied;
+                return copied && right_aligned;
             }
         }
         return false;
@@ -912,6 +920,7 @@ public:
         setUpdatesEnabled(false);
         document()->setLayoutEnabled(false);
         zoom_layout_.apply(percent);
+        alignCodeCopyHeaders();
         const auto formats_us = profile.nsecsElapsed() / 1000;
         applyDocumentWidth();
         resizeLoadedImages();
@@ -1278,6 +1287,7 @@ protected:
         const auto anchor = explicit_navigation ? ViewportAnchor{} : captureViewportAnchor();
         QTextEdit::resizeEvent(event);
         applyDocumentWidth();
+        alignCodeCopyHeaders();
         resizeLoadedImages();
         if (!explicit_navigation) restoreViewportAnchor(anchor);
         if (!explicit_navigation) scroll_controller_.rebaseAfterLayout();
@@ -1808,7 +1818,9 @@ private:
         language.setFontWeight(QFont::Normal);
         inside.insertText(command.extra.isEmpty() ? QStringLiteral("code") : command.extra.toLower(),
                           language);
-        inside.insertText(QStringLiteral("   ·   "), language);
+        // A right-aligned native tab keeps the functional Copy link at the
+        // trailing edge, without an overlay that could break selection.
+        inside.insertText(QStringLiteral("\t"), language);
         auto copy = language;
         copy.setAnchor(true);
         copy.setAnchorHref(QStringLiteral("wolfmark-copy:%1").arg(code_index));
@@ -2072,6 +2084,28 @@ private:
         const int base = settings_.value("documentPadding").toInt(48);
         return std::min(static_cast<int>(base * zoom_percent_ / 100.0),
                         std::max(20, (viewport()->width() - 400) / 12));
+    }
+
+    void alignCodeCopyHeaders() {
+        if (!document() || code_frames_.empty()) return;
+        // QTextBlockFormat tab stops are fixed layout coordinates, so refresh
+        // them when the viewport or zoom changes. The link stays a selectable
+        // native QTextDocument anchor with the existing Copy action.
+        const qreal usable_width = viewport()->width() - 2.0 * effectiveSideMargin();
+        for (const auto& frame : code_frames_) {
+            if (!frame) continue;
+            QTextCursor header(frame->firstCursorPosition());
+            const auto format = frame->frameFormat();
+            const qreal content_width = usable_width - format.leftMargin() -
+                format.rightMargin() - 2.0 * format.padding();
+            const qreal right_edge = std::max<qreal>(90.0, content_width - 6.0);
+            auto block = header.blockFormat();
+            const auto tabs = block.tabPositions();
+            if (tabs.size() == 1 && tabs.front().type == QTextOption::RightTab &&
+                std::abs(tabs.front().position - right_edge) < 0.5) continue;
+            block.setTabPositions({QTextOption::Tab(right_edge, QTextOption::RightTab)});
+            header.setBlockFormat(block);
+        }
     }
 
     void applyDocumentWidth() {
