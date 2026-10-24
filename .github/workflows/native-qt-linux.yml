@@ -135,6 +135,58 @@ jobs:
           $env:WOLFMARK_QT_DIR = $env:QT_ROOT_DIR
           cargo check --locked -p wolfmark
           if ($LASTEXITCODE -ne 0) { throw "Wolfmark Windows application compilation failed." }
+      - name: Build and exercise the native Windows application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:WOLFMARK_QT_DIR = $env:QT_ROOT_DIR
+          $env:WOLFMARK_DISABLE_UPDATE_CHECKS = '1'
+          cargo build --locked -p wolfmark
+          if ($LASTEXITCODE -ne 0) { throw 'Wolfmark Windows application link failed.' }
+          $app = Join-Path $PWD.Path 'out/cargo/debug/wolfmark.exe'
+          if (!(Test-Path $app)) { throw 'Linked Windows application was not found.' }
+          & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --no-translations "$app"
+          if ($LASTEXITCODE -ne 0) { throw 'Wolfmark Qt runtime deployment failed.' }
+
+          # Windows must exercise the actual application, not only compile it.
+          # Each smoke mode exits on its own; the timeout catches GUI deadlocks.
+          $runSmoke = {
+            param([string[]] $arguments)
+            $process = Start-Process -FilePath $app -WorkingDirectory $PWD.Path `
+              -ArgumentList $arguments -PassThru
+            if (!$process.WaitForExit(45000)) {
+              $process.Kill()
+              throw "Windows Wolfmark smoke timed out: $($arguments -join ' ')"
+            }
+            if ($process.ExitCode -ne 0) {
+              throw "Windows Wolfmark smoke failed ($($process.ExitCode)): $($arguments -join ' ')"
+            }
+          }
+          & $runSmoke -arguments @('fixtures/wolfmark-visual-test.md', '--smoke-render')
+          & $runSmoke -arguments @('fixtures/wolfmark-visual-test.md',
+            'fixtures/crimson-graphite-visual-reference.md', '--smoke-shell-controls')
+
+          $env:WOLFMARK_SNAPSHOT_WIDTH = '1648'
+          $env:WOLFMARK_SNAPSHOT_HEIGHT = '928'
+          foreach ($mode in @('reader', 'live')) {
+            $env:WOLFMARK_SNAPSHOT_MODE = if ($mode -eq 'live') { 'live' } else { '' }
+            $env:WOLFMARK_SNAPSHOT_NAME = "crimson-graphite-windows-$mode"
+            & $runSmoke -arguments @('fixtures/wolfmark-visual-test.md',
+              'fixtures/crimson-graphite-visual-reference.md', '--smoke-snapshot')
+            $image = Join-Path $PWD.Path "out/visual/dev7/$env:WOLFMARK_SNAPSHOT_NAME.png"
+            if (!(Test-Path $image)) { throw "Windows $mode UI screenshot was not created." }
+            Add-Type -AssemblyName System.Drawing
+            $bitmap = [System.Drawing.Image]::FromFile($image)
+            try { Write-Host "Windows $mode screenshot: $($bitmap.Width)x$($bitmap.Height)" }
+            finally { $bitmap.Dispose() }
+          }
+      - name: Upload native Windows application UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-windows-app-ui
+          path: out/visual/dev7/crimson-graphite-windows-*.png
+          if-no-files-found: warn
       - name: Compile native C++ setup host
         shell: pwsh
         run: |
