@@ -52,7 +52,12 @@ public:
                                  verticalScrollBar()->maximum());
         const bool reduced = qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1");
         if (animate && !reduced) {
-            scrolling_.addWheelDistance(destination - verticalScrollBar()->value());
+            // addWheelDistance changes the *existing target*, not the current
+            // scrollbar value. A second outline reveal must supersede the
+            // first destination even when the first animation has not painted.
+            const int active_target = scrolling_.isRunning()
+                ? scrolling_.targetValue() : verticalScrollBar()->value();
+            scrolling_.addWheelDistance(destination - active_target);
         } else {
             scrolling_.moveDirectlyTo(destination);
         }

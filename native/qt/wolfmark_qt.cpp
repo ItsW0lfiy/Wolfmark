@@ -3842,14 +3842,25 @@ public:
                                      document_->navigationInset()) <= 3;
                         const bool partial_wheel = sidebar_->testPartialOutlineWheel();
                         sidebar_->cancelOutlineScroll();
+                        // Two animated reveals before the first paint must
+                        // land on the latest requested outline destination.
+                        // Otherwise the old target survives the second reveal.
+                        const bool far_reveal = sidebar_->revealOutlineAnchor(
+                            QStringLiteral("end-clamped-heading"), true);
+                        const int far_target = sidebar_->outlineScrollTarget();
+                        const bool near_reveal = sidebar_->revealOutlineAnchor(
+                            QStringLiteral("heading-after-prose"), true);
+                        const bool outline_latest_wins = far_reveal && near_reveal &&
+                            far_target > 0 && sidebar_->outlineScrollTarget() == 0;
+                        sidebar_->cancelOutlineScroll();
                         const bool cancelled = !sidebar_->outlineScrollRunning();
                         const auto after = api_->backend_counters(backend_);
                         const bool counters = before.parse_count == after.parse_count &&
                             before.load_count == after.load_count &&
                             constructions == document_->constructionCount();
                         const bool ok = distinct >= 3 && largest_jump > 0 && landed && pixel_direct &&
-                            home_end_direct &&
-                            reversed_target && direct_navigation && partial_wheel && cancelled && counters;
+                            home_end_direct && reversed_target && direct_navigation &&
+                            partial_wheel && outline_latest_wins && cancelled && counters;
                         std::fprintf(stdout,
                                      "MOTION_DOCUMENT samples=%d largest_jump=%d landed=%s reversal=%s direct_navigation=%s\n",
                                      distinct, largest_jump, landed ? "ok" : "failed",
@@ -3861,9 +3872,12 @@ public:
                                      home_end_direct ? "direct" : "failed",
                                      home_end_direct ? "direct" : "failed");
                         std::fprintf(stdout,
-                                     "WOLFMARK_SMOKE motion=%s counters=%s partial_wheel=%s cancelled=%s\n",
+                                     "WOLFMARK_SMOKE motion=%s counters=%s partial_wheel=%s "
+                                     "outline_retarget=%s cancelled=%s\n",
                                      ok ? "ok" : "failed", counters ? "stable" : "changed",
-                                     partial_wheel ? "ok" : "failed", cancelled ? "ok" : "failed");
+                                     partial_wheel ? "ok" : "failed",
+                                     outline_latest_wins ? "ok" : "failed",
+                                     cancelled ? "ok" : "failed");
                         std::fflush(stdout);
                         QCoreApplication::exit(ok ? 0 : 16);
                     });
