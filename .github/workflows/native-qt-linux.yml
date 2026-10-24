@@ -241,8 +241,24 @@ jobs:
               }
               finally { $bitmap.Dispose() }
             }
+            # Windows font metrics differ from Linux. Verify the 150% inline
+            # code pill corners in the same exact-size offscreen viewport.
+            $env:WOLFMARK_SNAPSHOT_MODE = ''
+            $env:WOLFMARK_SNAPSHOT_ZOOM = '150'
+            $env:WOLFMARK_SNAPSHOT_NAME = 'inline-code-windows-offscreen-150'
+            & $runSmoke -arguments @('fixtures/inline-code-quality.md', '--smoke-snapshot')
+            $image = Join-Path $PWD.Path "out/visual/dev7/$env:WOLFMARK_SNAPSHOT_NAME.png"
+            if (!(Test-Path $image)) { throw 'Windows inline-code snapshot is missing.' }
+            $bitmap = [System.Drawing.Image]::FromFile($image)
+            try {
+              if ($bitmap.Width -ne 1648 -or $bitmap.Height -ne 928) {
+                throw 'Windows inline-code snapshot has the wrong dimensions.'
+              }
+            }
+            finally { $bitmap.Dispose() }
           }
           finally {
+            Remove-Item Env:WOLFMARK_SNAPSHOT_ZOOM -ErrorAction SilentlyContinue
             Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
             Remove-Item Env:QT_QPA_FONTDIR -ErrorAction SilentlyContinue
           }
@@ -251,7 +267,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wolfmark-windows-app-ui
-          path: out/visual/dev7/crimson-graphite-windows-*.png
+          path: |
+            out/visual/dev7/crimson-graphite-windows-*.png
+            out/visual/dev7/inline-code-windows-offscreen-150.png
           if-no-files-found: warn
       - name: Compile native C++ setup host
         shell: pwsh

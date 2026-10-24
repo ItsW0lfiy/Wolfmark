@@ -1271,13 +1271,20 @@ protected:
                 const QRectF ink(origin.x() + std::min(x1, x2),
                                  origin.y() + line.y() + line.ascent() - metrics.ascent(),
                                  std::abs(x2 - x1), metrics.height());
-                // QTextLayout's native format background includes font leading,
-                // which extends above/below the glyph metrics rectangle.
-                // Cover that complete painted area to avoid square "ears" at
-                // the top and bottom of otherwise rounded inline pills.
+                // The native character background extends through the caret's
+                // vertical text metrics, not just the glyph ink box. Derive
+                // those bounds from Qt itself: fixed padding left square ears
+                // with different Windows and Linux font metrics at high zoom.
+                QTextCursor line_cursor(document());
+                line_cursor.setPosition(block.position() + start);
+                const QRectF caret = cursorRect(line_cursor);
                 const double scale = zoom_percent_ / 100.0;
-                const QRectF outer = ink.adjusted(-padding, -3.5 * scale,
-                                                   padding, 1.5 * scale);
+                const qreal top = std::min(ink.top() - 3.5 * scale,
+                                           caret.top() - 0.5 * scale);
+                const qreal bottom = std::max(ink.bottom() + 1.5 * scale,
+                                              caret.bottom() + 0.5 * scale);
+                const QRectF outer(ink.left() - padding, top,
+                                   ink.width() + 2 * padding, bottom - top);
                 QPainterPath surface;
                 surface.addRoundedRect(outer, radius, radius);
                 // Erase just the rectangular native background's corner pixels.
