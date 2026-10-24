@@ -189,6 +189,9 @@ jobs:
           if (!(Test-Path $offscreenPlugin)) { throw 'Qt Windows offscreen plugin is missing.' }
           Copy-Item $offscreenPlugin 'out/cargo/debug/platforms/qoffscreen.dll' -Force
           $env:QT_QPA_PLATFORM = 'offscreen'
+          # Qt's Windows offscreen plugin has no native font database.
+          # Supply the runner's installed system fonts instead of tofu glyphs.
+          $env:QT_QPA_FONTDIR = Join-Path $env:WINDIR 'Fonts'
           try {
             foreach ($mode in @('reader', 'live')) {
               $env:WOLFMARK_SNAPSHOT_MODE = if ($mode -eq 'live') { 'live' } else { '' }
@@ -207,7 +210,10 @@ jobs:
               finally { $bitmap.Dispose() }
             }
           }
-          finally { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
+          finally {
+            Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+            Remove-Item Env:QT_QPA_FONTDIR -ErrorAction SilentlyContinue
+          }
       - name: Upload native Windows application UI screenshots
         if: always()
         uses: actions/upload-artifact@v4
