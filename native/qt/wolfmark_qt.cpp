@@ -855,13 +855,21 @@ public:
             for (const auto role : {QPalette::Accent, QPalette::Highlight, QPalette::Link,
                                     QPalette::Text, QPalette::Button, QPalette::ButtonText}) {
                 const auto color = palette.color(group, role);
-                if (color.blue() > color.red() && color.blue() > color.green()) {
-                    std::fprintf(stderr, "STYLE_DIAG blue role=%d group=%d color=%s\n",
+                // Slightly cool graphite is neutral, not a bright-blue UI accent.
+                constexpr int saturated_blue_bias = 12;
+                if (color.blue() > color.red() + saturated_blue_bias &&
+                    color.blue() > color.green() + saturated_blue_bias) {
+                    std::fprintf(stderr, "STYLE_DIAG saturated_blue role=%d group=%d color=%s\n",
                                  static_cast<int>(role), static_cast<int>(group),
                                  qUtf8Printable(color.name()));
                     return false;
                 }
             }
+        }
+        if (palette.color(QPalette::Active, QPalette::Accent) != QColor(colour::crimson) ||
+            palette.color(QPalette::Active, QPalette::Link) != QColor(colour::crimson_hover)) {
+            std::fprintf(stderr, "STYLE_DIAG crimson palette contract mismatch\n");
+            return false;
         }
         auto* accessible = QAccessible::queryAccessibleInterface(
             const_cast<DocumentView*>(this));
