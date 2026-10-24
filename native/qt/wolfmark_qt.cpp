@@ -2648,6 +2648,23 @@ public:
                           title_search_->isEnabled() && mode_segments_.size() == 3 &&
                           mode_segments_.at(0)->isChecked();
                 if (ok) {
+                    // Verify split-button geometry, working menu state and breadcrumb.
+                    auto* open_button = sidebar_->findChild<QPushButton*>(
+                        QStringLiteral("sidebarOpenButton"));
+                    auto* open_options = sidebar_->findChild<QToolButton*>(
+                        QStringLiteral("sidebarOpenMenuButton"));
+                    const bool menu_ok = open_options && open_options->menu() &&
+                        open_options->menu()->actions().size() == 2 &&
+                        open_options->menu()->actions().at(1)->isEnabled();
+                    const bool geometry_ok = open_button && open_options &&
+                        open_button->geometry().right() + 1 == open_options->geometry().left() &&
+                        open_button->height() == open_options->height();
+                    const bool breadcrumb_ok = title_label_->toolTip() == current_path_ &&
+                        title_label_->text().startsWith(QStringLiteral("Documents"));
+                    ok &= menu_ok && geometry_ok && breadcrumb_ok;
+                    std::fprintf(stdout, "SHELL_REFERENCE split=%s breadcrumb=%s\n",
+                                 menu_ok && geometry_ok ? "ok" : "failed",
+                                 breadcrumb_ok ? "ok" : "failed");
                     for (const auto* button : mode_segments_) {
                         const int text_width = button->fontMetrics().horizontalAdvance(button->text());
                         const int available = button->width();
@@ -5566,12 +5583,9 @@ private:
         document_ = active_->view;
         current_path_ = active_->canonical_path;
         const QFileInfo file(current_path_);
-        const auto directory_name = file.dir().dirName();
-        // A document stored inside its eponymous folder should not repeat the same
-        // long title in the already compact native frame.
-        const auto display_name = directory_name.compare(file.completeBaseName(), Qt::CaseInsensitive) == 0
-            ? file.fileName() : directory_name + QStringLiteral("   /   ") + file.fileName();
-        title_label_->setFullText(display_name);
+        // The compact title uses the reference's real document breadcrumb.
+        // Its full disk path remains available in the tooltip.
+        title_label_->setFullText(QStringLiteral("Documents   ›   %1").arg(file.fileName()));
         title_label_->setToolTip(current_path_);
         setWindowTitle(QStringLiteral("%1 — Wolfmark").arg(file.fileName()));
         stack_->setCurrentWidget(active_->page);

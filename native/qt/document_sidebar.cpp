@@ -2,6 +2,7 @@
 #include "wolf_style.h"
 #include "smooth_scroll_controller.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QBoxLayout>
 #include <QColor>
@@ -11,12 +12,16 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QKeySequence>
 #include <QMouseEvent>
+#include <QMenu>
 #include <QPainter>
 #include <QDir>
 #include <QPushButton>
 #include <QPixmap>
 #include <QScrollBar>
+#include <QSizePolicy>
+#include <QToolButton>
 #include <QSet>
 #include <QTreeWidget>
 #include <QWheelEvent>
@@ -111,13 +116,13 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_StyledBackground);
     setFixedWidth(style::metric::sidebar_width);
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(14, 18, 14, 14);
+    layout->setContentsMargins(22, 18, 18, 14);
     layout->setSpacing(8);
     // Branding is now above the sidebar in the single global titlebar.
     // Avoid the duplicate paw and product name from the legacy side rail.
     layout->addSpacing(3);
     auto* open_row = new QHBoxLayout;
-    open_row->setSpacing(6);
+    open_row->setSpacing(0);
     auto* open_button = new QPushButton(QStringLiteral("Open document"));
     open_button->setObjectName(QStringLiteral("sidebarOpenButton"));
     QPixmap folder_icon(20, 20);
@@ -132,18 +137,30 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     }
     open_button->setIcon(QIcon(folder_icon));
     open_button->setIconSize(QSize(20, 20));
-    open_button->setMinimumHeight(40);
+    open_button->setFixedHeight(40);
+    open_button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     open_button->setToolTip(QStringLiteral("Open Markdown or text file (Ctrl+O)"));
     connect(open_button, &QPushButton::clicked, this, [this] { if (open) open(); });
     open_row->addWidget(open_button, 1);
-    reload_ = new QPushButton(QStringLiteral("↻"));
-    reload_->setObjectName(QStringLiteral("sidebarReloadButton"));
-    reload_->setFixedSize(40, 40);
-    reload_->setAccessibleName(QStringLiteral("Reload current document"));
-    reload_->setEnabled(false);
-    reload_->setToolTip(QStringLiteral("Reload current document (F5)"));
-    connect(reload_, &QPushButton::clicked, this, [this] { if (reload) reload(); });
-    open_row->addWidget(reload_);
+    // A functional split-button: the dropdown offers real open/reload actions.
+    auto* open_options = new QToolButton(this);
+    open_options->setObjectName(QStringLiteral("sidebarOpenMenuButton"));
+    open_options->setFixedSize(40, 40);
+    open_options->setArrowType(Qt::DownArrow);
+    open_options->setPopupMode(QToolButton::InstantPopup);
+    open_options->setAccessibleName(QStringLiteral("Open document options"));
+    open_options->setToolTip(QStringLiteral("Document actions"));
+    auto* open_menu = new QMenu(open_options);
+    open_menu->setObjectName(QStringLiteral("sidebarOpenMenu"));
+    auto* open_action = open_menu->addAction(QStringLiteral("Open another document…"));
+    open_action->setShortcut(QKeySequence::Open);
+    connect(open_action, &QAction::triggered, this, [this] { if (open) open(); });
+    reload_action_ = open_menu->addAction(QStringLiteral("Reload current document"));
+    reload_action_->setShortcut(QKeySequence(Qt::Key_F5));
+    reload_action_->setEnabled(false);
+    connect(reload_action_, &QAction::triggered, this, [this] { if (reload) reload(); });
+    open_options->setMenu(open_menu);
+    open_row->addWidget(open_options);
     layout->addLayout(open_row);
     layout->addSpacing(22);
     auto* label = new QLabel(QStringLiteral("OPEN DOCUMENTS"));
@@ -264,7 +281,7 @@ void DocumentSidebar::setDocuments(const QStringList& filenames, int active_inde
     }
     const int rows = std::clamp(static_cast<int>(filenames.size()), 1, 4);
     documents_->setFixedHeight(rows * 34 + 4);
-    reload_->setEnabled(active_index >= 0);
+    reload_action_->setEnabled(active_index >= 0);
 }
 
 void DocumentSidebar::resetOutlineContext() {

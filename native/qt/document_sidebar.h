@@ -7,6 +7,7 @@
 #include <QWidget>
 #include <functional>
 
+class QAction;
 class QLabel;
 class QPushButton;
 class QTreeWidgetItem;
@@ -38,7 +39,7 @@ public:
 private:
     void activateOutlineItem(QTreeWidgetItem* item);
 
-    QPushButton* reload_;
+    QAction* reload_action_ = nullptr;
     SmoothTreeWidget* documents_;
     SmoothTreeWidget* outline_;
     QHash<QString, QTreeWidgetItem*> outline_items_;

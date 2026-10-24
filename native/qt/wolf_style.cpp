@@ -47,11 +47,13 @@ void apply(QApplication& application) {
         #sidebarSection { color: #ada5a9; font-size: 10px; font-weight: 650; letter-spacing: 1.05px; padding: 0 7px; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
         #documentSidebar QPushButton:hover { background: #2a2a30; }
-        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; font-weight: 600; padding: 7px 12px; text-align: left; }
+        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-top-left-radius: 8px; border-bottom-left-radius: 8px; border-top-right-radius: 0; border-bottom-right-radius: 0; min-height: 0; max-height: 40px; font-weight: 600; padding: 0 12px; text-align: left; }
         #documentSidebar #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
         #documentSidebar #sidebarOpenButton:pressed { background: #5e1a2f; }
-        #documentSidebar #sidebarReloadButton { background: #28282d; border: 1px solid #34343a; border-radius: 8px; text-align: center; padding: 0; font-size: 20px; }
-        #documentSidebar #sidebarReloadButton:hover { background: #303036; border-color: #55555c; }
+        #documentSidebar #sidebarOpenMenuButton { background: #8b2945; color: #f8eef1; border: 1px solid #9d3150; border-left: 0; border-top-right-radius: 8px; border-bottom-right-radius: 8px; padding: 0; }
+        #documentSidebar #sidebarOpenMenuButton:hover { background: #a12b4f; border-color: #c52a50; }
+        #documentSidebar #sidebarOpenMenuButton:pressed { background: #5e1a2f; }
+        #documentSidebar #sidebarOpenMenuButton::menu-indicator { image: none; width: 0; }
         #sidebarFooter { background: transparent; border-top: 1px solid #34343a; }
         #sidebarFooterName { color: #f1efed; font-size: 12px; font-weight: 600; }
         #sidebarFooterVersion { color: #939098; font-size: 11px; }
