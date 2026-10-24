@@ -29,6 +29,8 @@ public:
     [[nodiscard]] QVector<int> outlineScrollSamples() const;
     [[nodiscard]] bool outlineAnchorVisible(const QString& anchor) const;
     [[nodiscard]] bool testPartialOutlineWheel();
+    [[nodiscard]] bool testDocumentIconMapping() const;
+    [[nodiscard]] bool testStableDocumentRows() const;
     void cancelOutlineScroll();
     std::function<void()> open;
     std::function<void()> reload;

@@ -278,11 +278,18 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
 }
 
 namespace {
+QString documentIconFilename(QString label) {
+    // The sidebar appends a dirty marker to the displayed label. It is not
+    // part of the filename and must not turn an edited .txt into a .md icon.
+    if (label.endsWith(QStringLiteral(" *"))) label.chop(2);
+    return label.endsWith(QStringLiteral(".txt"), Qt::CaseInsensitive)
+        ? QStringLiteral("wolfmark-text.ico") : QStringLiteral("wolfmark-markdown.ico");
+}
+
 QIcon documentIcon(const QString& name) {
     // Reuse the approved application file icons. Never redraw or recolor the
     // locked wolfmark-markdown / wolfmark-text artwork for navigation states.
-    const auto filename = name.endsWith(QStringLiteral(".txt"), Qt::CaseInsensitive)
-        ? QStringLiteral("wolfmark-text.ico") : QStringLiteral("wolfmark-markdown.ico");
+    const auto filename = documentIconFilename(name);
     for (const auto& root : {QCoreApplication::applicationDirPath(), QDir::currentPath()}) {
         QIcon icon(QDir(root).filePath(QStringLiteral("assets/icons/") + filename));
         // Qt builds without an ICO decoder can return an icon handle which
@@ -293,24 +300,56 @@ QIcon documentIcon(const QString& name) {
 }
 } // namespace
 
+bool DocumentSidebar::testDocumentIconMapping() const {
+    return documentIconFilename(QStringLiteral("notes.txt")) == QStringLiteral("wolfmark-text.ico") &&
+           documentIconFilename(QStringLiteral("notes.TXT *")) == QStringLiteral("wolfmark-text.ico") &&
+           documentIconFilename(QStringLiteral("notes.md *")) == QStringLiteral("wolfmark-markdown.ico") &&
+           documentIconFilename(QStringLiteral("notes.markdown *")) == QStringLiteral("wolfmark-markdown.ico");
+}
+
+bool DocumentSidebar::testStableDocumentRows() const {
+    DocumentSidebar probe;
+    probe.setDocuments({QStringLiteral("notes.txt")}, 0);
+    auto* original = probe.documents_->topLevelItem(0);
+    probe.setDocuments({QStringLiteral("notes.txt *")}, 0);
+    const bool dirty_stable = original == probe.documents_->topLevelItem(0) &&
+                              probe.documents_->currentItem() == original;
+    probe.setDocuments({QStringLiteral("notes.txt *"), QStringLiteral("other.md")}, 1);
+    const bool added_stable = original == probe.documents_->topLevelItem(0) &&
+                              probe.documents_->currentItem() == probe.documents_->topLevelItem(1);
+    probe.setDocuments({QStringLiteral("notes.txt")}, 0);
+    return dirty_stable && added_stable &&
+           probe.documents_->topLevelItemCount() == 1 &&
+           probe.documents_->topLevelItem(0) == original &&
+           probe.documents_->currentItem() == original;
+}
+
 void DocumentSidebar::setDocuments(const QStringList& filenames, int active_index) {
-    documents_->clear();
+    // Preserve native row identity, keyboard focus and the scroll position on
+    // dirty-marker updates. Clearing and rebuilding the tree on the first edit
+    // caused needless selection/layout churn for otherwise unchanged files.
+    while (documents_->topLevelItemCount() > filenames.size())
+        delete documents_->takeTopLevelItem(documents_->topLevelItemCount() - 1);
     for (int index = 0; index < filenames.size(); ++index) {
-        auto* item = new QTreeWidgetItem(documents_);
-        item->setText(0, filenames.at(index));
-        item->setIcon(0, documentIcon(filenames.at(index)));
-        item->setToolTip(0, filenames.at(index));
+        auto* item = index < documents_->topLevelItemCount()
+            ? documents_->topLevelItem(index) : new QTreeWidgetItem(documents_);
+        const auto& label = filenames.at(index);
+        if (item->text(0) != label) {
+            item->setText(0, label);
+            item->setIcon(0, documentIcon(label));
+            item->setToolTip(0, label);
+        }
         item->setText(1, QStringLiteral("×"));
         item->setTextAlignment(1, Qt::AlignCenter);
         item->setToolTip(1, QStringLiteral("Close document"));
         item->setData(0, Qt::UserRole, index);
-        if (index == active_index) {
-            // Selection already paints a crimson left marker via the shared
-            // QTreeWidget style. Do not replace the real file icon with a
-            // three-pixel swatch when activating a document.
+        if (index == active_index && documents_->currentItem() != item) {
+            // Selection already paints the crimson left marker. Retain the
+            // approved file icon instead of substituting a color swatch.
             documents_->setCurrentItem(item);
         }
     }
+    if (active_index < 0) documents_->clearSelection();
     const int rows = std::clamp(static_cast<int>(filenames.size()), 1, 4);
     documents_->setFixedHeight(rows * 34 + 4);
     reload_action_->setEnabled(active_index >= 0);

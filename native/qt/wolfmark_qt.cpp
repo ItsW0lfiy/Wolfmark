@@ -2805,10 +2805,14 @@ public:
                         open_button->height() == open_options->height();
                     const bool breadcrumb_ok = title_label_->toolTip() == current_path_ &&
                         title_label_->text().startsWith(QStringLiteral("Documents"));
-                    ok &= menu_ok && geometry_ok && breadcrumb_ok;
-                    std::fprintf(stdout, "SHELL_REFERENCE split=%s breadcrumb=%s\n",
+                    const bool icons_ok = sidebar_->testDocumentIconMapping();
+                    const bool stable_rows = sidebar_->testStableDocumentRows();
+                    ok &= menu_ok && geometry_ok && breadcrumb_ok && icons_ok && stable_rows;
+                    std::fprintf(stdout, "SHELL_REFERENCE split=%s breadcrumb=%s dirty_file_icons=%s stable_rows=%s\n",
                                  menu_ok && geometry_ok ? "ok" : "failed",
-                                 breadcrumb_ok ? "ok" : "failed");
+                                 breadcrumb_ok ? "ok" : "failed",
+                                 icons_ok ? "ok" : "failed",
+                                 stable_rows ? "ok" : "failed");
                     for (const auto* button : mode_segments_) {
                         const int text_width = button->fontMetrics().horizontalAdvance(button->text());
                         const int available = button->width();
