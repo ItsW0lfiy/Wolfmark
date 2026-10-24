@@ -224,12 +224,12 @@ QIcon applicationIcon() {
         return icon;
     }
 #endif
-    QIcon icon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark.ico")));
+    QIcon fallbackIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark.ico")));
     // Qt on Linux does not necessarily ship the ICO decoder. The same approved
     // paw artwork is also bundled as PNG for native icon resolution.
-    if (icon.isNull() || icon.pixmap(32, 32).isNull())
-        icon = QIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark-32x32.png")));
-    return icon;
+    if (fallbackIcon.isNull() || fallbackIcon.pixmap(32, 32).isNull())
+        fallbackIcon = QIcon(applicationAssetPath(QStringLiteral("assets/icons/wolfmark-32x32.png")));
+    return fallbackIcon;
 }
 
 Command parseCommand(const QJsonValue& value) {
