@@ -118,6 +118,14 @@ jobs:
           version: '6.8.2'
           arch: win64_msvc2022_64
           modules: ''
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile Windows Rust and native Qt application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:WOLFMARK_QT_DIR = $env:QT_ROOT_DIR
+          cargo check --locked -p wolfmark
+          if ($LASTEXITCODE -ne 0) { throw "Wolfmark Windows application compilation failed." }
       - name: Compile native C++ setup host
         shell: pwsh
         run: |
