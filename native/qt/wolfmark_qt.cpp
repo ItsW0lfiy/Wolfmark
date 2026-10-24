@@ -1225,7 +1225,27 @@ protected:
                             QPointF(horizontalScrollBar()->value(), verticalScrollBar()->value());
         const auto selection = textCursor();
         const double padding = 3.5 * zoom_percent_ / 100.0;
-        const double radius = 4.5 * zoom_percent_ / 100.0;
+        const double radius = 7.0 * zoom_percent_ / 100.0;
+        // QTextEdit paints the native character background as a rectangle.
+        // Only the tiny corner cutouts need an overlay; drawing an entire pill
+        // after QTextEdit would cover its glyphs and selection. Use the actual
+        // containing surface, not the document color, for quoted/table code.
+        QColor backing(colour::document);
+        const QTextCursor block_cursor(block);
+        if (const auto* table = block_cursor.currentTable()) {
+            const auto cell = table->cellAt(block_cursor);
+            if (cell.isValid() && cell.format().background().style() != Qt::NoBrush)
+                backing = cell.format().background().color();
+        }
+        if (backing == QColor(colour::document)) {
+            for (auto* frame = block_cursor.currentFrame(); frame; frame = frame->parentFrame()) {
+                const auto brush = frame->frameFormat().background();
+                if (brush.style() != Qt::NoBrush) {
+                    backing = brush.color();
+                    break;
+                }
+            }
+        }
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
@@ -1251,15 +1271,26 @@ protected:
                 const QRectF ink(origin.x() + std::min(x1, x2),
                                  origin.y() + line.y() + line.ascent() - metrics.ascent(),
                                  std::abs(x2 - x1), metrics.height());
-                const QRectF outer = ink.adjusted(-padding, 0, padding, 0);
+                // QTextLayout's native format background includes font leading,
+                // which extends above/below the glyph metrics rectangle.
+                // Cover that complete painted area to avoid square "ears" at
+                // the top and bottom of otherwise rounded inline pills.
+                const double scale = zoom_percent_ / 100.0;
+                const QRectF outer = ink.adjusted(-padding, -3.5 * scale,
+                                                   padding, 1.5 * scale);
                 QPainterPath surface;
                 surface.addRoundedRect(outer, radius, radius);
+                // Erase just the rectangular native background's corner pixels.
+                // The original text, native selection and hit testing are untouched.
+                QPainterPath square;
+                square.addRect(outer);
+                painter.fillPath(square.subtracted(surface), backing);
                 // Paint the side breathing room only. Clipping avoids the antialiased
                 // subtraction seam that could leave a punctuation-like pixel after
                 // inline code in ordinary prose. Qt remains responsible for the native
                 // character background, glyphs, selection, wrapping, and hit testing.
                 painter.save();
-                const double glyph_guard = 0.75 * zoom_percent_ / 100.0;
+                const double glyph_guard = 0.25 * zoom_percent_ / 100.0;
                 painter.setClipRect(QRectF(outer.left(), outer.top(), padding - glyph_guard,
                                            outer.height()),
                                     Qt::IntersectClip);

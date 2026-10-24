@@ -92,6 +92,18 @@ jobs:
             WOLFMARK_SNAPSHOT_NAME="table-corners-$percent" \
               timeout 45s ./out/cargo/debug/wolfmark fixtures/table-corner-quality.md --smoke-snapshot
           done
+      - name: Verify rounded inline code and native selection at two zoom levels
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: |
+          timeout 45s ./out/cargo/debug/wolfmark fixtures/inline-code-quality.md --smoke-style
+          for percent in 100 150; do
+            WOLFMARK_SNAPSHOT_WIDTH=1648 WOLFMARK_SNAPSHOT_HEIGHT=928 \
+            WOLFMARK_SNAPSHOT_ZOOM="$percent" \
+            WOLFMARK_SNAPSHOT_NAME="inline-code-rounded-$percent" \
+              timeout 45s ./out/cargo/debug/wolfmark fixtures/inline-code-quality.md --smoke-snapshot
+          done
       - name: Verify smooth wheel motion and direct anchor navigation
         env:
           QT_QPA_PLATFORM: offscreen
@@ -184,6 +196,7 @@ jobs:
           & $runSmoke -arguments @('fixtures/wolfmark-visual-test.md',
             'fixtures/crimson-graphite-visual-reference.md', '--smoke-shell-controls')
           & $runSmoke -arguments @('fixtures/table-corner-quality.md', '--smoke-style')
+          & $runSmoke -arguments @('fixtures/inline-code-quality.md', '--smoke-style')
 
           $env:WOLFMARK_SNAPSHOT_WIDTH = '1648'
           $env:WOLFMARK_SNAPSHOT_HEIGHT = '928'
