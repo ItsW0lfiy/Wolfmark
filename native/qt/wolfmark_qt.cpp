@@ -3744,7 +3744,7 @@ public:
                         const bool width_retarget = width_decreased && width_increased &&
                             width_largest_jump < wolfmark::style::metric::sidebar_width / 3 &&
                             sidebar_->isVisible() &&
-                            sidebar_->width() == wolfmark::style::metric::sidebar_width;
+                            sidebar_->width() == sidebarTargetWidth();
                         const auto after = api_->backend_counters(backend_);
                         const bool counters = before.parse_count == after.parse_count &&
                             before.load_count == after.load_count &&
@@ -4269,23 +4269,39 @@ protected:
 #endif
 
 private:
+    [[nodiscard]] int sidebarTargetWidth() const {
+        // Match the approved spacious sidebar at wide desktop sizes without
+        // taking a disproportionate share on smaller laptop windows.
+        return std::clamp(static_cast<int>(std::lround(width() * 0.185)),
+                          wolfmark::style::metric::sidebar_width, 304);
+    }
+
     void updateSidebarVisibility() {
         if (sidebar_ == nullptr) return;
         const bool visible = !fullscreen_ && sidebar_requested_ && (sidebar_explicit_ || width() >= 1000);
         const bool reduced = qEnvironmentVariable("WOLFMARK_REDUCED_MOTION") == QStringLiteral("1");
+        const int target = visible ? sidebarTargetWidth() : 0;
         if (reduced || !isVisible()) {
             sidebar_animation_.stop();
             sidebar_target_visible_ = visible;
-            sidebar_->setFixedWidth(visible ? wolfmark::style::metric::sidebar_width : 0);
+            sidebar_->setFixedWidth(target);
             sidebar_->setVisible(visible);
             if (open_ != nullptr) open_->setVisible(!visible);
             // Branding stays visible in the global titlebar during sidebar changes.
             return;
         }
         if (sidebar_animation_.state() == QAbstractAnimation::Running &&
-            sidebar_target_visible_ == visible) return;
-        const int target = visible ? wolfmark::style::metric::sidebar_width : 0;
+            sidebar_target_visible_ == visible &&
+            sidebar_animation_.endValue().toInt() == target) return;
         const int current = sidebar_->isVisible() ? sidebar_->width() : 0;
+        // Ordinary window resizing must follow the pointer, not continually
+        // restart a short width animation (which appears as lag or wobble).
+        if (visible && sidebar_target_visible_ && sidebar_->isVisible() &&
+            sidebar_animation_.state() != QAbstractAnimation::Running) {
+            if (current != target) sidebar_->setFixedWidth(target);
+            if (open_ != nullptr) open_->hide();
+            return;
+        }
         if (current != target || sidebar_->isVisible() != visible) {
             sidebar_animation_.stop();
             sidebar_target_visible_ = visible;
@@ -4298,7 +4314,7 @@ private:
             sidebar_animation_.setStartValue(current);
             sidebar_animation_.setEndValue(target);
             sidebar_animation_.setDuration(std::max(60, full_duration * remaining /
-                                                        wolfmark::style::metric::sidebar_width));
+                                                        std::max(1, sidebarTargetWidth())));
             sidebar_animation_.setEasingCurve(QEasingCurve::InOutQuad);
             sidebar_animation_.start();
             return;
@@ -4329,7 +4345,7 @@ private:
             sidebar_->setFixedWidth(value);
         });
         QObject::connect(&sidebar_animation_, &QVariantAnimation::finished, this, [this] {
-            sidebar_->setFixedWidth(sidebar_target_visible_ ? wolfmark::style::metric::sidebar_width : 0);
+            sidebar_->setFixedWidth(sidebar_target_visible_ ? sidebarTargetWidth() : 0);
             sidebar_->setVisible(sidebar_target_visible_);
             if (open_ != nullptr) open_->setVisible(!sidebar_target_visible_);
             // Global titlebar branding remains visible.
