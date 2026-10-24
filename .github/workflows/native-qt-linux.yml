@@ -199,7 +199,7 @@ jobs:
               if (!(Test-Path $image)) { throw "Windows offscreen $mode screenshot is missing." }
               $bitmap = [System.Drawing.Image]::FromFile($image)
               try {
-                Write-Host "Windows offscreen $mode: $($bitmap.Width)x$($bitmap.Height)"
+                Write-Host "Windows offscreen ${mode}: $($bitmap.Width)x$($bitmap.Height)"
                 if ($bitmap.Width -ne 1648 -or $bitmap.Height -ne 928) {
                   throw 'Windows offscreen reference did not preserve the approved viewport.'
                 }
