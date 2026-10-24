@@ -55,6 +55,7 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
+#include <QShortcut>
 #include <QScrollBar>
 #include <QSettings>
 #include <QShowEvent>
@@ -2944,6 +2945,30 @@ public:
                     }
                     title_search_->click();
                     ok &= find_bar_->isVisible() && find_input_->hasFocus();
+                    find_input_->setText(QStringLiteral("Wolfmark"));
+                    highlightFindMatches();
+                    const bool matches_visible = !document_->extraSelections().isEmpty();
+                    auto* close_shortcut = find_bar_->findChild<QShortcut*>(
+                        QStringLiteral("findEscapeShortcut"));
+                    ok &= matches_visible && close_shortcut &&
+                          close_shortcut->key() == QKeySequence(Qt::Key_Escape) &&
+                          close_shortcut->context() == Qt::WidgetWithChildrenShortcut;
+                    if (close_shortcut) {
+                        // Trigger the same close handler as Escape, then ensure
+                        // stale match paint does not survive the hidden bar.
+                        QMetaObject::invokeMethod(close_shortcut, "activated");
+                        ok &= !find_bar_->isVisible() &&
+                              document_->extraSelections().isEmpty() && document_->hasFocus();
+                    }
+                    title_search_->click();
+                    ok &= find_bar_->isVisible() && find_input_->hasFocus() &&
+                          find_input_->text() == QStringLiteral("Wolfmark") &&
+                          !document_->extraSelections().isEmpty();
+                    auto* close_button = find_bar_->findChild<QPushButton*>(
+                        QStringLiteral("findCloseButton"));
+                    if (close_button) close_button->click();
+                    ok &= close_button && !find_bar_->isVisible() &&
+                          document_->extraSelections().isEmpty();
                 }
                 std::fprintf(stdout, "WOLFMARK_SMOKE shell_controls=%s modes=checked find=checked\n",
                              ok ? "ok" : "failed");
@@ -4986,8 +5011,14 @@ private:
             find_layout->addWidget(button);
         }
         auto* close_find = new WolfButton(QStringLiteral("Close"));
-        QObject::connect(close_find, &QPushButton::clicked, this, [this] { find_bar_->hide(); focusDocument(); });
+        close_find->setObjectName(QStringLiteral("findCloseButton"));
+        close_find->setAccessibleName(QStringLiteral("Close Find"));
+        QObject::connect(close_find, &QPushButton::clicked, this, [this] { closeFind(); });
         find_layout->addWidget(close_find);
+        auto* close_shortcut = new QShortcut(QKeySequence(Qt::Key_Escape), find_bar_);
+        close_shortcut->setObjectName(QStringLiteral("findEscapeShortcut"));
+        close_shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        QObject::connect(close_shortcut, &QShortcut::activated, this, [this] { closeFind(); });
         find_bar_->hide();
         root->addWidget(find_bar_);
 
@@ -5491,7 +5522,7 @@ private:
         diagnostics_bar_->hide();
         tabs_->hide();
         tab_row_->hide();
-        find_bar_->hide();
+        closeFind(false);
         showFullScreen();
     }
 
@@ -5545,7 +5576,7 @@ private:
 
     void updateDocumentControls() {
         if (!active_) {
-            find_bar_->hide();
+            closeFind(false);
             title_search_->setEnabled(false);
             return;
         }
@@ -5701,6 +5732,20 @@ private:
         return choice == QMessageBox::Discard;
     }
 
+    void clearFindHighlights() {
+        if (document_) document_->setExtraSelections({});
+        // Inactive editors retain their Qt view objects. Clear them as well so
+        // switching tabs cannot resurrect stale search decorations.
+        for (const auto& session : documents_)
+            session->editor->setExtraSelections({});
+    }
+
+    void closeFind(bool restore_focus = true) {
+        find_bar_->hide();
+        clearFindHighlights();
+        if (restore_focus) focusDocument();
+    }
+
     void showFind() {
         if (!active_) return;
         find_bar_->show();
@@ -5715,6 +5760,10 @@ private:
     }
 
     void highlightFindMatches() {
+        if (!find_bar_->isVisible()) {
+            clearFindHighlights();
+            return;
+        }
         auto* target = activeTextDocument();
         if (!target) return;
         QList<QTextEdit::ExtraSelection> matches;
