@@ -551,7 +551,9 @@ public:
         code_sources_.clear();
         code_frames_.clear();
         code_frame_bounds_.clear();
-        code_frame_bounds_dirty_ = true;
+        quote_frames_.clear();
+        quote_frame_bounds_.clear();
+        decorative_frame_bounds_dirty_ = true;
         anchor_positions_.clear();
         source_positions_.clear();
         navigation_anchor_.clear();
@@ -619,7 +621,7 @@ public:
         verticalScrollBar()->setValue(0);
         QTimer::singleShot(0, this, [this] {
             queueVisibleImages();
-            invalidateCodeFrameBounds();
+            invalidateDecorativeFrameBounds();
         });
     }
 
@@ -858,6 +860,21 @@ public:
                 }
             }
         }
+        if (!quote_frames_.empty()) {
+            if (decorative_frame_bounds_dirty_ ||
+                quote_frame_bounds_.size() != quote_frames_.size()) {
+                std::fprintf(stderr, "STYLE_DIAG quote geometry cache is not ready\n");
+                return false;
+            }
+            for (const auto& quote : quote_frame_bounds_) {
+                if (!quote.frame || quote.bounds.isEmpty() ||
+                    quote.frame->frameFormat().background().color() !=
+                        QColor(QStringLiteral("#231a20"))) {
+                    std::fprintf(stderr, "STYLE_DIAG quote frame geometry/background mismatch\n");
+                    return false;
+                }
+            }
+        }
         const auto palette = QApplication::palette();
         for (const auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
             for (const auto role : {QPalette::Accent, QPalette::Highlight, QPalette::Link,
@@ -926,7 +943,7 @@ public:
         resizeLoadedImages();
         const auto images_us = profile.nsecsElapsed() / 1000;
         document()->setLayoutEnabled(true);
-        invalidateCodeFrameBounds();
+        invalidateDecorativeFrameBounds();
         setTextCursor(selection);
         if (!explicit_navigation) {
             verticalScrollBar()->setValue(at_top ? 0 : verticalScrollBar()->value() +
@@ -1161,28 +1178,15 @@ protected:
         }
         QPainter painter(viewport());
         paintCodeFrameCorners(painter);
-        painter.setPen(QPen(QColor(colour::crimson), 2));
-        // Qt retains layout, selection, and accessibility; only quote markers are painted.
+        paintQuoteFrameCorners(painter);
+        // Inline-code edges are native viewport decoration. Quote accents are
+        // painted once per cached frame, not once per paragraph: this avoids
+        // broken stripes and stray nested markers outside the quote surface.
         auto block = cursorForPosition(QPoint(0, 0)).block();
         for (; block.isValid(); block = block.next()) {
             QTextCursor cursor(block);
-            const auto first = cursorRect(cursor);
-            if (first.top() > viewport()->height()) break;
+            if (cursorRect(cursor).top() > viewport()->height()) break;
             paintInlineCodeEdges(painter, block);
-            const int depth = block.blockFormat().intProperty(quote_depth_property);
-            if (depth == 0 || block.text().isEmpty()) continue;
-            cursor.movePosition(QTextCursor::EndOfBlock);
-            auto bottom = cursorRect(cursor).bottom() + 4;
-            const auto next = block.next();
-            if (next.isValid() &&
-                next.blockFormat().intProperty(quote_depth_property) == depth &&
-                !next.text().isEmpty()) {
-                bottom = cursorRect(QTextCursor(next)).top();
-            }
-            for (int level = 0; level < depth; ++level) {
-                const int x = first.left() - static_cast<int>((14 + level * 22) * zoom_percent_ / 100.0);
-                painter.drawLine(x, first.top() - 3, x, bottom);
-            }
         }
         paintAutoscrollAnchor(painter);
         scroll_trace_.recordPaint(paint_started_us, paint_cost.nsecsElapsed() / 1000);
@@ -1247,7 +1251,7 @@ protected:
     }
 
     void paintCodeFrameCorners(QPainter& painter) const {
-        if (code_frame_bounds_dirty_) return;
+        if (decorative_frame_bounds_dirty_) return;
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(Qt::NoPen);
@@ -1282,6 +1286,45 @@ protected:
         painter.restore();
     }
 
+    void paintQuoteFrameCorners(QPainter& painter) const {
+        if (decorative_frame_bounds_dirty_) return;
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(Qt::NoPen);
+        painter.setClipRect(viewport()->rect());
+        const QPointF scroll(horizontalScrollBar()->value(), verticalScrollBar()->value());
+        const qreal radius = 9.0 * zoom_percent_ / 100.0;
+        const qreal visible_top = verticalScrollBar()->value();
+        const qreal visible_bottom = visible_top + viewport()->height();
+        auto frame = std::lower_bound(quote_frame_bounds_.cbegin(), quote_frame_bounds_.cend(),
+                                      visible_top,
+                                      [](const QuoteFrameBounds& item, qreal top) {
+                                          return item.bounds.bottom() < top;
+                                      });
+        for (; frame != quote_frame_bounds_.cend() && frame->bounds.top() <= visible_bottom;
+             ++frame) {
+            const QRectF bounds = frame->bounds.translated(-scroll);
+            QPainterPath square;
+            square.addRect(bounds);
+            QPainterPath rounded;
+            rounded.addRoundedRect(bounds, radius, radius);
+            // Only erase the square corner pixels. Native QTextFrame text,
+            // selection, layout and keyboard accessibility remain untouched.
+            // Nested quotes reveal their parent panel, not the document canvas.
+            painter.setBrush(frame->nested ? QColor(QStringLiteral("#231a20"))
+                                           : QColor(colour::document));
+            painter.drawPath(square.subtracted(rounded));
+            // One continuous accent follows each native QTextFrame, including
+            // nested quotes. Keep it inside the rounded panel rather than
+            // calculating offsets from the text cursor for every paragraph.
+            const qreal stripe = std::max<qreal>(1.5, 2.0 * zoom_percent_ / 100.0);
+            painter.fillRect(QRectF(bounds.left() + 1.0, bounds.top() + radius / 2.0,
+                                    stripe, std::max<qreal>(0.0, bounds.height() - radius)),
+                             QColor(colour::crimson));
+        }
+        painter.restore();
+    }
+
     void resizeEvent(QResizeEvent* event) override {
         const bool explicit_navigation = navigationActive();
         const auto anchor = explicit_navigation ? ViewportAnchor{} : captureViewportAnchor();
@@ -1291,7 +1334,7 @@ protected:
         resizeLoadedImages();
         if (!explicit_navigation) restoreViewportAnchor(anchor);
         if (!explicit_navigation) scroll_controller_.rebaseAfterLayout();
-        invalidateCodeFrameBounds();
+        invalidateDecorativeFrameBounds();
         scheduleNavigationRetarget();
         QTimer::singleShot(0, this, [this] { queueVisibleImages(); });
     }
@@ -1576,6 +1619,7 @@ private:
                 quote_format.setBottomMargin(6.0);
                 quote_format.setLeftMargin(depth * 22.0);
                 auto* frame = cursor.insertFrame(quote_format);
+                quote_frames_.push_back({frame, quote_depth_ > 0});
                 QTextCursor inside(frame);
                 ++quote_depth_;
                 buildBlocks(inside, index, command_kind::end_quote, depth);
@@ -2234,7 +2278,7 @@ private:
             document()->setLayoutEnabled(true);
             if (navigation_anchor_.isEmpty() && viewport_anchor.has_value())
                 restoreViewportAnchor(*viewport_anchor);
-            invalidateCodeFrameBounds();
+            invalidateDecorativeFrameBounds();
             if (!navigation_anchor_.isEmpty()) ++navigation_image_retarget_count_;
             scheduleNavigationRetarget();
             viewport()->update();
@@ -2294,6 +2338,17 @@ private:
         QRectF bounds;
     };
 
+    struct QuoteFrame {
+        QPointer<QTextFrame> frame;
+        bool nested = false;
+    };
+
+    struct QuoteFrameBounds {
+        QPointer<QTextFrame> frame;
+        QRectF bounds;
+        bool nested = false;
+    };
+
     [[nodiscard]] ViewportAnchor captureViewportAnchor() const {
         if (document() == nullptr) return {};
         const auto cursor = cursorForPosition(QPoint(0, 0));
@@ -2314,12 +2369,12 @@ private:
             verticalScrollBar()->minimum(), verticalScrollBar()->maximum()));
     }
 
-    void invalidateCodeFrameBounds() {
-        code_frame_bounds_dirty_ = true;
-        if (code_frame_bounds_rebuild_pending_) return;
-        code_frame_bounds_rebuild_pending_ = true;
+    void invalidateDecorativeFrameBounds() {
+        decorative_frame_bounds_dirty_ = true;
+        if (decorative_frame_bounds_rebuild_pending_) return;
+        decorative_frame_bounds_rebuild_pending_ = true;
         QTimer::singleShot(0, this, [this] {
-            code_frame_bounds_rebuild_pending_ = false;
+            decorative_frame_bounds_rebuild_pending_ = false;
             code_frame_bounds_.clear();
             if (document() == nullptr || document()->documentLayout() == nullptr) return;
             code_frame_bounds_.reserve(code_frames_.size());
@@ -2332,7 +2387,19 @@ private:
                       [](const CodeFrameBounds& left, const CodeFrameBounds& right) {
                           return left.bounds.bottom() < right.bounds.bottom();
                       });
-            code_frame_bounds_dirty_ = false;
+            quote_frame_bounds_.clear();
+            quote_frame_bounds_.reserve(quote_frames_.size());
+            for (const auto& quote : quote_frames_) {
+                if (!quote.frame) continue;
+                quote_frame_bounds_.push_back(
+                    {quote.frame, document()->documentLayout()->frameBoundingRect(quote.frame),
+                     quote.nested});
+            }
+            std::sort(quote_frame_bounds_.begin(), quote_frame_bounds_.end(),
+                      [](const QuoteFrameBounds& left, const QuoteFrameBounds& right) {
+                          return left.bounds.bottom() < right.bounds.bottom();
+                      });
+            decorative_frame_bounds_dirty_ = false;
             viewport()->update();
         });
     }
@@ -2403,8 +2470,10 @@ private:
     QString last_copy_text_;
     std::vector<QPointer<QTextFrame>> code_frames_;
     std::vector<CodeFrameBounds> code_frame_bounds_;
-    bool code_frame_bounds_dirty_ = true;
-    bool code_frame_bounds_rebuild_pending_ = false;
+    std::vector<QuoteFrame> quote_frames_;
+    std::vector<QuoteFrameBounds> quote_frame_bounds_;
+    bool decorative_frame_bounds_dirty_ = true;
+    bool decorative_frame_bounds_rebuild_pending_ = false;
     QJsonObject settings_;
     QJsonObject metrics_;
     QString title_ = QStringLiteral("Wolfmark");
