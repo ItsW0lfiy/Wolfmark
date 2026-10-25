@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 rust-version = "1.94"
 publish = false
-license = "GPL-3.0-only"
+license = "MPL-2.0"
 description = "Isolated, optional Servo embedding experiment for Wolfmark"
 
 # Nested workspace: never compile Servo for normal Wolfmark/Qt commands.
