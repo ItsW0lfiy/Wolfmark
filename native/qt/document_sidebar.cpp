@@ -179,25 +179,6 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     open_button->setToolTip(QStringLiteral("Open Markdown or text file (Ctrl+O)"));
     connect(open_button, &QPushButton::clicked, this, [this] { if (open) open(); });
     open_row->addWidget(open_button, 1);
-    // A functional split-button: the dropdown offers real open/reload actions.
-    auto* open_options = new QToolButton(this);
-    open_options->setObjectName(QStringLiteral("sidebarOpenMenuButton"));
-    open_options->setFixedSize(40, 40);
-    open_options->setArrowType(Qt::DownArrow);
-    open_options->setPopupMode(QToolButton::InstantPopup);
-    open_options->setAccessibleName(QStringLiteral("Open document options"));
-    open_options->setToolTip(QStringLiteral("Document actions"));
-    auto* open_menu = new QMenu(open_options);
-    open_menu->setObjectName(QStringLiteral("sidebarOpenMenu"));
-    auto* open_action = open_menu->addAction(QStringLiteral("Open another document…"));
-    open_action->setShortcut(QKeySequence::Open);
-    connect(open_action, &QAction::triggered, this, [this] { if (open) open(); });
-    reload_action_ = open_menu->addAction(QStringLiteral("Reload current document"));
-    reload_action_->setShortcut(QKeySequence(Qt::Key_F5));
-    reload_action_->setEnabled(false);
-    connect(reload_action_, &QAction::triggered, this, [this] { if (reload) reload(); });
-    open_options->setMenu(open_menu);
-    open_row->addWidget(open_options);
     layout->addLayout(open_row);
     layout->addSpacing(22);
     auto* label = new QLabel(QStringLiteral("OPEN DOCUMENTS"));
@@ -357,7 +338,6 @@ void DocumentSidebar::setDocuments(const QStringList& filenames, int active_inde
     if (active_index < 0) documents_->clearSelection();
     const int rows = std::clamp(static_cast<int>(filenames.size()), 1, 4);
     documents_->setFixedHeight(rows * 34 + 4);
-    reload_action_->setEnabled(active_index >= 0);
 }
 
 void DocumentSidebar::resetOutlineContext() {

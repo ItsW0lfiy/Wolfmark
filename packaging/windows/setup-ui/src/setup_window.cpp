@@ -723,16 +723,16 @@ QString SetupWindow::actionProgressDetail(InstallerAction action) const {
 
 void SetupWindow::applyStyle() {
     qApp->setStyleSheet(QStringLiteral(R"(
-        QWidget#setupWindow { background: #121010; color: #ebe9e8; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; border: 1px solid #3a3434; border-radius: 9px; }
-        QWidget#setupBody { background: #121010; }
-        QWidget#setupTitleBar { background: #1c1919; border-bottom: 1px solid #3a3434; }
+        QWidget#setupWindow { background: #101012; color: #ebe9e8; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; border: 1px solid #34343a; border-radius: 9px; }
+        QWidget#setupBody { background: #101012; }
+        QWidget#setupTitleBar { background: #19191c; border-bottom: 1px solid #34343a; }
         QLabel#setupTitleText { color: #ebe9e8; font-size: 11pt; font-weight: 600; }
         QPushButton#setupMinimize, QPushButton#setupClose { background: transparent; border: none; border-radius: 0; color: #bcb9bb; font-size: 18px; padding: 0; }
-        QPushButton#setupMinimize:hover { background: #363030; color: #ffffff; }
+        QPushButton#setupMinimize:hover { background: #303036; color: #ffffff; }
         QPushButton#setupClose:hover { background: #8a1f3f; color: #ffffff; }
         QPushButton#setupMinimize:focus, QPushButton#setupClose:focus { border: 1px solid #c52a50; }
-        QWidget#brandPanel { background: #1c1919; border-right: 1px solid #3a3434; }
-        QStackedWidget#setupPages { background: #121010; }
+        QWidget#brandPanel { background: #19191c; border-right: 1px solid #34343a; }
+        QStackedWidget#setupPages { background: #101012; }
         QLabel#brandName { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 23pt; font-weight: 600; }
         QLabel#brandDetail { color: #9c9895; font-size: 9pt; }
         QLabel#eyebrow { color: #a09c99; font-size: 8pt; font-weight: 600; letter-spacing: 2px; }
@@ -740,12 +740,12 @@ void SetupWindow::applyStyle() {
         QLabel#pageDetail { color: #aaa6a3; font-size: 10pt; }
         QLabel#sectionLabel { color: #d5d2d3; font-weight: 600; }
         QLabel#metadata { color: #9c9895; padding: 5px 0; }
-        QLabel#assurance, QLabel#errorDetails { background: #242020; border: 1px solid #3a3434; border-radius: 9px; padding: 15px; color: #c5c1be; }
-        QFrame#separator { background: #3a3434; border: none; }
-        QLineEdit { background: #242020; border: 1px solid #4b4545; border-radius: 7px; padding: 9px 11px; color: #ebe9e8; selection-background-color: #653040; selection-color: #ffffff; }
+        QLabel#assurance, QLabel#errorDetails { background: #242428; border: 1px solid #34343a; border-radius: 9px; padding: 15px; color: #c5c1be; }
+        QFrame#separator { background: #34343a; border: none; }
+        QLineEdit { background: #242428; border: 1px solid #48484f; border-radius: 7px; padding: 9px 11px; color: #ebe9e8; selection-background-color: #653040; selection-color: #ffffff; }
         QLineEdit:focus { border-color: #c52a50; }
-        QPushButton { background: #282424; border: 1px solid #4b4545; border-radius: 7px; color: #d8d4d1; padding: 8px 16px; }
-        QPushButton:hover { background: #363030; border-color: #5c5c5c; }
+        QPushButton { background: #28282d; border: 1px solid #48484f; border-radius: 7px; color: #d8d4d1; padding: 8px 16px; }
+        QPushButton:hover { background: #303036; border-color: #5c5c5c; }
         QPushButton:pressed { background: #3a2029; border-color: #a51e41; }
         QPushButton:focus { border: 2px solid #c52a50; padding: 7px 15px; }
         QPushButton[primary="true"] { background: #c52a50; color: #ffffff; border-color: #c52a50; font-weight: 600; }
@@ -754,12 +754,12 @@ void SetupWindow::applyStyle() {
         QPushButton[danger="true"] { color: #e8909c; }
         QPushButton[danger="true"]:hover { background: #422127; border-color: #d45a64; }
         QCheckBox { spacing: 9px; color: #d5d2d3; }
-        QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #5b5b5b; border-radius: 5px; background: #1a1a1a; }
+        QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #5b5b5b; border-radius: 5px; background: #202024; }
         QCheckBox::indicator:hover { border-color: #c52a50; }
         QCheckBox::indicator:checked { background: #c52a50; border-color: #d83a61; }
         QCheckBox:focus { outline: none; color: #ffffff; }
-        QProgressBar { background: #242020; border: 1px solid #3c3c3c; border-radius: 5px; min-height: 11px; max-height: 11px; }
+        QProgressBar { background: #242428; border: 1px solid #34343a; border-radius: 5px; min-height: 11px; max-height: 11px; }
         QProgressBar::chunk { background: #c52a50; border-radius: 4px; }
-        QMessageBox { background: #121010; }
+        QMessageBox { background: #101012; }
     )"));
 }

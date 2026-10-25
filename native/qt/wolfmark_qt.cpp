@@ -299,6 +299,12 @@ public:
         setMinimumHeight(wolfmark::style::metric::control_height);
         setFocusPolicy(Qt::StrongFocus);
     }
+protected:
+    void changeEvent(QEvent* event) override {
+        QPushButton::changeEvent(event);
+        if (event->type() == QEvent::EnabledChange)
+            setCursor(isEnabled() ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    }
 };
 
 class ElidingLabel final : public QLabel {
@@ -325,16 +331,6 @@ private:
     }
 
     QString full_text_;
-};
-
-// A bounded native tab strip: long Markdown filenames should never consume the toolbar.
-class CompactDocumentTabs final : public QTabBar {
-protected:
-    QSize tabSizeHint(int index) const override {
-        QSize result = QTabBar::tabSizeHint(index);
-        result.setWidth(std::min(result.width(), 230));
-        return result;
-    }
 };
 
 class ScrollFrameTrace final {
@@ -2949,27 +2945,37 @@ public:
                           title_search_->isEnabled() && mode_segments_.size() == 3 &&
                           mode_segments_.at(0)->isChecked();
                 if (ok) {
-                    // Verify split-button geometry, working menu state and breadcrumb.
-                    auto* open_button = sidebar_->findChild<QPushButton*>(
-                        QStringLiteral("sidebarOpenButton"));
-                    auto* open_options = sidebar_->findChild<QToolButton*>(
-                        QStringLiteral("sidebarOpenMenuButton"));
-                    const bool menu_ok = open_options && open_options->menu() &&
-                        open_options->menu()->actions().size() == 2 &&
-                        open_options->menu()->actions().at(1)->isEnabled();
-                    const bool geometry_ok = open_button && open_options &&
-                        open_button->geometry().right() + 1 == open_options->geometry().left() &&
-                        open_button->height() == open_options->height();
+                                // The sidebar is the sole document selector. No parallel tab strip.
+                    const bool no_tabs = findChild<QTabBar*>() == nullptr &&
+                                         findChild<QWidget*>(QStringLiteral("documentTabRow")) == nullptr;
+                    const bool single_open = sidebar_->findChild<QPushButton*>(
+                        QStringLiteral("sidebarOpenButton")) != nullptr &&
+                        sidebar_->findChild<QToolButton*>(
+                            QStringLiteral("sidebarOpenMenuButton")) == nullptr;
+                    bool reload_ok = title_reload_ && title_reload_->isEnabled() &&
+                        title_reload_->accessibleName() == QStringLiteral("Reload current document");
+                    if (reload_ok) {
+                        title_reload_->setEnabled(false);
+                        const bool disabled_cursor = title_reload_->cursor().shape() == Qt::ArrowCursor;
+                        title_reload_->setEnabled(true);
+                        reload_ok &= disabled_cursor &&
+                            title_reload_->cursor().shape() == Qt::PointingHandCursor;
+                    }
+                    auto* settings = findChild<QPushButton*>(QStringLiteral("headerSettingsButton"));
+                    const bool settings_ok = settings && settings->isEnabled() &&
+                        !settings->icon().isNull() && settings->text() == QStringLiteral("Settings");
                     const bool breadcrumb_ok = title_label_->toolTip() == current_path_ &&
                         title_label_->text().startsWith(QStringLiteral("Documents"));
                     const bool icons_ok = sidebar_->testDocumentIconMapping();
                     const bool stable_rows = sidebar_->testStableDocumentRows();
-                    ok &= menu_ok && geometry_ok && breadcrumb_ok && icons_ok && stable_rows;
-                    std::fprintf(stdout, "SHELL_REFERENCE split=%s breadcrumb=%s dirty_file_icons=%s stable_rows=%s\n",
-                                 menu_ok && geometry_ok ? "ok" : "failed",
-                                 breadcrumb_ok ? "ok" : "failed",
-                                 icons_ok ? "ok" : "failed",
-                                 stable_rows ? "ok" : "failed");
+                    ok &= no_tabs && single_open && reload_ok && settings_ok &&
+                          breadcrumb_ok && icons_ok && stable_rows;
+                    std::fprintf(stdout,
+                        "SHELL_REFERENCE no_duplicate_tabs=%s open=%s reload=%s settings_icon=%s breadcrumb=%s dirty_file_icons=%s stable_rows=%s\n",
+                        no_tabs ? "ok" : "failed", single_open ? "ok" : "failed",
+                        reload_ok ? "ok" : "failed", settings_ok ? "ok" : "failed",
+                        breadcrumb_ok ? "ok" : "failed", icons_ok ? "ok" : "failed",
+                        stable_rows ? "ok" : "failed");
                     for (const auto* button : mode_segments_) {
                         const int text_width = button->fontMetrics().horizontalAdvance(button->text());
                         const int available = button->width();
@@ -2998,9 +3004,10 @@ public:
                         ok &= active_ != original && previous_tab_->isEnabled();
                         next_tab_->click();
                         ok &= active_ == original && next_tab_->isEnabled();
-                        ok &= tab_row_->isVisible() && tabs_->count() == static_cast<int>(documents_.size());
-                        auto* add = findChild<QPushButton*>(QStringLiteral("newDocumentTab"));
-                        ok &= add != nullptr && add->isVisible() && add->isEnabled();
+                        ok &= documents_.size() == 2 &&
+                            findChild<QTabBar*>() == nullptr;
+                        auto* sidebar_documents = sidebar_->findChild<QTreeWidget*>(QStringLiteral("openDocuments"));
+                        ok &= sidebar_documents && sidebar_documents->topLevelItemCount() == 2;
                     }
                     title_search_->click();
                     ok &= find_bar_->isVisible() && find_input_->hasFocus();
@@ -3131,9 +3138,8 @@ public:
             QTimer::singleShot(250, this, [this, stage] {
                 *stage = QStringLiteral("modes");
                 bool ok = documents_.size() == 2 && active_->mode == OpenDocumentSession::Mode::Reader;
-                // UI contract: multi-document tabs are available, but the new editor
-                // features must not introduce a permanent full-width toolbar row.
-                ok &= tabs_->count() == 2 && !tabs_->isHidden() &&
+                // The sidebar is the only open-document selector.
+                ok &= documents_.size() == 2 && findChild<QTabBar*>() == nullptr &&
                       findChild<QWidget*>(QStringLiteral("documentToolbar")) == nullptr &&
                       findChild<QWidget*>(QStringLiteral("documentCommandBar")) != nullptr &&
                       document_actions_->isVisible() && title_search_->isEnabled() &&
@@ -3220,7 +3226,7 @@ public:
                 ok &= active_ == session && background->view->sourceLineAtViewport() == old_line;
                 const auto after = api_->backend_counters(session->backend);
                 ok &= after.parse_count == active_counters.parse_count && after.load_count == before.load_count;
-                ok &= tabs_->count() == 2 && mode_group_->checkedAction() != nullptr &&
+                ok &= documents_.size() == 2 && mode_group_->checkedAction() != nullptr &&
                       mode_group_->checkedAction()->data().toInt() == 2;
                 *stage = QStringLiteral("empty-outline");
                 auto heading = editor->textCursor();
@@ -4711,7 +4717,6 @@ private:
             // Global titlebar branding remains visible.
         });
         sidebar_->open = [this] { chooseDocument(); };
-        sidebar_->reload = [this] { reloadDocument(); };
         sidebar_->navigate = [this](const QString& anchor) {
             if (document_) {
                 if (active_ && active_->mode != OpenDocumentSession::Mode::Reader) {
@@ -4790,6 +4795,28 @@ private:
         title_label_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         title_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
         title_layout->addWidget(title_label_, 1);
+        title_reload_ = new WolfButton(QString());
+        title_reload_->setObjectName(QStringLiteral("headerReloadButton"));
+        title_reload_->setFixedSize(35, 35);
+        title_reload_->setAccessibleName(QStringLiteral("Reload current document"));
+        title_reload_->setToolTip(QStringLiteral("Reload current document (F5)"));
+        QPixmap reload_pixmap(20, 20);
+        reload_pixmap.fill(Qt::transparent);
+        {
+            QPainter painter(&reload_pixmap);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setPen(QPen(QColor(colour::secondary), 1.65,
+                                Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawArc(QRectF(3.5, 3.5, 13, 13), 35 * 16, 290 * 16);
+            painter.drawLine(QPointF(15.1, 4.0), QPointF(16.6, 8.1));
+            painter.drawLine(QPointF(16.6, 8.1), QPointF(12.5, 7.2));
+        }
+        title_reload_->setIcon(QIcon(reload_pixmap));
+        title_reload_->setIconSize(QSize(20, 20));
+        title_reload_->setEnabled(false);
+        QObject::connect(title_reload_, &QPushButton::clicked, this,
+                         [this] { reloadDocument(); });
+        title_layout->addWidget(title_reload_);
         title_search_ = new WolfButton(QStringLiteral("⌕  Search in document…   Ctrl+F"));
         title_search_->setObjectName(QStringLiteral("titleSearch"));
         title_search_->setProperty("titleTool", true);
@@ -4978,8 +5005,6 @@ private:
         menu->addAction(QStringLiteral("Find…\tCtrl+F"), this,
                         [this] { showFind(); });
         menu->addSeparator();
-        reload_action_ = menu->addAction(QStringLiteral("Reload\tF5"), this,
-                                         [this] { reloadDocument(); });
         menu->addAction(QStringLiteral("Reset zoom"), this,
                         [this] { if (active_) changeZoom(100 - active_->zoom_percent); });
         menu->addSeparator();
@@ -5002,9 +5027,30 @@ private:
         actions->addSpacing(4);
         actions->addWidget(more);
         document_actions_->hide();
-        auto* settings_button = new WolfButton(QStringLiteral("⚙  Settings"));
-        settings_button->setProperty("titleTool", true);
+        auto* settings_button = new WolfButton(QStringLiteral("Settings"));
+        settings_button->setObjectName(QStringLiteral("headerSettingsButton"));
         settings_button->setAccessibleName(QStringLiteral("Open Wolfmark Settings"));
+        settings_button->setToolTip(QStringLiteral("Settings (Ctrl+,)"));
+        // Antialiased Qt vector cog rather than a platform-dependent emoji glyph.
+        QPixmap settings_pixmap(22, 22);
+        settings_pixmap.fill(Qt::transparent);
+        {
+            QPainter painter(&settings_pixmap);
+            painter.setRenderHint(QPainter::Antialiasing);
+            painter.setPen(QPen(QColor(colour::silver), 1.7, Qt::SolidLine,
+                                Qt::RoundCap, Qt::RoundJoin));
+            painter.drawEllipse(QRectF(7.5, 7.5, 7, 7));
+            painter.drawEllipse(QRectF(4, 4, 14, 14));
+            for (int degree = 0; degree < 360; degree += 45) {
+                painter.save();
+                painter.translate(11, 11);
+                painter.rotate(degree);
+                painter.drawLine(QPointF(0, -7), QPointF(0, -9.3));
+                painter.restore();
+            }
+        }
+        settings_button->setIcon(QIcon(settings_pixmap));
+        settings_button->setIconSize(QSize(19, 19));
         QObject::connect(settings_button, &QPushButton::clicked, this, [this] { showSettings(); });
         title_layout->addWidget(settings_button);
 
@@ -5025,34 +5071,7 @@ private:
         title_layout->addLayout(captions);
         window_root->insertWidget(0, title_bar_);
 
-        tabs_ = new CompactDocumentTabs;
-        tabs_->setObjectName(QStringLiteral("documentTabs"));
-        tabs_->setAccessibleName(QStringLiteral("Open document tabs"));
-        // We supply a restrained close button instead of Fusion's bright red close box.
-        tabs_->setTabsClosable(false);
-        tabs_->setExpanding(false);
-        tabs_->setElideMode(Qt::ElideMiddle);
-        tabs_->setUsesScrollButtons(true);
-        tabs_->hide();
-        QObject::connect(tabs_, &QTabBar::currentChanged, this, [this](int index) { activateDocument(index); });
-        QObject::connect(tabs_, &QTabBar::tabCloseRequested, this, [this](int index) { closeDocument(index); });
-        tab_row_ = new QWidget;
-        tab_row_->setObjectName(QStringLiteral("documentTabRow"));
-        tab_row_->setAttribute(Qt::WA_StyledBackground);
-        auto* tab_layout = new QHBoxLayout(tab_row_);
-        tab_layout->setContentsMargins(4, 0, 12, 0);
-        tab_layout->setSpacing(3);
-        tab_layout->addWidget(tabs_, 0);
-        auto* new_tab = new WolfButton(QStringLiteral("+"), tab_row_);
-        new_tab->setObjectName(QStringLiteral("newDocumentTab"));
-        new_tab->setFixedSize(30, 30);
-        new_tab->setAccessibleName(QStringLiteral("Open another document"));
-        new_tab->setToolTip(QStringLiteral("Open another document (Ctrl+O)"));
-        QObject::connect(new_tab, &QPushButton::clicked, this, [this] { chooseDocument(); });
-        tab_layout->addWidget(new_tab);
-        tab_layout->addStretch(1);
-        tab_row_->hide();
-        root->addWidget(tab_row_);
+        // File switching and closing are handled by the sidebar only.
         root->addWidget(document_actions_);
 
         find_bar_ = new QWidget;
@@ -5579,8 +5598,6 @@ private:
         sidebar_->hide();
         document_actions_->hide();
         diagnostics_bar_->hide();
-        tabs_->hide();
-        tab_row_->hide();
         closeFind(false);
         showFullScreen();
     }
@@ -5592,8 +5609,6 @@ private:
         updateSidebarVisibility();
         document_actions_->setVisible(!current_path_.isEmpty());
         diagnostics_bar_->setVisible(diagnostics_);
-        tabs_->setVisible(documents_.size() > 1);
-        tab_row_->setVisible(documents_.size() > 1);
         if (restored == 1 || pre_fullscreen_maximized_) {
             showMaximized();
         } else {
@@ -5984,7 +5999,7 @@ private:
         setWindowTitle(QStringLiteral("%1 — Wolfmark").arg(file.fileName()));
         stack_->setCurrentWidget(active_->page);
         focusDocument();
-        reload_action_->setEnabled(true);
+        title_reload_->setEnabled(true);
         document_actions_->setVisible(!fullscreen_);
         zoom_label_->setText(QStringLiteral("%1%").arg(active_->zoom_percent));
         refreshSidebar();
@@ -6019,7 +6034,7 @@ private:
         title_label_->setFullText(QStringLiteral("Documents"));
         title_label_->setToolTip({});
         setWindowTitle(QStringLiteral("Wolfmark"));
-        reload_action_->setEnabled(false);
+        title_reload_->setEnabled(false);
         document_actions_->hide();
         zoom_label_->setText(QStringLiteral("100%"));
         refreshSidebar();
@@ -6042,40 +6057,6 @@ private:
         sidebar_->setDocuments(names, activeDocumentIndex());
         sidebar_->setOutline(active_ ? (active_->mode != OpenDocumentSession::Mode::Reader && active_->editing_outline_ready
                                            ? active_->editing_outline : active_->outline) : QJsonArray{});
-        if (tabs_) {
-            const QSignalBlocker blocker(tabs_);
-            while (tabs_->count() > names.size()) tabs_->removeTab(tabs_->count() - 1);
-            for (int index = 0; index < names.size(); ++index) {
-                if (index >= tabs_->count()) {
-                    const int new_index = tabs_->addTab(names[index]);
-                    auto* closer = new QToolButton(tabs_);
-                    closer->setObjectName(QStringLiteral("documentTabClose"));
-                    closer->setText(QStringLiteral("×"));
-                    closer->setAutoRaise(true);
-                    closer->setCursor(Qt::PointingHandCursor);
-                    closer->setFixedSize(18, 18);
-                    QObject::connect(closer, &QToolButton::clicked, this, [this, closer] {
-                        // Resolve the current index: closing an earlier tab can shift indices.
-                        for (int tab = 0; tab < tabs_->count(); ++tab) {
-                            if (tabs_->tabButton(tab, QTabBar::RightSide) == closer) {
-                                closeDocument(tab);
-                                return;
-                            }
-                        }
-                    });
-                    tabs_->setTabButton(new_index, QTabBar::RightSide, closer);
-                } else tabs_->setTabText(index, names[index]);
-                if (auto* closer = tabs_->tabButton(index, QTabBar::RightSide)) {
-                    closer->setAccessibleName(QStringLiteral("Close %1").arg(names[index]));
-                    closer->setToolTip(QStringLiteral("Close document"));
-                }
-                tabs_->setTabToolTip(index, documents_[static_cast<std::size_t>(index)]->canonical_path);
-            }
-            tabs_->setCurrentIndex(activeDocumentIndex());
-            // A single document already has a title and a sidebar entry.
-            tabs_->setVisible(documents_.size() > 1 && !fullscreen_);
-            tab_row_->setVisible(documents_.size() > 1 && !fullscreen_);
-        }
         if (previous_tab_) previous_tab_->setEnabled(documents_.size() > 1);
         if (next_tab_) next_tab_->setEnabled(documents_.size() > 1);
     }
@@ -6093,8 +6074,6 @@ private:
     WolfButton* title_search_ = nullptr;
     QVector<WolfButton*> mode_segments_;
     QStackedWidget* stack_ = nullptr;
-    QTabBar* tabs_ = nullptr;
-    QWidget* tab_row_ = nullptr;
     WolfButton* previous_tab_ = nullptr;
     WolfButton* next_tab_ = nullptr;
     QActionGroup* mode_group_ = nullptr;
@@ -6104,7 +6083,7 @@ private:
     QLineEdit* find_input_ = nullptr;
     DocumentView* document_ = nullptr;
     WolfButton* open_ = nullptr;
-    QAction* reload_action_ = nullptr;
+    WolfButton* title_reload_ = nullptr;
     WolfButton* zoom_out_ = nullptr;
     WolfButton* zoom_in_ = nullptr;
     wolfmark::qt::CaptionButton* minimize_ = nullptr;

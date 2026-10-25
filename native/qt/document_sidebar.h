@@ -7,7 +7,6 @@
 #include <QWidget>
 #include <functional>
 
-class QAction;
 class QLabel;
 class QPushButton;
 class QTreeWidgetItem;
@@ -33,7 +32,6 @@ public:
     [[nodiscard]] bool testStableDocumentRows() const;
     void cancelOutlineScroll();
     std::function<void()> open;
-    std::function<void()> reload;
     std::function<void(const QString&)> navigate;
     std::function<void(int)> activate_document;
     std::function<void(int)> close_document;
@@ -41,7 +39,6 @@ public:
 private:
     void activateOutlineItem(QTreeWidgetItem* item);
 
-    QAction* reload_action_ = nullptr;
     SmoothTreeWidget* documents_;
     SmoothTreeWidget* outline_;
     QHash<QString, QTreeWidgetItem*> outline_items_;

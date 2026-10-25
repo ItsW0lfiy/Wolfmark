@@ -47,13 +47,9 @@ void apply(QApplication& application) {
         #sidebarSection { color: #ada5a9; font-size: 12px; font-weight: 650; letter-spacing: 1.05px; padding: 0; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
         #documentSidebar QPushButton:hover { background: #2a2a30; }
-        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-top-left-radius: 8px; border-bottom-left-radius: 8px; border-top-right-radius: 0; border-bottom-right-radius: 0; min-height: 0; max-height: 40px; font-weight: 600; padding: 0 12px; text-align: left; }
+        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; min-height: 0; max-height: 40px; font-weight: 600; padding: 0 13px; text-align: left; }
         #documentSidebar #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
         #documentSidebar #sidebarOpenButton:pressed { background: #5e1a2f; }
-        #documentSidebar #sidebarOpenMenuButton { background: #8b2945; color: #f8eef1; border: 1px solid #9d3150; border-left: 0; border-top-right-radius: 8px; border-bottom-right-radius: 8px; padding: 0; }
-        #documentSidebar #sidebarOpenMenuButton:hover { background: #a12b4f; border-color: #c52a50; }
-        #documentSidebar #sidebarOpenMenuButton:pressed { background: #5e1a2f; }
-        #documentSidebar #sidebarOpenMenuButton::menu-indicator { image: none; width: 0; }
         #sidebarFooter { background: transparent; border-top: 1px solid #34343a; }
         #sidebarFooterName { color: #f1efed; font-size: 13px; font-weight: 600; }
         #sidebarFooterVersion { color: #939098; font-size: 12px; }
@@ -83,6 +79,13 @@ void apply(QApplication& application) {
         QPushButton[titleTool="true"]:pressed { background: #3a2029; border-color: #c52a50; }
 
         #documentTitle { color: #c9c6c3; font-size: 13px; font-weight: 500; }
+        #headerReloadButton { background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 4px; }
+        #headerReloadButton:hover { background: #303036; border-color: #414149; }
+        #headerReloadButton:disabled { background: transparent; border-color: transparent; }
+        #headerSettingsButton { background: transparent; border: 1px solid transparent; border-radius: 7px; color: #d5d2d3; font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 13px; font-weight: 500; padding: 5px 9px; }
+        #headerSettingsButton:hover { background: #303036; border-color: #414149; color: #f5f3f3; }
+        #headerSettingsButton:pressed { background: #3a2029; }
+
         #titleSearch { color: #bbb8b6; background: #1d1d22; border: 1px solid #34343a; border-radius: 9px; padding: 5px 13px; }
         #titleSearch:hover { color: #f5f3f3; background: #303036; border-color: #55555c; }
         #titleSearch:disabled { color: #7a7477; background: #202024; border-color: #303036; }
@@ -149,24 +152,12 @@ void apply(QApplication& application) {
         QPlainTextEdit { background: #101012; color: #ebe9e8; border: none; selection-background-color: #653040; selection-color: #ffffff; }
         #documentStatus { color: #c1bdbb; font-size: 11px; }
         #documentStatus[attention="true"] { color: #e27680; }
-        #documentTabClose { color: #a6a19f; background: transparent; border: 0; border-radius: 4px; padding: 0; font-size: 15px; }
-        #documentTabClose:hover { color: #f5f3f3; background: #453034; }
-        #documentTabClose:pressed { color: #ffffff; background: #5a303a; }
         QSlider::groove:horizontal { height: 5px; border-radius: 2px; background: #34343a; }
         QSlider::sub-page:horizontal { background: #c52a50; border-radius: 2px; }
         QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: #f0edeb; border: 1px solid #c52a50; }
-        #documentTabRow { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #1a1a1f, stop:1 #141418); border-bottom: 1px solid #34343a; min-height: 42px; }
-        #newDocumentTab { background: transparent; border: 1px solid transparent; border-radius: 7px; color: #bfb6ba; font-size: 17px; }
-        #newDocumentTab:hover { background: #2f2f34; color: #ffffff; border-color: #484141; }
         #documentNavigationButton { background: transparent; border: 1px solid transparent; color: #bcb9bb; font-size: 17px; padding: 1px; }
         #documentNavigationButton:hover { background: #303036; color: #ffffff; }
         #documentNavigationButton:disabled { color: #6c6467; }
-        #documentTabs { background: transparent; min-height: 40px; }
-        #documentTabs::tab { background: #1d1d21; color: #aaa6a3; border: 1px solid #34343a; border-bottom: 0; border-radius: 9px 9px 0 0; margin: 5px 3px 0 0; padding: 8px 15px; min-height: 25px; }
-        #documentTabs::tab:hover { background: #2d2727; color: #f5f3f3; }
-        #documentTabs::tab:selected { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2a2a30, stop:1 #242428); color: #ffffff; border-top: 2px solid #c52a50; }
-        #documentTabs::tab:focus { border-color: #d64d72; }
-        #documentTabs::tab:disabled { color: #7a7477; }
 
         #updateBanner { background: #211a20; border-bottom: 1px solid #4a2930; }
         #updateLabel { color: #e1dedd; font-weight: 500; }
