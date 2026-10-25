@@ -15,6 +15,7 @@ resolver = "3"
 servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard"] }
 embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
 euclid = "0.22"
+http = "1.4"
 percent-encoding = "2.3"
 rustls = { version = "0.23", features = ["aws-lc-rs"] }
 tracing = "0.1.44"
