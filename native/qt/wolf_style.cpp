@@ -39,8 +39,8 @@ void apply(QApplication& application) {
         #settingsOption { background: #27272d; border: 1px solid #34343a; border-radius: 9px; }
         #settingsOption:hover { background: #2f2f34; border-color: #48484f; }
         #settingsFooter { background: transparent; border-top: 1px solid #34343a; }
-        #settingsOption QCheckBox { color: #efeded; font-weight: 600; }
-        #settingsOption QLabel { padding-left: 28px; }
+        #settingsOption QCheckBox { color: #efeded; font-size: 13px; font-weight: 600; }
+        #settingsOption QLabel { padding-left: 28px; color: #bcb9bb; font-size: 12px; }
         #documentSidebar { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #19191c, stop:1 #16161a); border-right: 1px solid #34343a; }
         #brandSymbol { background: #29292e; border: 1px solid #34343a; border-radius: 7px; }
         #sidebarIdentity { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 18px; font-weight: 600; }
@@ -126,7 +126,7 @@ void apply(QApplication& application) {
         QDialog { background: #151518; }
         #settingsDialog { background: #101012; }
         #settingsChrome { background: #19191c; border-bottom: 1px solid #34343a; }
-        #settingsChromeTitle { color: #ebe9e8; font-size: 13px; font-weight: 600; }
+        #settingsChromeTitle { color: #ebe9e8; font-size: 14px; font-weight: 600; }
         #settingsBody { background: #101012; }
         #settingsNavigation { background: #19191c; border-right: 1px solid #34343a; }
         #settingsNavigation QPushButton[nav="true"] { border-radius: 8px; min-height: 38px; margin: 2px 0; padding: 9px 14px; font-weight: 500; }
@@ -135,7 +135,7 @@ void apply(QApplication& application) {
         #settingsBrand { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 20px; font-weight: 600; }
         #settingsTitle { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 29px; font-weight: 600; }
         #settingsSectionTitle { color: #ebe9e8; font-size: 14px; font-weight: 600; }
-        #settingsHint { color: #9c9895; }
+        #settingsHint { color: #bcb9bb; font-size: 13px; }
         #settingsResult { color: #d5d2d3; padding: 8px 0; }
         #settingsCard { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #28282e, stop:1 #202024); border: 1px solid #34343a; border-radius: 12px; }
         #settingsCard:hover { border-color: #48484f; }
