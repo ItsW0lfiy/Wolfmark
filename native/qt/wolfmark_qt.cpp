@@ -1673,6 +1673,10 @@ private:
     }
 
     void buildBlocks(QTextCursor& cursor, std::size_t& index, int stop_kind, int depth) {
+        // The paragraph immediately after a document-level H1 is the editorial
+        // deck/lead. Keep this state local to each block sequence, so nested
+        // quotes and list contents never inherit the lead treatment.
+        bool introductory_paragraph_pending = false;
         while (index < commands_.size()) {
             const auto& command = commands_[index];
             if (command.source_line > 0)
@@ -1681,15 +1685,22 @@ private:
                 ++index;
                 return;
             }
+            if (command.kind != command_kind::begin_paragraph &&
+                command.kind != command_kind::begin_heading)
+                introductory_paragraph_pending = false;
             switch (command.kind) {
             case command_kind::begin_paragraph:
                 ++index;
-                buildParagraph(cursor, index, false, 0, depth);
+                buildParagraph(cursor, index, false, 0, depth, {}, introductory_paragraph_pending);
+                introductory_paragraph_pending = false;
                 break;
-            case command_kind::begin_heading:
+            case command_kind::begin_heading: {
+                const bool document_title = command.level == 1 && depth == 0 && quote_depth_ == 0;
                 ++index;
                 buildParagraph(cursor, index, true, command.level, depth, command.target);
+                introductory_paragraph_pending = document_title;
                 break;
+            }
             case command_kind::begin_list:
                 buildList(cursor, index, depth);
                 break;
@@ -1767,9 +1778,17 @@ private:
     }
 
     void buildParagraph(QTextCursor& cursor, std::size_t& index, bool heading, int level, int depth,
-                        const QString& anchor = {}) {
+                        const QString& anchor = {}, bool introductory_lead = false) {
         auto block = bodyBlockFormat(settings_.value("lineHeightPercent").toInt(150));
         double points = settings_.value("bodyFontPoints").toDouble(12.75);
+        if (introductory_lead) {
+            // The approved Crimson Graphite reference distinguishes the quiet
+            // H1 lead from ordinary body prose; retain selectable native text.
+            points *= 1.18;
+            block.setLineHeight(138, QTextBlockFormat::ProportionalHeight);
+            block.setTopMargin(0);
+            block.setBottomMargin(12);
+        }
         if (quote_depth_ > 0 && !heading) {
             block.setLineHeight(128, QTextBlockFormat::ProportionalHeight);
             block.setTopMargin(0);
@@ -1794,7 +1813,7 @@ private:
             cursor.insertText(QString(QChar::ObjectReplacementCharacter), named);
         }
         while (index < commands_.size() && commands_[index].kind != command_kind::end_block) {
-            insertInline(cursor, commands_[index], points, heading);
+            insertInline(cursor, commands_[index], points, heading, introductory_lead);
             ++index;
         }
         if (index < commands_.size()) {
@@ -1803,13 +1822,14 @@ private:
         cursor.insertBlock();
     }
 
-    void insertInline(QTextCursor& cursor, const Command& command, double points, bool heading) {
-        if (command.kind == command_kind::soft_break) {
-            cursor.insertText(QStringLiteral(" "), baseCharacterFormat(points));
-            return;
-        }
-        if (command.kind == command_kind::hard_break) {
-            cursor.insertText(QString(QChar::LineSeparator), baseCharacterFormat(points));
+    void insertInline(QTextCursor& cursor, const Command& command, double points, bool heading,
+                      bool introductory_lead = false) {
+        if (command.kind == command_kind::soft_break ||
+            command.kind == command_kind::hard_break) {
+            auto format = baseCharacterFormat(points);
+            if (introductory_lead) format.setForeground(QColor(colour::secondary));
+            cursor.insertText(command.kind == command_kind::soft_break
+                                  ? QStringLiteral(" ") : QString(QChar::LineSeparator), format);
             return;
         }
         if (command.kind == command_kind::image) {
@@ -1827,7 +1847,8 @@ private:
             return;
         }
         auto format = baseCharacterFormat(points);
-        if (quote_depth_ > 0) format.setForeground(QColor(colour::secondary));
+        if (quote_depth_ > 0 || introductory_lead)
+            format.setForeground(QColor(colour::secondary));
         if (heading) {
             format.setFontFamilies({QStringLiteral("Georgia"), QStringLiteral("Cambria"),
                                     QStringLiteral("Segoe UI")});
