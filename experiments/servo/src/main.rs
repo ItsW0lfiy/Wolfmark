@@ -51,6 +51,21 @@ impl servo::WebViewDelegate for State {
         self.window.request_redraw();
     }
 
+    fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
+        // HTTP(S) request associated with this webview: stop it before network I/O.
+        // ServoDelegate's non-webview/background requests need a separate audit.
+        let url = load.request().url.clone();
+        eprintln!("Blocked Servo web resource request: {url}");
+        let response = embedder_traits::WebResourceResponse::new(url)
+            .status_code(http::StatusCode::FORBIDDEN)
+            .status_message(b"Offline-only experiment".to_vec());
+        load.intercept(response).finish();
+    }
+
+    fn request_permission(&self, _webview: WebView, request: servo::PermissionRequest) {
+        request.deny();
+    }
+
     fn request_navigation(&self, _webview: WebView, request: NavigationRequest) {
         // Only data: navigation is permitted by this trial delegate.
         // This does NOT block all HTTP resource or background network paths.
