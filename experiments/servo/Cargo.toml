@@ -1,0 +1,23 @@
+[package]
+name = "wolfmark-servo-test"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "GPL-3.0-only"
+description = "Isolated, optional Servo embedding experiment for Wolfmark"
+
+# Nested workspace: never compile Servo for normal Wolfmark/Qt commands.
+[workspace]
+resolver = "3"
+
+[dependencies]
+servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard"] }
+embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
+euclid = "0.22"
+percent-encoding = "2.3"
+rustls = { version = "0.23", features = ["aws-lc-rs"] }
+tracing = "0.1.44"
+url = "2.5"
+webrender_api = "0.70"
+winit = "0.30.13"
