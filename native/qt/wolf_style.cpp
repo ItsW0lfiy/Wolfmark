@@ -47,7 +47,7 @@ void apply(QApplication& application) {
         #sidebarSection { color: #ada5a9; font-size: 12px; font-weight: 650; letter-spacing: 1.05px; padding: 0; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
         #documentSidebar QPushButton:hover { background: #2a2a30; }
-        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; min-height: 0; max-height: 40px; font-weight: 600; padding: 0 13px; text-align: left; }
+        #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-radius: 8px; min-height: 38px; max-height: 38px; font-weight: 600; padding: 0 13px; text-align: left; }
         #documentSidebar #sidebarOpenButton:hover { background: #8b2945; border-color: #c52a50; }
         #documentSidebar #sidebarOpenButton:pressed { background: #5e1a2f; }
         #sidebarFooter { background: transparent; border-top: 1px solid #34343a; }

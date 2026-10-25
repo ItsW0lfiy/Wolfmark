@@ -2948,10 +2948,16 @@ public:
                                 // The sidebar is the sole document selector. No parallel tab strip.
                     const bool no_tabs = findChild<QTabBar*>() == nullptr &&
                                          findChild<QWidget*>(QStringLiteral("documentTabRow")) == nullptr;
-                    const bool single_open = sidebar_->findChild<QPushButton*>(
-                        QStringLiteral("sidebarOpenButton")) != nullptr &&
+                    auto* open_button = sidebar_->findChild<QPushButton*>(
+                        QStringLiteral("sidebarOpenButton"));
+                    const bool single_open = open_button != nullptr &&
                         sidebar_->findChild<QToolButton*>(
                             QStringLiteral("sidebarOpenMenuButton")) == nullptr;
+                    // The native button must retain its intended height after
+                    // Qt stylesheets and layouts have been applied.
+                    const bool open_geometry_ok = open_button &&
+                        open_button->height() == 40 &&
+                        open_button->width() >= sidebar_->width() - 50;
                     bool reload_ok = title_reload_ && title_reload_->isEnabled() &&
                         title_reload_->accessibleName() == QStringLiteral("Reload current document");
                     if (reload_ok) {
@@ -2968,11 +2974,13 @@ public:
                         title_label_->text().startsWith(QStringLiteral("Documents"));
                     const bool icons_ok = sidebar_->testDocumentIconMapping();
                     const bool stable_rows = sidebar_->testStableDocumentRows();
-                    ok &= no_tabs && single_open && reload_ok && settings_ok &&
+                    ok &= no_tabs && single_open && open_geometry_ok && reload_ok && settings_ok &&
                           breadcrumb_ok && icons_ok && stable_rows;
                     std::fprintf(stdout,
-                        "SHELL_REFERENCE no_duplicate_tabs=%s open=%s reload=%s settings_icon=%s breadcrumb=%s dirty_file_icons=%s stable_rows=%s\n",
+                        "SHELL_REFERENCE no_duplicate_tabs=%s open=%s open_geometry=%s(%dx%d) reload=%s settings_icon=%s breadcrumb=%s dirty_file_icons=%s stable_rows=%s\n",
                         no_tabs ? "ok" : "failed", single_open ? "ok" : "failed",
+                        open_geometry_ok ? "ok" : "failed", open_button ? open_button->width() : 0,
+                        open_button ? open_button->height() : 0,
                         reload_ok ? "ok" : "failed", settings_ok ? "ok" : "failed",
                         breadcrumb_ok ? "ok" : "failed", icons_ok ? "ok" : "failed",
                         stable_rows ? "ok" : "failed");
