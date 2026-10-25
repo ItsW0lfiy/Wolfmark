@@ -198,6 +198,18 @@ jobs:
           & $runSmoke -arguments @('fixtures/table-corner-quality.md', '--smoke-style')
           & $runSmoke -arguments @('fixtures/inline-code-quality.md', '--smoke-style')
 
+          # The Windows integration suite checks six outline/image reflow cases.
+          # Keep them in CI too: Linux Rust tests cannot execute the Windows-only
+          # native_frontend.rs cases, so green Linux builds alone miss this race.
+          foreach ($fixture in @(
+            'outline-reflow-single.md', 'outline-reflow-multiple.md',
+            'outline-reflow-missing.md', 'outline-reflow-failed.md',
+            'outline-reflow-bottom.md', 'outline-reflow-rapid.md'
+          )) {
+            Write-Host "Native outline/reflow verification: $fixture"
+            & $runSmoke -arguments @("fixtures/$fixture", '--smoke-outline-reflow')
+          }
+
           $env:WOLFMARK_SNAPSHOT_WIDTH = '1648'
           $env:WOLFMARK_SNAPSHOT_HEIGHT = '928'
           foreach ($mode in @('reader', 'live')) {
