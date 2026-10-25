@@ -58,11 +58,11 @@ jobs:
         run: |
           timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-render
           timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-snapshot
-      - name: Capture multi-document tabs and code styling
+      - name: Capture sidebar-only multi-document navigation and code styling
         env:
           QT_QPA_PLATFORM: offscreen
           WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
-          WOLFMARK_SNAPSHOT_NAME: "crimson-graphite-tabs"
+          WOLFMARK_SNAPSHOT_NAME: "crimson-graphite-multidoc"
         run: timeout 45s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md fixtures/code-block-quality.md --smoke-snapshot
       - name: Capture selected Live Preview styling
         env:

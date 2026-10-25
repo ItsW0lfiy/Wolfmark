@@ -23,8 +23,10 @@ file icons in `assets/design-reference/wolfmark/` remain authoritative.
   the same dark background.
 - Sidebar: correct hierarchical outline connectors, document file icons,
   selection treatment, spacing, rounded hover/selected rows and footer.
-- Tabs and toolbar: crisp joined geometry, real icons, visually continuous
-  segmented modes, smooth radius joins, restrained separators and no clipping.
+- One document navigation surface: open-document selection and close controls live
+  in the sidebar only. No second horizontal file tab strip or duplicate plus tab.
+- Toolbar: crisp joined geometry, real icons, visually continuous segmented
+  Reader/Live Preview/Source modes, smooth radius joins and no clipping.
 - Reader: editorial typography, clear hierarchy, soft graphite layers, rounded
   inline-code pills, full-width rounded code frames with an integrated
   language header and a **functional Copy button on the right**, accurately
@@ -52,12 +54,16 @@ file icons in `assets/design-reference/wolfmark/` remain authoritative.
 
 ## Layout contract
 
-- Graphite titlebar: 48 logical pixels, dynamic breadcrumb, interactive Find,
-  Settings, and real native caption controls.
-- Sidebar: 240 logical pixels; one real Open action, Reload, open documents,
-  outline navigation, and a restrained footer. Only real files are listed.
-- Tabs: multi-document strip with real close and new-document actions; no
-  decorative blank tabs. Single-document sessions remain tabless by design.
+- Graphite titlebar: 48 logical pixels, dynamic breadcrumb, a genuine Reload
+  action (F5), interactive Find, a native vector Settings icon with readable
+  text, and real native caption controls.
+- Sidebar: 240 logical pixels; one full-width Open document button (Ctrl+O),
+  open documents with selection/close controls, outline navigation, and a
+  restrained footer. Only real files are listed. No Open dropdown.
+- No horizontal document tabs, including when multiple files are open; do not
+  reintroduce them from the older approved-concept illustration.
+- Disabled controls must never advertise a clickable hand cursor. Native
+  hit testing must distinguish interactive controls from passive surfaces.
 - Command row: 48 logical pixels, real previous/next-open-document navigation,
   equal treatment of Reader / Live Preview / Source, actual zoom and actions.
 - Document canvas: full available width, readable editorial hierarchy,
@@ -85,14 +91,15 @@ file icons in `assets/design-reference/wolfmark/` remain authoritative.
 Every visible control must either execute an existing function or be disabled
 with an accurate accessible description. Previous/next arrows cycle among real
 open sessions (Alt+Left and Alt+Right); they are not a fabricated edit history.
-The plus control opens the real file chooser. There are no imaginary vaults,
-folders, cloud searches, accounts, bookmarks, or paid features.
+The Open document button opens the real file chooser. Reload is a separate
+top-bar action. There are no imaginary vaults, folders, cloud searches,
+accounts, bookmarks, or paid features.
 
 ## Verification matrix
 
 1. `cargo check -p wolfmark --locked --offline` / `cargo test -p wolfmark`
 2. `cargo build -p wolfmark`, real Qt offscreen Reader/Live/Source screenshots
-3. Shell-mode interaction smoke and multi-document title/tab checks
+3. Shell-mode interaction smoke, no-duplicate-tabs checks, native-icon and disabled-cursor checks
 4. Code-frame render, selection/copy behavior, code editing history
 5. Fast-wheel/scroll stabilization, anchor preservation, resize, zoom
 6. Settings modal navigation, Save/Cancel persistence, keyboard focus
