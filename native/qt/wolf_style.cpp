@@ -44,7 +44,7 @@ void apply(QApplication& application) {
         #documentSidebar { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #19191c, stop:1 #16161a); border-right: 1px solid #34343a; }
         #brandSymbol { background: #29292e; border: 1px solid #34343a; border-radius: 7px; }
         #sidebarIdentity { color: #f1efed; font-family: "Georgia", "Cambria", "Segoe UI"; font-size: 18px; font-weight: 600; }
-        #sidebarSection { color: #ada5a9; font-size: 10px; font-weight: 650; letter-spacing: 1.05px; padding: 0 7px; }
+        #sidebarSection { color: #ada5a9; font-size: 12px; font-weight: 650; letter-spacing: 1.05px; padding: 0; }
         #documentSidebar QPushButton { background: transparent; border-color: transparent; text-align: left; min-height: 34px; padding-left: 11px; }
         #documentSidebar QPushButton:hover { background: #2a2a30; }
         #documentSidebar #sidebarOpenButton { background: #712038; color: #f8eef1; border: 1px solid #9d3150; border-top-left-radius: 8px; border-bottom-left-radius: 8px; border-top-right-radius: 0; border-bottom-right-radius: 0; min-height: 0; max-height: 40px; font-weight: 600; padding: 0 12px; text-align: left; }
@@ -55,10 +55,10 @@ void apply(QApplication& application) {
         #documentSidebar #sidebarOpenMenuButton:pressed { background: #5e1a2f; }
         #documentSidebar #sidebarOpenMenuButton::menu-indicator { image: none; width: 0; }
         #sidebarFooter { background: transparent; border-top: 1px solid #34343a; }
-        #sidebarFooterName { color: #f1efed; font-size: 12px; font-weight: 600; }
-        #sidebarFooterVersion { color: #939098; font-size: 11px; }
+        #sidebarFooterName { color: #f1efed; font-size: 13px; font-weight: 600; }
+        #sidebarFooterVersion { color: #939098; font-size: 12px; }
 
-        QTreeWidget { background: transparent; border: none; color: #bcb9bb; font-size: 13px; outline: 0; }
+        QTreeWidget { background: transparent; border: none; color: #bcb9bb; font-size: 14px; outline: 0; }
         QTreeWidget::item { padding: 7px 6px; border: 1px solid transparent; border-radius: 6px; }
         QTreeWidget::item:hover { background: #252529; color: #f5f3f3; }
         QTreeWidget::item:selected { background: #33242b; color: #f5f3f3; border-left: 3px solid #c52a50; }

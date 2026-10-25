@@ -153,7 +153,7 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_StyledBackground);
     setFixedWidth(style::metric::sidebar_width);
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(22, 18, 18, 14);
+    layout->setContentsMargins(22, 14, 18, 14);
     layout->setSpacing(8);
     // Branding is now above the sidebar in the single global titlebar.
     // Avoid the duplicate paw and product name from the legacy side rail.
@@ -261,12 +261,12 @@ DocumentSidebar::DocumentSidebar(QWidget* parent) : QWidget(parent) {
     footer->setAttribute(Qt::WA_StyledBackground);
     auto* footer_layout = new QHBoxLayout(footer);
     footer_layout->setContentsMargins(5, 12, 0, 2);
-    footer_layout->setSpacing(9);
+    footer_layout->setSpacing(18);
     auto* footer_symbol = new QLabel;
     QIcon footer_icon(QDir::current().filePath(QStringLiteral("assets/icons/wolfmark-32x32.png")));
     if (footer_icon.isNull()) footer_icon = QApplication::windowIcon();
-    footer_symbol->setPixmap(footer_icon.pixmap(28, 28));
-    footer_symbol->setFixedSize(30, 30);
+    footer_symbol->setPixmap(footer_icon.pixmap(36, 36));
+    footer_symbol->setFixedSize(42, 42);
     footer_symbol->setAlignment(Qt::AlignCenter);
     footer_layout->addWidget(footer_symbol);
     auto* footer_copy = new QVBoxLayout;
