@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 //! Minimal Servo embedding investigation. Not the approved Wolfmark interface.
 //!
 //! Source basis: Servo v0.7.0 components/servo/examples/winit_minimal.rs (MPL-2.0).
