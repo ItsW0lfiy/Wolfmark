@@ -992,6 +992,11 @@ public:
     }
     [[nodiscard]] quint64 navigationEpoch() const { return navigation_epoch_; }
     [[nodiscard]] quint64 layoutGeneration() const { return layout_generation_; }
+    [[nodiscard]] quint64 correctedNavigationGeneration() const {
+        return navigation_corrected_generation_;
+    }
+    [[nodiscard]] int navigationStablePasses() const { return navigation_stable_passes_; }
+    void requestRedundantNavigationRetargetForTest() { scheduleNavigationRetarget(); }
     [[nodiscard]] int pendingNavigationImages() const {
         const auto found = anchor_positions_.constFind(navigation_anchor_);
         if (found == anchor_positions_.cend()) return 0;
@@ -1623,14 +1628,19 @@ private:
             cancelScrollMotion();
             return;
         }
-        if (*destination != verticalScrollBar()->value()) {
+        const bool generation_changed = navigation_corrected_generation_ != layout_generation_;
+        const bool moved = *destination != verticalScrollBar()->value();
+        if (moved) {
             ++navigation_retarget_count_;
             scroll_controller_.moveDirectlyTo(*destination);
         }
         navigation_corrected_generation_ = layout_generation_;
-        navigation_stable_passes_ = 0;
+        // Repeated no-op range notifications must not prevent a successful
+        // one-click navigation from completing its two stable settlement passes.
+        if (generation_changed || moved) navigation_stable_passes_ = 0;
         queueVisibleImages();
-        scheduleNavigationSettlement();
+        if (generation_changed || moved || !navigation_settle_.isActive())
+            scheduleNavigationSettlement();
     }
 
     void settleNavigation() {
@@ -3730,6 +3740,17 @@ public:
                     immediate ? "yes" : "no", no_motion ? "stopped" : "running");
 
                 document_->setImageDeliveryPausedForTest(false);
+                // Exercise redundant native range/layout notifications during a
+                // rapid second click. A no-op retarget must not starve the
+                // quiet settlement timer even if Qt sends them continuously.
+                auto* retarget_stress = rapid ? new QTimer(this) : nullptr;
+                if (retarget_stress) {
+                    retarget_stress->setInterval(8);
+                    QObject::connect(retarget_stress, &QTimer::timeout, this, [this] {
+                        document_->requestRedundantNavigationRetargetForTest();
+                    });
+                    retarget_stress->start();
+                }
                 auto* poll = new QTimer(this);
                 auto elapsed = std::make_shared<QElapsedTimer>();
                 elapsed->start();
@@ -3737,13 +3758,17 @@ public:
                 QObject::connect(poll, &QTimer::timeout, this,
                     [this, poll, elapsed, before, constructions, target, rapid, missing, failed,
                      activation, latest_wins, expected_pending, immediate, no_motion,
-                     provisional_document_y, provisional_maximum, generation] {
+                     provisional_document_y, provisional_maximum, generation, retarget_stress] {
                     if ((document_->navigationActive() ||
                          document_->pendingImageDecodes() > 0) && elapsed->elapsed() < 6000) {
                         return;
                     }
                     poll->stop();
                     poll->deleteLater();
+                    if (retarget_stress) {
+                        retarget_stress->stop();
+                        retarget_stress->deleteLater();
+                    }
 
                     const int final_document_y = document_->anchorDocumentY(target);
                     const int final_viewport_y = document_->anchorViewportY(target);
@@ -3785,6 +3810,14 @@ public:
                         document_->navigationImageRetargetCount(),
                         document_->viewportAnchorPosition(),
                         motion_stopped ? "stopped" : "running");
+                    std::fprintf(stdout,
+                        "OUTLINE_REFLOW_DIAG elapsed_ms=%lld active=%s pending_decodes=%d "
+                        "pending_navigation=%d stable_passes=%d corrected_generation=%llu\n",
+                        static_cast<long long>(elapsed->elapsed()),
+                        document_->navigationActive() ? "yes" : "no",
+                        document_->pendingImageDecodes(), document_->pendingNavigationImages(),
+                        document_->navigationStablePasses(),
+                        static_cast<unsigned long long>(document_->correctedNavigationGeneration()));
                     std::fprintf(stdout,
                         "WOLFMARK_SMOKE outline_reflow=%s one_click=%s latest_wins=%s "
                         "counters=%s scenario=%s\n",
