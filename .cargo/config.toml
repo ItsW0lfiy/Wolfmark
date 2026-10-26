@@ -3,9 +3,9 @@ target-dir = "out/cargo"
 
 [alias]
 # The isolated Servo experiment is opt-in. Bare cargo run/build always keep Qt.
-servo-test = ["run", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo"]
-build-servo-test = ["build", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo"]
-check-servo-test = ["check", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo"]
+servo-test = ["run", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo/target"]
+build-servo-test = ["build", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo/target"]
+check-servo-test = ["check", "--manifest-path", "experiments/servo/Cargo.toml", "--target-dir", "out/servo-cargo/target"]
 app = "run --release"
 build-app = "build --release"
 setup = ["run", "--quiet", "--manifest-path", "scripts/cargo_alias/Cargo.toml", "--target-dir", "out/cargo-alias", "--", "setup"]
