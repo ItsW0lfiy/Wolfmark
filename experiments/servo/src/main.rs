@@ -14,15 +14,21 @@ use std::rc::Rc;
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use servo::{
-    InputEvent, MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent,
-    MouseMoveEvent, NavigationRequest, RenderingContext, Servo, ServoBuilder, WebView,
-    WebViewBuilder, WheelDelta, WheelEvent, WheelMode, WindowRenderingContext,
+    Code as ServoCode, InputEvent, Key as ServoKey, KeyState as ServoKeyState,
+    KeyboardEvent as ServoKeyboardEvent, Location as ServoLocation,
+    Modifiers as ServoModifiers, MouseButton as ServoMouseButton, MouseButtonAction,
+    MouseButtonEvent, MouseMoveEvent, NamedKey as ServoNamedKey, NavigationRequest,
+    RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder, WheelDelta, WheelEvent,
+    WheelMode, WindowRenderingContext,
 };
 use tracing::warn;
 use url::Url;
 use webrender_api::units::DevicePoint;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{
+    ElementState, KeyEvent, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent,
+};
+use winit::keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey as WinitNamedKey, PhysicalKey};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
@@ -45,6 +51,7 @@ struct State {
     context: Rc<WindowRenderingContext>,
     view: RefCell<Vec<WebView>>,
     cursor: RefCell<DevicePoint>,
+    modifiers: RefCell<ServoModifiers>,
 }
 
 impl servo::WebViewDelegate for State {
@@ -113,6 +120,7 @@ impl ApplicationHandler<Wake> for App {
                 context,
                 view: RefCell::new(Vec::new()),
                 cursor: RefCell::new(DevicePoint::new(0.0, 0.0)),
+                modifiers: RefCell::new(ServoModifiers::empty()),
             });
 
             let page_url = local_probe_url();
@@ -163,6 +171,27 @@ impl ApplicationHandler<Wake> for App {
                 if let App::Running(state) = self {
                     if let Some(view) = state.view.borrow().last() {
                         view.set_hidpi_scale_factor(Scale::new(scale_factor as f32));
+                    }
+                }
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                if let App::Running(state) = self {
+                    let current = modifiers.state();
+                    let mut flags = ServoModifiers::empty();
+                    flags.set(ServoModifiers::SHIFT, current.shift_key());
+                    flags.set(ServoModifiers::CONTROL, current.control_key());
+                    flags.set(ServoModifiers::ALT, current.alt_key());
+                    flags.set(ServoModifiers::META, current.super_key());
+                    *state.modifiers.borrow_mut() = flags;
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let App::Running(state) = self {
+                    if let Some(input) = keyboard_input(&event, *state.modifiers.borrow()) {
+                        if let Some(view) = state.view.borrow().last() {
+                            view.notify_input_event(input);
+                            state.servo.spin_event_loop();
+                        }
                     }
                 }
             }
@@ -222,6 +251,90 @@ impl ApplicationHandler<Wake> for App {
     }
 }
 
+// This is intentionally limited to the keys needed to smoke-test selection,
+ // scrolling, ordinary typing and shortcuts. IME/dead keys, clipboard and
+ // comprehensive keyboard mappings still require separate acceptance tests.
+fn keyboard_input(event: &KeyEvent, modifiers: ServoModifiers) -> Option<InputEvent> {
+    let key = match &event.logical_key {
+        WinitKey::Character(text) => ServoKey::Character(text.to_string()),
+        WinitKey::Named(named) => {
+            let value = match named {
+                WinitNamedKey::Space => return Some(InputEvent::Keyboard(
+                    ServoKeyboardEvent::new_without_event(
+                        key_state(event.state),
+                        ServoKey::Character(" ".into()),
+                        ServoCode::Space,
+                        ServoLocation::Standard,
+                        modifiers,
+                        event.repeat,
+                        false,
+                    ),
+                )),
+                WinitNamedKey::Tab => ServoNamedKey::Tab,
+                WinitNamedKey::Enter => ServoNamedKey::Enter,
+                WinitNamedKey::Escape => ServoNamedKey::Escape,
+                WinitNamedKey::Backspace => ServoNamedKey::Backspace,
+                WinitNamedKey::Delete => ServoNamedKey::Delete,
+                WinitNamedKey::Home => ServoNamedKey::Home,
+                WinitNamedKey::End => ServoNamedKey::End,
+                WinitNamedKey::PageUp => ServoNamedKey::PageUp,
+                WinitNamedKey::PageDown => ServoNamedKey::PageDown,
+                WinitNamedKey::ArrowUp => ServoNamedKey::ArrowUp,
+                WinitNamedKey::ArrowDown => ServoNamedKey::ArrowDown,
+                WinitNamedKey::ArrowLeft => ServoNamedKey::ArrowLeft,
+                WinitNamedKey::ArrowRight => ServoNamedKey::ArrowRight,
+                WinitNamedKey::Shift => ServoNamedKey::Shift,
+                WinitNamedKey::Control => ServoNamedKey::Control,
+                WinitNamedKey::Alt => ServoNamedKey::Alt,
+                WinitNamedKey::Super => ServoNamedKey::Meta,
+                _ => return None,
+            };
+            ServoKey::Named(value)
+        }
+        _ => return None,
+    };
+    let code = match event.physical_key {
+        PhysicalKey::Code(KeyCode::KeyA) => ServoCode::KeyA,
+        PhysicalKey::Code(KeyCode::KeyC) => ServoCode::KeyC,
+        PhysicalKey::Code(KeyCode::KeyV) => ServoCode::KeyV,
+        PhysicalKey::Code(KeyCode::KeyX) => ServoCode::KeyX,
+        PhysicalKey::Code(KeyCode::KeyZ) => ServoCode::KeyZ,
+        PhysicalKey::Code(KeyCode::KeyF) => ServoCode::KeyF,
+        PhysicalKey::Code(KeyCode::Tab) => ServoCode::Tab,
+        PhysicalKey::Code(KeyCode::Enter) => ServoCode::Enter,
+        PhysicalKey::Code(KeyCode::Escape) => ServoCode::Escape,
+        PhysicalKey::Code(KeyCode::Backspace) => ServoCode::Backspace,
+        PhysicalKey::Code(KeyCode::Delete) => ServoCode::Delete,
+        PhysicalKey::Code(KeyCode::ArrowUp) => ServoCode::ArrowUp,
+        PhysicalKey::Code(KeyCode::ArrowDown) => ServoCode::ArrowDown,
+        PhysicalKey::Code(KeyCode::ArrowLeft) => ServoCode::ArrowLeft,
+        PhysicalKey::Code(KeyCode::ArrowRight) => ServoCode::ArrowRight,
+        _ => ServoCode::Unidentified,
+    };
+    let location = match event.location {
+        KeyLocation::Left => ServoLocation::Left,
+        KeyLocation::Right => ServoLocation::Right,
+        KeyLocation::Numpad => ServoLocation::Numpad,
+        KeyLocation::Standard => ServoLocation::Standard,
+    };
+    Some(InputEvent::Keyboard(ServoKeyboardEvent::new_without_event(
+        key_state(event.state),
+        key,
+        code,
+        location,
+        modifiers,
+        event.repeat,
+        false,
+    )))
+}
+
+fn key_state(state: ElementState) -> ServoKeyState {
+    match state {
+        ElementState::Pressed => ServoKeyState::Down,
+        ElementState::Released => ServoKeyState::Up,
+    }
+}
+
 #[derive(Debug)]
 struct Wake;
 
@@ -257,6 +370,7 @@ small { color: #aaa2a9; }
 main { margin: 25px auto; max-width: 920px; padding: 0 28px 80px; }
 h2 { margin-top: 32px; color: #eeb0ab; }
 blockquote { border-left: 4px solid #b74a56; padding-left: 15px; margin-left: 0; color: #c8bec1; }
+input, textarea { display: block; width: 100%; padding: 12px; margin: 9px 0; color: #eee; background: #302b31; border: 1px solid #71646a; border-radius: 5px; font: inherit; }
 table { border-collapse: collapse; width: 100%; }
 th, td { padding: 10px; border-bottom: 1px solid #504750; text-align: left; }
 pre { background: #29252b; padding: 16px; overflow-x: auto; }
@@ -273,6 +387,13 @@ document, not Wolfmark's existing QTextDocument implementation.</p>
 <p class="selection-target"><strong>Bold</strong>, <em>italic</em>, <code>inline code</code>, and <a href="#table">an internal anchor</a>.
 Try scrolling, resizing, and mouse selection. Clipboard and keyboard forwarding are not yet implemented.</p>
 <blockquote>A local, script-free page used for early rendering tests.</blockquote>
+<h2 id="keyboard">Keyboard and selection smoke test</h2>
+<p>Tab into this field, type characters, use Shift+arrows, Ctrl+A/C/V, Home/End
+and PageUp/PageDown. Clipboard and IME behavior must be validated separately.</p>
+<input aria-label="Keyboard smoke input" value="Select or replace this local text">
+<textarea aria-label="Keyboard smoke editor" rows="3">Local-only editing surface. No document is saved.</textarea>
+<p><a href="https://example.com/should-be-blocked">Attempt external navigation (must be denied)</a>.</p>
+<p><img width="32" height="32" alt="Embedded local PNG" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9VEGlRIAAAAASUVORK5CYII="></p>
 <h2 id="table">Tables and code</h2>
 <table><thead><tr><th>Capability</th><th>Initial target</th></tr></thead>
 <tbody><tr><td>Embedded rendering</td><td>Observe on Windows</td></tr>
