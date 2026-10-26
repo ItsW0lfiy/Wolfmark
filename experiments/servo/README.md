@@ -27,6 +27,27 @@ Servo's native Windows build prerequisites, and downloads crates *at build time*
 See Servo's official [build prerequisites](https://book.servo.org/building/index.html).
 The experiment does not require Qt, WebView2, Node.js or a local HTTP server.
 
+## Windows OpenGL startup troubleshooting
+
+On a hybrid-GPU Windows laptop, the first successfully **linked and launched**
+Servo 0.7 test crashed during `WindowRenderingContext::new()` at
+`glow 0.17` while querying `GL_VERSION`. The logs also reported missing
+Surfman GPU-selection exports. We now invoke Surfman's upstream
+`declare_surfman!()` macro at the executable root to declare these exports,
+and print initialization diagnostics.
+
+**This does not establish a runtime fix.** The OpenGL version panic can still
+occur if the WGL context is not current when Servo initializes its
+`glow::Context`. In the upstream Servo 0.7 implementation, `SurfmanRenderingContext::new`
+constructs the `glow` wrapper before explicitly making the newly created
+context current; the Surfman Windows context constructor temporarily binds
+it and then restores the previous context. If the GPU export fix is insufficient,
+we should maintain a small upstream rendering-context patch, not blindly switch
+drivers or redesign Wolfmark.
+
+A successful `cargo check-servo-test` validates compilation only. CI on
+headless Windows cannot prove a graphics window runs on a hybrid-GPU laptop.
+
 ## Windows SpiderMonkey build notes
 
 The initial Oct 26 Windows CI and laptop checks failed inside
