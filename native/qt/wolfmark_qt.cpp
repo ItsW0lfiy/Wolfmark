@@ -3622,17 +3622,11 @@ public:
                 const auto before = api_->backend_counters(backend_);
                 const auto constructions = document_->constructionCount();
                 const auto normal_geometry = geometry();
-                const auto native_maximize_click = [this] {
-#ifdef _WIN32
-                    const QPoint global = maximize_->mapToGlobal(maximize_->rect().center());
-                    const LPARAM point = MAKELPARAM(global.x(), global.y());
-                    const HWND handle = reinterpret_cast<HWND>(winId());
-                    SendMessageW(handle, WM_NCLBUTTONDOWN, HTMAXBUTTON, point);
-                    SendMessageW(handle, WM_NCLBUTTONUP, HTMAXBUTTON, point);
-#else
-                    maximize_->click();
-#endif
-                };
+                // Test the real connected Qt caption control via its click
+                // action. Synthetic WM_NCLBUTTONDOWN messages do not represent
+                // a real mouse gesture and may be discarded by virtual desktops.
+                // Native HTMAXBUTTON hit-testing is checked separately above.
+                const auto native_maximize_click = [this] { maximize_->click(); };
                 native_maximize_click();
                 QTimer::singleShot(100, this,
                     [this, status, styles, captions, minimize_client, maximize_hit, close_client,
@@ -4256,11 +4250,29 @@ public:
             QTimer::singleShot(250, this, [this] {
                 QFile source(current_path_);
                 const bool opened = source.open(QIODevice::ReadOnly);
-                const auto expected = opened ? QString::fromUtf8(source.readAll()) : QString{};
+                auto expected = opened ? QString::fromUtf8(source.readAll()) : QString{};
+                // Git on Windows may check out .txt fixtures with CRLF. Native
+                // QTextDocument represents line breaks as LF regardless of the
+                // disk convention. Compare the displayed text, not raw endings;
+                // byte-exact source round-trips are tested in the editor suite.
+                expected.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+                expected.replace(QLatin1Char('\r'), QLatin1Char('\n'));
                 const auto counters = api_->backend_counters(backend_);
+                const auto actual = document_->plainText();
                 const bool ok = opened && document_->isPlainText() &&
-                                document_->plainText() == expected &&
+                                actual == expected &&
                                 document_->discoveredImages() == 0 && counters.parse_count == 0;
+                if (!ok) {
+                    std::fprintf(stderr,
+                        "PLAINTEXT_DIAG loaded=%s mode=%s expected_units=%lld actual_units=%lld "
+                        "same_content=%s images=%d parse=%llu\n",
+                        opened ? "yes" : "no", document_->isPlainText() ? "plain" : "markdown",
+                        static_cast<long long>(expected.size()),
+                        static_cast<long long>(actual.size()),
+                        actual == expected ? "yes" : "no",
+                        document_->discoveredImages(),
+                        static_cast<unsigned long long>(counters.parse_count));
+                }
                 std::fprintf(stdout,
                              "WOLFMARK_SMOKE plaintext=%s chars=%lld construction_us=%llu parse_count=%llu images=%d\n",
                              ok ? "ok" : "failed", static_cast<long long>(expected.size()),
