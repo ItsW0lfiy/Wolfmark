@@ -178,6 +178,11 @@ jobs:
           & "$env:QT_ROOT_DIR/bin/windeployqt.exe" --release --no-translations "$app"
           if ($LASTEXITCODE -ne 0) { throw 'Wolfmark Qt runtime deployment failed.' }
 
+          # Run the same native integration suite as cargo all, not just a
+          # hand-picked subset of Windows smoke tests.
+          cargo test --locked -p wolfmark --test native_frontend -- --test-threads=2
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native frontend integration suite failed.' }
+
           # Windows must exercise the actual application, not only compile it.
           # Each smoke mode exits on its own; the timeout catches GUI deadlocks.
           $runSmoke = {
