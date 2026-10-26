@@ -27,6 +27,27 @@ Servo's native Windows build prerequisites, and downloads crates *at build time*
 See Servo's official [build prerequisites](https://book.servo.org/building/index.html).
 The experiment does not require Qt, WebView2, Node.js or a local HTTP server.
 
+## Patched Servo paint component (upstream fix)
+
+The first executable launch failed in `glow 0.17` with `GL_VERSION`
+because Servo 0.7.0 constructs `glow` before making the WGL OpenGL context
+current. We backport Servo's already-merged
+[commit 16e4b1591e1f](https://github.com/servo/servo/commit/16e4b1591e1fa4a47016643e34d4f259185c5f2f)
+using an isolated `[patch.crates-io]` override of `servo-paint-api`.
+
+The vendored component contains the original v0.7.0 source (MPL-2.0)
+with **only that small rendering-context fix**. See
+`vendor/servo-paint-api/README.md`. It does not affect Qt,
+the normal Cargo workspace or users' system graphics drivers.
+
+Expect Servo dependencies to rebuild **once** after changing this patch,
+as a key upstream library changed. Do not `cargo clean` and do not upgrade
+hundreds of unrelated crates.
+
+**The fix still requires real Windows rendering validation**. Passing
+`cargo check-servo-test` or Windows headless CI is not equivalent
+to seeing the test page render.
+
 ## Windows OpenGL startup troubleshooting
 
 On a hybrid-GPU Windows laptop, the first successfully **linked and launched**

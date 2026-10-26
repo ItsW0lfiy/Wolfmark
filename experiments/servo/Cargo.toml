@@ -23,3 +23,7 @@ url = "2.5"
 webrender_api = "0.70"
 winit = "0.30.13"
 surfman = "=0.14.0"
+
+# Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
+[patch.crates-io]
+servo-paint-api = { path = "vendor/servo-paint-api" }

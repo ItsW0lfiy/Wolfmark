@@ -1,0 +1,48 @@
+[package]
+name = "servo-paint-api"
+version = "0.7.0"
+authors = ["The Servo Project Developers"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.88.0"
+repository = "https://github.com/servo/servo"
+description = "Locally patched Servo 0.7.0 paint API for the isolated Wolfmark experiment"
+
+[lib]
+name = "paint_api"
+path = "lib.rs"
+
+[features]
+no-wgl = ["surfman/sm-angle-default"]
+tracing = ["dep:tracing"]
+
+[dependencies]
+bitflags = "2.11"
+crossbeam-channel = "0.5"
+dpi = "0.1"
+embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
+euclid = "0.22"
+gleam = "0.15"
+glow = "0.17.0"
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "rayon", "webp"] }
+log = "0.4.32"
+malloc_size_of = { package = "servo-malloc-size-of", version = "=0.7.0" }
+malloc_size_of_derive = "0.1"
+parking_lot = { version = "0.12", features = ["serde"] }
+profile_traits = { package = "servo-profile-traits", version = "=0.7.0" }
+raw-window-handle = "0.6"
+rustc-hash = "2.1.2"
+serde = "1.0.228"
+serde_bytes = "0.11"
+servo-base = { version = "=0.7.0" }
+servo-geometry = { version = "=0.7.0" }
+servo-tracing = { version = "=0.7.0" }
+servo-url = { version = "=0.7.0" }
+smallvec = { version = "1.15", features = ["serde", "union"] }
+strum = { version = "0.28", features = ["derive"] }
+stylo = "0.22"
+stylo_traits = "0.22"
+surfman = { version = "0.14.0", features = ["sm-x11"] }
+tracing = { version = "0.1.44", optional = true }
+webrender_api = "0.70"
