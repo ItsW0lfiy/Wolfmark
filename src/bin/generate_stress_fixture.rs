@@ -57,7 +57,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
         }
     }
-    std::fs::write(root.join("image-stress.md"), markdown)?;
+    // Both native integration tests and performance tools require these files.
+    std::fs::write(root.join("image-stress.md"), &markdown)?;
+    std::fs::write(root.join("image-stress-250.md"), &markdown)?;
 
     let mut large_text = String::from("# Wolfmark 10,000-block fixture\n\n");
     for index in 0..10_000 {
