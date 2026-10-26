@@ -61,7 +61,10 @@ function Test-QtSdk {
             return $false
         }
     }
-    return $true
+    $core = Join-Path $qtRoot 'bin/Qt6Core.dll'
+    if (-not (Test-Path -LiteralPath $core -PathType Leaf)) { return $false }
+    $actualVersion = (Get-Item -LiteralPath $core).VersionInfo.FileVersion
+    return $actualVersion -match '^6\.8\.2(?:\D|$)'
 }
 
 function Invoke-Bootstrap([string]$ScriptName) {
@@ -78,7 +81,7 @@ try {
     if (Test-QtSdk) {
         Write-Host "Project-local Qt is already available at $qtRoot"
     } else {
-        Write-Host 'Project-local Qt is missing; running the existing verified Qt bootstrap.'
+        Write-Host 'Project-local Qt is missing or differs from CI-verified Qt 6.8.2; running Qt bootstrap.'
         Invoke-Bootstrap 'bootstrap_qt.ps1'
         if (-not (Test-QtSdk)) {
             throw "Qt bootstrap completed, but the required Core, Gui, Widgets, and Network libraries are not all present at $qtRoot."
