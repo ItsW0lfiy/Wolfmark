@@ -64,10 +64,16 @@ impl servo::WebViewDelegate for State {
     }
 
     fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
-        // HTTP(S) request associated with this webview: stop it before network I/O.
+        // Servo 0.7 also invokes this callback for our embedded data: page.
+        // Dropping an unintercepted load lets Servo process its own local data.
+        // Intercept all other loads while network access remains forbidden.
         // ServoDelegate's non-webview/background requests need a separate audit.
         let url = load.request().url.clone();
-        eprintln!("Blocked Servo web resource request: {url}");
+        if allow_local_probe_resource(&url) {
+            return;
+        }
+        // Avoid printing huge data: payloads or other user-controlled URL data.
+        eprintln!("Blocked Servo resource request (scheme: {})", url.scheme());
         let response = embedder_traits::WebResourceResponse::new(url)
             .status_code(http::StatusCode::FORBIDDEN)
             .status_message(b"Offline-only experiment".to_vec());
@@ -86,6 +92,41 @@ impl servo::WebViewDelegate for State {
         } else {
             eprintln!("Blocked Servo document navigation: {}", request.url);
             request.deny();
+        }
+    }
+}
+
+
+fn allow_local_probe_resource(url: &Url) -> bool {
+    // This probe packages its HTML and small image into data: URLs. This is
+    // intentionally narrower than general local-file or custom-protocol access.
+    url.scheme() == "data"
+}
+
+#[cfg(test)]
+mod offline_resource_tests {
+    use super::allow_local_probe_resource;
+    use url::Url;
+
+    #[test]
+    fn embedded_data_resources_can_load() {
+        for source in [
+            "data:text/html;charset=utf-8,%3Cp%3EProbe%3C/p%3E",
+            "data:image/png;base64,iVBORw0KGgo=",
+        ] {
+            assert!(allow_local_probe_resource(&Url::parse(source).unwrap()));
+        }
+    }
+
+    #[test]
+    fn external_and_file_resources_are_not_exempt() {
+        for source in [
+            "https://example.com/",
+            "http://127.0.0.1:8080/",
+            "file:///C:/private.txt",
+            "ftp://example.com/file",
+        ] {
+            assert!(!allow_local_probe_resource(&Url::parse(source).unwrap()));
         }
     }
 }
