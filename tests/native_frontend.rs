@@ -5,9 +5,30 @@ use std::process::Command;
 use std::{io::Read, io::Write, net::TcpListener, thread};
 
 fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures")
-        .join(name)
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if name.starts_with("generated/") {
+        // Direct cargo test must also work before cargo all has run.
+        // A single generator per test process avoids competing writes.
+        static GENERATED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        GENERATED.get_or_init(|| {
+            let required = ["large-text.md", "image-stress-250.md"];
+            let output = root.join("fixtures/generated");
+            if required.iter().all(|file| output.join(file).is_file()) {
+                return;
+            }
+            let result = Command::new(env!("CARGO_BIN_EXE_generate_stress_fixture"))
+                .current_dir(&root)
+                .output()
+                .expect("launch deterministic Wolfmark fixture generator");
+            assert!(
+                result.status.success(),
+                "generating native test fixtures failed: {}{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+        });
+    }
+    root.join("fixtures").join(name)
 }
 
 fn run_smoke(mode: &str, fixture_name: &str) -> String {
