@@ -12,7 +12,7 @@ description = "Isolated, optional Servo embedding experiment for Wolfmark"
 resolver = "3"
 
 [dependencies]
-servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard"] }
+servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard", "js_jit"] }
 embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
 euclid = "0.22"
 http = "1.4"
