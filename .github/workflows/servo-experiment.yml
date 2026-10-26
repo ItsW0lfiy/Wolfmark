@@ -1,0 +1,59 @@
+name: Servo embedding experiment — Windows compile
+
+on:
+  push:
+    branches:
+      - experiment/servo-embedding-poc-20261026
+    paths:
+      - ".github/workflows/servo-experiment.yml"
+      - ".cargo/config.toml"
+      - "experiments/servo/**"
+      - "Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-servo-compile:
+    name: Compile-check isolated Servo crate
+    runs-on: windows-2022
+    timeout-minutes: 55
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Show toolchain details
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          clang --version
+      - name: Confirm the default Cargo workspace remains Qt-only
+        shell: pwsh
+        run: |
+          $json = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $names = @($json.workspace_members | ForEach-Object {
+            $id = $_
+            ($json.packages | Where-Object { $_.id -eq $id }).name
+          })
+          if ($names -contains 'wolfmark-servo-test') {
+            throw 'Servo experiment unexpectedly entered the default Qt workspace.'
+          }
+      - name: Resolve and compile-check isolated Servo experiment
+        shell: pwsh
+        run: |
+          $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
+          cargo check-servo-test
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo compile check failed; inspect build logs for dependency/SDK/API errors.'
+          }
+      - name: Upload resolved experiment lockfile when generated
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: servo-experiment-cargo-lock
+          path: experiments/servo/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7
