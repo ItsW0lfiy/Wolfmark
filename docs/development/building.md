@@ -37,7 +37,7 @@ Tested on Windows x64 with:
 
 - Rust 1.94+ MSVC toolchain
 - a C++20-capable MSVC compiler
-- Qt 6.11.2 Core, Gui, Widgets, and Network development files
+- Qt 6.8.2 Core, Gui, Widgets, and Network development files
 - Windows SDK resource compiler for the executable icon
 - PowerShell 7 for project-local verified tool bootstrap and release packaging
 
@@ -73,7 +73,7 @@ pwsh -File scripts/clean.ps1
 pwsh -File scripts/clean.ps1 -Deep
 ```
 
-The Qt bootstrap downloads the tested Qt 6.11.2 MSVC2022 x64 archive to ignored project-local storage and verifies Qt's published SHA-1. The NSIS bootstrap downloads the pinned 3.12 portable archive to ignored project-local storage and verifies its locked SHA-256. Neither tool is installed globally.
+The Qt bootstrap downloads the tested Qt 6.8.2 MSVC2022 x64 archive to ignored project-local storage and verifies Qt's published SHA-1. The NSIS bootstrap downloads the pinned 3.12 portable archive to ignored project-local storage and verifies its locked SHA-256. Neither tool is installed globally.
 
 See [Windows packaging](../distribution/packaging.md) for prerequisites, staging, app-local runtime policy, artifact paths, installer lifecycle validation, unattended switches, and checksums.
 
