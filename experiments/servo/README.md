@@ -135,6 +135,26 @@ It does not prove performance parity or acceptable package size.
 The future official GitHub updater is the only possible Wolfmark network
 exception, handled by the dedicated Rust update subsystem—not the webview.
 
+## Embedded page load regression (October 26)
+
+The first Windows runtime after the upstream OpenGL fix reached
+`Servo OpenGL window context is current.`, but the offline
+`WebViewDelegate::load_web_resource` callback also received the
+application's **data:text/html** startup URL. The old handler
+intercepted *every* callback with HTTP 403, preventing the page itself
+from rendering and printing the enormous percent-encoded HTML URL.
+
+The probe now leaves `data:` resources unintercepted, allowing Servo
+to process the bundled HTML and PNG normally. All other resource
+loads observed by this callback continue to receive a forbidden
+response; logs now print the scheme rather than a full URL.
+Regression unit tests cover embedded data versus remote and file URLs.
+
+This fixes the known logical load blocker but **still needs a real
+graphical runtime test** on Windows. The callback is not a complete
+network sandbox: unaffiliated background loads and other engine
+paths need auditing before production integration.
+
 ## Quick Windows test checklist
 
 1. From the experiment worktree, run `cargo check-servo-test`. It may
