@@ -26,6 +26,10 @@ try {
     Invoke-ScriptStage 'Preparing Wolfmark development tooling' 'setup.ps1'
     Invoke-CargoStage 'Checking Rust formatting' @('fmt', '--all', '--check')
     Invoke-CargoStage 'Checking the complete workspace' @('check', '--workspace')
+    # Ignored stress fixtures are absent after a fresh clone or clean rebuild.
+    Invoke-CargoStage 'Generating native test fixtures' @(
+        'run', '--locked', '--bin', 'generate_stress_fixture'
+    )
     Invoke-CargoStage 'Testing the complete workspace' @('test', '--workspace')
     Invoke-CargoStage 'Running strict workspace linting' @(
         'clippy', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings'
