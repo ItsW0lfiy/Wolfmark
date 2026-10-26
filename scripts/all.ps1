@@ -30,7 +30,11 @@ try {
     Invoke-CargoStage 'Generating native test fixtures' @(
         'run', '--locked', '--bin', 'generate_stress_fixture'
     )
-    Invoke-CargoStage 'Testing the complete workspace' @('test', '--workspace')
+    # Native GUI integration tests use shared Windows focus/clipboard/desktop
+    # state and must not execute multiple test windows simultaneously.
+    Invoke-CargoStage 'Testing the complete workspace' @(
+        'test', '--workspace', '--', '--test-threads=1'
+    )
     Invoke-CargoStage 'Running strict workspace linting' @(
         'clippy', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings'
     )
