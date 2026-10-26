@@ -7,6 +7,10 @@
 //! This is NOT a validated no-network sandbox: engine background traffic,
 //! navigation, resource requests, and OS-level network isolation need auditing.
 
+// Surfman uses these exports to select a hardware GPU on hybrid Windows laptops.
+// Without them it warns and may choose an unsuitable adapter.
+surfman::declare_surfman!();
+
 use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
@@ -103,11 +107,20 @@ impl ApplicationHandler<Wake> for App {
                 )
                 .expect("test window");
             let handle = window.window_handle().expect("window handle");
+            eprintln!(
+                "Initializing Servo OpenGL window context ({}x{}, scale={:.2})",
+                window.inner_size().width,
+                window.inner_size().height,
+                window.scale_factor()
+            );
             let context = Rc::new(
                 WindowRenderingContext::new(display, handle, window.inner_size())
                     .expect("Servo window rendering context"),
             );
-            let _ = context.make_current();
+            context.make_current().expect(
+                "Servo created the OpenGL context but could not make it current"
+            );
+            eprintln!("Servo OpenGL window context is current.");
 
             let servo = ServoBuilder::default()
                 .event_loop_waker(Box::new(waker.clone()))
