@@ -2949,6 +2949,20 @@ public:
     }
 
     void runSmoke(const QString& mode) {
+        if (mode == QStringLiteral("native-window") ||
+            mode == QStringLiteral("maximize") ||
+            mode == QStringLiteral("layout-normal")) {
+            // Native CI desktops can be smaller than the normal 1280x820
+            // startup window. Start with a window that actually fits the
+            // available work area so Windows can restore its exact geometry.
+            // Preserve strict maximize/restore and hit-test assertions.
+            if (auto* display = screen() ? screen() : QGuiApplication::primaryScreen()) {
+                const auto available = display->availableGeometry();
+                resize(std::min(width(), std::max(minimumWidth(), available.width() - 64)),
+                       std::min(height(), std::max(minimumHeight(), available.height() - 64)));
+                move(available.topLeft() + QPoint(24, 24));
+            }
+        }
         if (mode == QStringLiteral("shell-controls")) {
             QTimer::singleShot(300, this, [this] {
                 bool ok = active_ != nullptr && document_actions_->isVisible() &&
