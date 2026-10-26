@@ -27,6 +27,37 @@ Servo's native Windows build prerequisites, and downloads crates *at build time*
 See Servo's official [build prerequisites](https://book.servo.org/building/index.html).
 The experiment does not require Qt, WebView2, Node.js or a local HTTP server.
 
+## Windows SpiderMonkey build notes
+
+The initial Oct 26 Windows CI and laptop checks failed inside
+`mozjs_sys 153.3.0-1` before reaching the Wolfmark test crate. Upstream's
+Windows build script assumed that the Cargo output tree includes a directory
+literally named `target`, but this experiment initially used
+`out/servo-cargo`. On reaching the filesystem root, upstream
+`cargo_target_dir()` panicked at `build.rs:725`.
+
+The separate target directory is now `out/servo-cargo/target`. The Servo
+crate also enables `js_jit` (one of upstream Servo 0.7's default features),
+allowing `mozjs_sys` to try its prebuilt SpiderMonkey archive instead of
+forcing source compilation merely because JIT was disabled.
+
+A build-time archive download is permitted; the *installed application* must
+remain fully offline. If the archive is unavailable, SpiderMonkey may fall
+back to compiling from source. That requires MozTools 4.0, Clang/LLVM,
+MSVC C++ build tools/SDK and Python, as detailed in
+[Servo's mozjs Windows prerequisites](https://github.com/servo/mozjs#building).
+These are developer/build-machine dependencies, not proposed requirements
+for Wolfmark end users.
+
+**Existing Windows build cache:** if you previously ran the experiment with
+`out/servo-cargo`, the corrected target path starts a separate cache. The
+old cache may safely be deleted later after build validation; don't delete
+any Qt cache under `out/cargo`. Normal Cargo still builds Qt.
+
+`available: vX` lines in Cargo output are version notices, not compilation
+errors. Do not mass-update Servo's pinned transitive dependencies just to
+silence these notices.
+
 ## What this first probe actually tests
 
 - Servo initialization in an independent Windows-hosted Rust binary.
