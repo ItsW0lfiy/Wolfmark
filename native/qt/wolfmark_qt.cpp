@@ -3156,6 +3156,11 @@ public:
             QTimer::singleShot(250, this, [this, stage] {
                 *stage = QStringLiteral("modes");
                 bool ok = documents_.size() == 2 && active_->mode == OpenDocumentSession::Mode::Reader;
+                auto first_failure = std::make_shared<QString>();
+                const auto advance = [stage, first_failure, &ok](const QString& next) {
+                    if (!ok && first_failure->isEmpty()) *first_failure = *stage;
+                    *stage = next;
+                };
                 // The sidebar is the only open-document selector.
                 ok &= documents_.size() == 2 && findChild<QTabBar*>() == nullptr &&
                       findChild<QWidget*>(QStringLiteral("documentToolbar")) == nullptr &&
@@ -3194,7 +3199,7 @@ public:
                 editor->undo(); editor->redo();
                 ok &= editor->sourceText() == edited;
                 find_input_->setText(QStringLiteral("Unsaved"));
-                *stage = QStringLiteral("find-format");
+                advance(QStringLiteral("find-format"));
                 findNext(false);
                 ok &= editor->textCursor().selectedText() == QStringLiteral("Unsaved");
                 focusDocument();
@@ -3207,13 +3212,13 @@ public:
                 ok &= documents_.size() == count && session->mode == OpenDocumentSession::Mode::Source;
                 activateDocument(0); activateDocument(1);
                 ok &= active_ == session && session->mode == OpenDocumentSession::Mode::Source;
-                *stage = QStringLiteral("save");
+                advance(QStringLiteral("save"));
                 ok &= saveSession(session, false) && !editor->document()->isModified();
                 QFile saved(session->canonical_path);
                 saved.open(QIODevice::ReadOnly);
                 ok &= saved.readAll() == editor->encodedBytes(); saved.close();
                 const auto current = editor->sourceText();
-                *stage = QStringLiteral("external-conflict");
+                advance(QStringLiteral("external-conflict"));
                 editor->insertPlainText(QStringLiteral(" local"));
                 QFile external(session->canonical_path);
                 external.open(QIODevice::Append); external.write("\nexternal writer"); external.close();
@@ -3226,13 +3231,13 @@ public:
                 QTimer::singleShot(0, this, [] {
                     if (auto* dialog = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) dialog->done(QMessageBox::Cancel);
                 });
-                *stage = QStringLiteral("close-cancel");
+                advance(QStringLiteral("close-cancel"));
                 closeDocument(1);
                 ok &= documents_.size() == count;
                 editor->undo();
                 ok &= editor->sourceText() == current;
                 auto* background = documents_.front().get();
-                *stage = QStringLiteral("background-reload");
+                advance(QStringLiteral("background-reload"));
                 background->view->navigateToSourceLine(3003);
                 background->view->verticalScrollBar()->setValue(background->view->verticalScrollBar()->value() + 30);
                 const int old_line = background->view->sourceLineAtViewport();
@@ -3246,18 +3251,21 @@ public:
                 ok &= after.parse_count == active_counters.parse_count && after.load_count == before.load_count;
                 ok &= documents_.size() == 2 && mode_group_->checkedAction() != nullptr &&
                       mode_group_->checkedAction()->data().toInt() == 2;
-                *stage = QStringLiteral("empty-outline");
+                advance(QStringLiteral("empty-outline"));
                 auto heading = editor->textCursor();
                 heading.movePosition(QTextCursor::Start);
                 heading.select(QTextCursor::BlockUnderCursor);
                 heading.removeSelectedText();
                 auto* outline_poll = new QTimer(this);
-                QObject::connect(outline_poll, &QTimer::timeout, this, [this, outline_poll, editor, ok, old_line]() mutable {
+                QObject::connect(outline_poll, &QTimer::timeout, this, [this, outline_poll, editor, ok, old_line, stage, first_failure]() mutable {
                     if (!editor->analysisReady()) return;
                     outline_poll->stop();
                     ok &= active_->editing_outline_ready && active_->editing_outline.isEmpty();
                     activateDocument(0); activateDocument(1);
                     ok &= !sidebar_->activateOutlineAnchorForTest(QStringLiteral("other-document"));
+                    if (!ok && first_failure->isEmpty()) *first_failure = *stage;
+                    std::fprintf(stdout, "EDITOR_SESSIONS_DIAG first_failure=%s qt=%s\n",
+                                 first_failure->isEmpty() ? "none" : qUtf8Printable(*first_failure), QT_VERSION_STR);
                     std::fprintf(stdout, "WOLFMARK_SMOKE editor_sessions=%s shared_history=checked dirty=checked find=checked save=checked conflict=checked empty_outline=checked background_anchor=%d\n",
                                  ok ? "ok" : "failed", old_line);
                     std::fflush(stdout);
@@ -3644,6 +3652,15 @@ public:
                         const auto restored_status =
                             wolfmark::qt::windows::nativeFrameStatus(this);
                         const bool restored = !isMaximized() && geometry() == normal_geometry;
+                        if (!maximized || !restored) {
+                            const QRect now = geometry();
+                            std::fprintf(stdout,
+                                "NATIVE_WINDOW_DIAG max_state=%s restored_state=%s initial=(%d,%d,%dx%d) final=(%d,%d,%dx%d)\n",
+                                maximized ? "yes" : "no", isMaximized() ? "maximized" : "normal",
+                                normal_geometry.x(), normal_geometry.y(),
+                                normal_geometry.width(), normal_geometry.height(),
+                                now.x(), now.y(), now.width(), now.height());
+                        }
                         const bool corners =
                             (status.corner_preference == 0 || status.corner_preference == 2) &&
                             (maximized_status.corner_preference == 0 ||
@@ -4462,6 +4479,15 @@ public:
                                        [this, before, constructions, normal_geometry, maximized] {
                         const auto after = api_->backend_counters(backend_);
                         const bool geometry_restored = geometry() == normal_geometry;
+                        if (!geometry_restored || !maximized || isMaximized()) {
+                            const QRect now = geometry();
+                            std::fprintf(stdout,
+                                "MAXIMIZE_DIAG max_state=%s restored_state=%s initial=(%d,%d,%dx%d) final=(%d,%d,%dx%d)\n",
+                                maximized ? "yes" : "no", isMaximized() ? "maximized" : "normal",
+                                normal_geometry.x(), normal_geometry.y(),
+                                normal_geometry.width(), normal_geometry.height(),
+                                now.x(), now.y(), now.width(), now.height());
+                        }
                         const bool ok = maximized && !isMaximized() && geometry_restored &&
                                         before.parse_count == after.parse_count &&
                                         before.load_count == after.load_count &&
