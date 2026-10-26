@@ -2806,8 +2806,10 @@ protected:
 
     void changeEvent(QEvent* event) override {
         QDialog::changeEvent(event);
-        if (event->type() == QEvent::WindowStateChange && maximize_)
-            maximize_->setMaximized(isMaximized());
+        if (event->type() == QEvent::WindowStateChange) {
+            if (maximize_) maximize_->setMaximized(isMaximized());
+            wolfmark::qt::windows::refreshNativeFrameCorners(this, false);
+        }
     }
 
 #ifdef _WIN32
@@ -4711,9 +4713,12 @@ protected:
 
     void changeEvent(QEvent* event) override {
         QWidget::changeEvent(event);
-        if (event->type() == QEvent::WindowStateChange && !fullscreen_) {
-            api_->window_set_mode(window_state_, isMaximized() ? 1 : 0);
-            maximize_->setMaximized(isMaximized());
+        if (event->type() == QEvent::WindowStateChange) {
+            if (!fullscreen_) {
+                api_->window_set_mode(window_state_, isMaximized() ? 1 : 0);
+                maximize_->setMaximized(isMaximized());
+            }
+            wolfmark::qt::windows::refreshNativeFrameCorners(this, fullscreen_);
         }
     }
 

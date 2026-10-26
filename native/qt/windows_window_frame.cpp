@@ -95,13 +95,13 @@ void constrainMaximizedBounds(HWND handle, LPARAM parameter) {
     bounds->ptMaxSize.y = monitor_info.rcWork.bottom - monitor_info.rcWork.top;
 }
 
-void updateCornerPreference(HWND handle, bool fullscreen) {
+void updateCornerPreference(HWND handle, bool fullscreen, bool maximized) {
     // DWMWA_WINDOW_CORNER_PREFERENCE is available on Windows 11. Older Windows
     // versions safely ignore this attribute and keep their native frame behavior.
     constexpr auto corner_attribute = static_cast<DWMWINDOWATTRIBUTE>(33);
     constexpr DWORD do_not_round = 1;
     constexpr DWORD round = 2;
-    const DWORD preference = fullscreen || IsZoomed(handle) ? do_not_round : round;
+    const DWORD preference = fullscreen || maximized ? do_not_round : round;
     DwmSetWindowAttribute(handle, corner_attribute, &preference, sizeof(preference));
 }
 #endif
@@ -115,12 +115,25 @@ void installNativeFrame(QWidget* window) {
     auto style = GetWindowLongPtrW(handle, GWL_STYLE);
     style |= WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
     SetWindowLongPtrW(handle, GWL_STYLE, style);
-    updateCornerPreference(handle, false);
+    updateCornerPreference(handle, false, IsZoomed(handle) != FALSE);
     SetWindowPos(handle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE |
                      SWP_NOOWNERZORDER | SWP_NOZORDER);
 #else
     Q_UNUSED(window);
+#endif
+}
+
+void refreshNativeFrameCorners(QWidget* window, bool fullscreen) {
+#ifdef _WIN32
+    if (window == nullptr) return;
+    const auto handle = reinterpret_cast<HWND>(window->winId());
+    // Qt has authoritative window state here; querying IsZoomed in WM_SIZE
+    // alone can race with the maximize transition on some Windows versions.
+    updateCornerPreference(handle, fullscreen, window->isMaximized());
+#else
+    Q_UNUSED(window);
+    Q_UNUSED(fullscreen);
 #endif
 }
 
@@ -203,7 +216,12 @@ bool handleNativeFrameEvent(QWidget* window, QWidget* title_bar,
         }
         return false;
     case WM_SIZE:
-        updateCornerPreference(handle, fullscreen);
+        // WM_SIZE is delivered during transitions; combine its explicit
+        // maximized code with Qt/native state, then let WindowStateChange
+        // perform the final, authoritative corner refresh.
+        updateCornerPreference(handle, fullscreen,
+                               native->wParam == SIZE_MAXIMIZED ||
+                               window->isMaximized() || IsZoomed(handle));
         return false;
     case WM_NCHITTEST: {
         POINT point{GET_X_LPARAM(native->lParam), GET_Y_LPARAM(native->lParam)};

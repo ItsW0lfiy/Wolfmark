@@ -36,6 +36,8 @@ struct NativeFrameStatus {
 };
 
 void installNativeFrame(QWidget* window);
+// Apply DWM corner policy after Qt settles maximize/restore/fullscreen state.
+void refreshNativeFrameCorners(QWidget* window, bool fullscreen);
 [[nodiscard]] NativeFrameStatus nativeFrameStatus(QWidget* window);
 [[nodiscard]] HitRole hitTest(QWidget* window, QWidget* title_bar,
                               CaptionButton* minimize, CaptionButton* maximize,
