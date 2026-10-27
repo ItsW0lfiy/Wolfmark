@@ -175,6 +175,7 @@ enum App {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
     Open, Refresh, Reader, Source, ZoomIn, ZoomOut,
+    SelectDocument(usize), SelectBundled,
 }
 
 impl Action {
@@ -187,6 +188,10 @@ impl Action {
             ("mode", "/source") => Some(Self::Source),
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
+            ("document", "/bundled") => Some(Self::SelectBundled),
+            ("document", path) => path.strip_prefix('/')
+                .and_then(|index| index.parse::<usize>().ok())
+                .map(Self::SelectDocument),
             _ => None,
         }
     }
@@ -212,6 +217,8 @@ impl State {
             Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
             Action::ZoomIn => self.document.borrow_mut().change_zoom(10),
             Action::ZoomOut => self.document.borrow_mut().change_zoom(-10),
+            Action::SelectDocument(index) => self.document.borrow_mut().select(index),
+            Action::SelectBundled => self.document.borrow_mut().select_bundled(),
         }
         let url = self.document.borrow().page_url();
         if let Some(view) = self.view.borrow().last() {
@@ -237,6 +244,8 @@ mod host_actions_tests {
     fn only_known_ui_commands_dispatch() {
         let good = Url::parse("wolfmark://mode/source").unwrap();
         assert_eq!(Action::from_url(&good), Some(Action::Source));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://document/3").unwrap()), Some(Action::SelectDocument(3)));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://document/bundled").unwrap()), Some(Action::SelectBundled));
         for bad in ["https://example.com/", "wolfmark://evil/", "wolfmark://mode/remove", "file:///C:/windows"] {
             assert_eq!(Action::from_url(&Url::parse(bad).unwrap()), None);
         }
