@@ -21,6 +21,7 @@ use std::path::PathBuf;
 #[path = "../../../src/markdown/parser.rs"] mod parser;
 #[path = "../../../src/markdown/highlight.rs"] mod highlight;
 #[path = "../../../src/presentation.rs"] mod presentation;
+#[path = "../../../src/images/paths.rs"] mod image_paths;
 mod ui;
 
 use euclid::Scale;
