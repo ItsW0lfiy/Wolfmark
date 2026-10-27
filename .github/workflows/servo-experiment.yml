@@ -49,6 +49,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Servo compile check failed; inspect build logs for dependency/SDK/API errors.'
           }
+      - name: Typecheck Servo prototype regression tests
+        shell: pwsh
+        run: |
+          $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
+          cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo prototype test targets failed to compile.'
+          }
       - name: Upload resolved experiment lockfile when generated
         if: always()
         uses: actions/upload-artifact@v4
