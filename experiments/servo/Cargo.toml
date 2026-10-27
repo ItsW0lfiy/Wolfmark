@@ -29,19 +29,7 @@ two-face = { version = "=0.5.1", default-features = false, features = ["syntect-
 serde = { version = "1.0.228", features = ["derive"] }
 base64 = "0.22"
 # Native desktop file picker; no localhost or external browser.
-rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal"] }
-
-# Reuse the real Wolfmark framework-neutral Rust presentation pipeline.
-# This nested workspace DOES NOT depend on the root Qt/C++ application target.
-comrak = { version = "0.54.0", default-features = false }
-crossbeam-channel = "0.5.15"
-image = { version = "0.25.8", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
-rayon = "1.11.0"
-resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts"] }
-serde = { version = "1.0.228", features = ["derive"] }
-two-face = { version = "0.5.1", default-features = false, features = ["syntect-onig"] }
-base64 = "0.22"
-rfd = { version = "0.15.3", default-features = false, features = ["xdg-portal", "async-std"] }
+rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", "async-std"] }
 
 # Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
 [patch.crates-io]
