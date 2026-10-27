@@ -232,7 +232,11 @@ impl State {
             Action::HistoryForward => self.document.borrow_mut().forward(),
             Action::AdjacentDocument(backward) => self.document.borrow_mut().select_adjacent(backward),
         }
-        let url = self.document.borrow().page_url();
+        let (url, title) = {
+            let session = self.document.borrow();
+            (session.page_url(), session.title())
+        };
+        self.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
         if let Some(view) = self.view.borrow().last() {
             view.load(url);
         }
@@ -271,10 +275,15 @@ impl ApplicationHandler<Wake> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let App::Initial(waker, session, smoke_page) = self {
             let display = event_loop.display_handle().expect("display handle");
+            let caption = if *smoke_page {
+                "Wolfmark — Servo graphics diagnostic".to_owned()
+            } else {
+                format!("{} — Wolfmark (Servo experiment)", session.title())
+            };
             let window = event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title("Wolfmark / Servo embedding experiment")
+                        .with_title(caption)
                         .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 760.0)),
                 )
                 .expect("test window");
@@ -345,8 +354,13 @@ impl ApplicationHandler<Wake> for App {
                 if let App::Running(state) = self {
                     if !state.smoke_page {
                         state.document.borrow_mut().open(&path);
+                        let (url, title) = {
+                            let session = state.document.borrow();
+                            (session.page_url(), session.title())
+                        };
+                        state.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
                         if let Some(view) = state.view.borrow().last() {
-                            view.load(state.document.borrow().page_url());
+                            view.load(url);
                         }
                         state.servo.spin_event_loop();
                     }
