@@ -27,6 +27,64 @@ Servo's native Windows build prerequisites, and downloads crates *at build time*
 See Servo's official [build prerequisites](https://book.servo.org/building/index.html).
 The experiment does not require Qt, WebView2, Node.js or a local HTTP server.
 
+## Wolfmark UI parity prototype (October 27)
+
+The Servo command now launches an **initial, read-only Wolfmark shell**, not
+the old standalone rendering test. This work is intentionally isolated from
+`main` and the normal Qt frontend.
+
+It follows the preferred single-sidebar design: one **Open document** button,
+no Open dropdown, no duplicate horizontal document-tab strip; the original
+bottom-left Wolfmark artwork is retained. The main toolbar contains Reader,
+Live Preview (currently disabled), and Source. The system/winit title bar
+remains temporarily native/default: a frameless custom window must not be
+introduced until move/resize/snap/caption semantics are implemented and tested
+for Windows and Linux.
+
+### Run it on Windows
+
+```powershell
+cd C:\Projects\Wolfmark-Servo
+git fetch origin
+git switch --detach origin/experiment/servo-embedding-poc-20261026
+cargo servo-test
+# Or open a known local file without a picker:
+cargo servo-test -- --document "C:\path\to\document.md"
+# The original small engine smoke page is still available:
+cargo servo-test -- --smoke-page
+```
+
+Use **Open document**, or drag a `.md`, `.markdown` or `.txt` file onto
+the application window. Reload re-reads the file. Reader and Source switch
+read-only presentation modes. Plus/minus changes document text zoom. The
+sidebar shows document headings and anchors from Wolfmark's existing Rust
+Comrak model. Code blocks use Wolfmark's existing two-face/Syntect classifier.
+Local PNG/JPEG/GIF/WebP images are embedded by Rust as `data:` resources,
+not accessed over the network or via `file:` requests.
+
+**Prototype limits (not approved production behavior):** source files are
+limited to 2 MiB and each local image to 2 MiB; images must be relative and
+resolve beneath the document directory (canonical path). HTML is displayed
+inertly. External links are inactive. Live Preview editing, text search,
+settings, multiple retained document sessions, polished clipboard/IME,
+image-cache parity, accessibility, custom Windows caption/snap and smooth
+scrolling are not yet complete. The native picker uses the OS desktop dialog.
+Neither strict offline network isolation nor Android portability is proven.
+Avoid comparing memory/performance with production Qt until a release build
+and equivalent document/input paths are available.
+
+The experiment imports Wolfmark's existing `src/markdown/model.rs`,
+`parser.rs`, `highlight.rs` and `src/presentation.rs` directly from Rust,
+without linking the main Qt build script or authoring any C++ bridge.
+This is a temporary source-level reuse boundary; a later production migration
+would extract the shared Rust core into its own Cargo crate instead of keeping
+path imports.
+
+The branch CI typechecks both the executable and Rust unit-test targets.
+It does **not** run the graphical UI. Run the full regression tests locally
+with `cargo test --manifest-path experiments/servo/Cargo.toml --target-dir
+out/servo-cargo/target` when build resources permit.
+
 ## Patched Servo paint component (upstream fix)
 
 The first executable launch failed in `glow 0.17` with `GL_VERSION`
