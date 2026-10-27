@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn parser_and_highlighter_render_real_markdown() {
         let mut session = Session::default();
-        session.source = "# Title\n\nA **wolf**.\n\n\`\`\`rust\nfn main() {}\n\`\`\`\n".into();
+        session.source = "# Title\n\nA **wolf**.\n\n```rust\nfn main() {}\n```\n".into();
         let html = session.render_html();
         assert!(html.contains("<h1 id=\"wm-heading-1\">Title</h1>"));
         assert!(html.contains("<strong>wolf</strong>"));
