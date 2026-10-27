@@ -11,6 +11,11 @@ on:
       - "Cargo.toml"
   workflow_dispatch:
 
+# Avoid compiling the same ~800-crate Servo graph for every small UI commit.
+concurrency:
+  group: servo-experiment-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
