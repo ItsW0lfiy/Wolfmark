@@ -85,6 +85,30 @@ normalizes wheel notches to a 48-pixel estimate and sends
 This needs a fresh physical comparison on the same hardware: it is **not yet
 proof of smooth-scrolling parity** with the existing Qt frontend.
 
+### Document-navigation parity (October 27 continuation)
+
+The single left sidebar now supports multiple retained in-process documents,
+active selection and **Close** controls. Back/Forward navigate through the
+Rust-owned document history; closed entries are invalidated and remaining
+indexes adjusted. The extra horizontal document-tab strip stays rejected.
+
+Rust/Winit shortcuts in the experiment: **Ctrl+O** Open, **Ctrl+W** Close
+current document, **Ctrl+R** Reload, **Ctrl+Tab** and **Ctrl+Shift+Tab**
+cycle through the built-in document and opened documents, and **Alt+Left /
+Alt+Right** navigate Back/Forward. Actual Windows keyboard behavior still
+needs end-to-end user testing; CI only typechecks targets.
+
+The OS window caption shows the selected document, but the title bar is
+still the normal native frame. Custom minimize/maximize/snap/resize semantics
+must be verified before adopting a frameless Wolfmark title bar.
+
+For local document images, the prototype now uses Wolfmark's authoritative
+`src/images/paths.rs` policy instead of its earlier divergent relative-only
+resolver, including percent-encoded spaces and explicitly allowed absolute
+or `file:` paths. SVG rasterization and full image pipeline/cache parity
+remain outstanding; remote image requests are blocked. Brand artwork base64
+encoding is cached between document switches.
+
 The experiment imports Wolfmark's existing `src/markdown/model.rs`,
 `parser.rs`, `highlight.rs` and `src/presentation.rs` directly from Rust,
 without linking the main Qt build script or authoring any C++ bridge.
