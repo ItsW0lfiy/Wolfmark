@@ -5,6 +5,7 @@
 
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use base64::Engine;
 use url::Url;
@@ -247,8 +248,12 @@ impl Session {
             render_blocks(&mut body, &parsed.blocks, self.path.as_deref(), &mut toc);
         }
 
-        let logo = data_png(LOGO);
-        let footer = data_png(FOOTER);
+        // Brand assets do not change between document switches. Avoid encoding
+        // hundreds of KiB to base64 again every time a mode/zoom button is used.
+        static LOGO_URI: OnceLock<String> = OnceLock::new();
+        static FOOTER_URI: OnceLock<String> = OnceLock::new();
+        let logo = LOGO_URI.get_or_init(|| data_png(LOGO));
+        let footer = FOOTER_URI.get_or_init(|| data_png(FOOTER));
         let mut html = String::with_capacity(CSS.len() + body.len() + 4000);
         html.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
         html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
