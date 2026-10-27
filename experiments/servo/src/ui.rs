@@ -33,6 +33,8 @@ pub struct Session {
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
     active_document: Option<usize>,
+    history: Vec<Option<usize>>,
+    history_position: usize,
 }
 
 struct SavedDocument {
@@ -50,6 +52,8 @@ impl Default for Session {
             notice: Some("Bundled architecture document — drag and drop a .md/.txt file or use Open document to test your own files.".into()),
             open_documents: Vec::new(),
             active_document: None,
+            history: vec![None],
+            history_position: 0,
         }
     }
 }
@@ -86,20 +90,97 @@ impl Session {
     }
 
     pub fn select(&mut self, index: usize) {
-        let Some(document) = self.open_documents.get(index) else { return };
-        self.path = Some(document.path.clone());
-        self.source = document.source.clone();
-        self.active_document = Some(index);
-        self.mode = Mode::Reader;
-        self.notice = None;
+        self.activate(Some(index), true);
     }
 
     pub fn select_bundled(&mut self) {
-        self.path = None;
-        self.source = BUNDLED_SOURCE.to_owned();
-        self.active_document = None;
+        self.activate(None, true);
+    }
+
+    // Every document navigation is Rust-owned. The view's data: URL is only
+    // a representation of this state, never the source of truth.
+    fn activate(&mut self, target: Option<usize>, record: bool) -> bool {
+        if let Some(index) = target {
+            let Some(document) = self.open_documents.get(index) else {
+                return false;
+            };
+            self.path = Some(document.path.clone());
+            self.source = document.source.clone();
+        } else {
+            self.path = None;
+            self.source = BUNDLED_SOURCE.to_owned();
+        }
+        self.active_document = target;
         self.mode = Mode::Reader;
         self.notice = None;
+
+        if record && self.history.get(self.history_position).copied() != Some(target) {
+            self.history.truncate(self.history_position + 1);
+            self.history.push(target);
+            self.history_position = self.history.len() - 1;
+        }
+        true
+    }
+
+    pub fn can_go_back(&self) -> bool { self.history_position > 0 }
+    pub fn can_go_forward(&self) -> bool { self.history_position + 1 < self.history.len() }
+
+    pub fn back(&mut self) {
+        if self.can_go_back() {
+            self.history_position -= 1;
+            let target = self.history[self.history_position];
+            self.activate(target, false);
+        }
+    }
+
+    pub fn forward(&mut self) {
+        if self.can_go_forward() {
+            self.history_position += 1;
+            let target = self.history[self.history_position];
+            self.activate(target, false);
+        }
+    }
+
+    pub fn close(&mut self, index: usize) {
+        if index >= self.open_documents.len() { return; }
+        let closing_active = self.active_document == Some(index);
+        self.open_documents.remove(index);
+
+        // Previously visited documents cannot point to removed/shifted slots.
+        for entry in &mut self.history {
+            match entry {
+                Some(value) if *value == index => *entry = None,
+                Some(value) if *value > index => *value -= 1,
+                _ => {},
+            }
+        }
+        if let Some(active) = self.active_document.as_mut() {
+            if *active > index { *active -= 1; }
+        }
+        if closing_active {
+            let next = if self.open_documents.is_empty() {
+                None
+            } else {
+                Some(index.min(self.open_documents.len() - 1))
+            };
+            self.activate(next, true);
+        }
+    }
+
+    pub fn close_active(&mut self) {
+        if let Some(index) = self.active_document { self.close(index); }
+    }
+
+    pub fn select_adjacent(&mut self, backward: bool) {
+        // Sidebar order includes the built-in architecture document first.
+        let count = self.open_documents.len() + 1;
+        let current = self.active_document.map_or(0, |value| value + 1);
+        let next = if backward {
+            (current + count - 1) % count
+        } else {
+            (current + 1) % count
+        };
+        self.activate(next.checked_sub(1), true);
     }
 
     pub fn reload(&mut self) {
@@ -187,13 +268,13 @@ impl Session {
         html.push_str("<p class=\"section-title\">Open Documents</p>");
         html.push_str("<nav class=\"document-list\" aria-label=\"Open documents\">");
         let bundled_class = if self.active_document.is_none() { " selected" } else { "" };
-        let _ = write!(html, "<a class=\"document-link{bundled_class}\" href=\"wolfmark://document/bundled\" title=\"Bundled Wolfmark architecture\"><span class=\"doc-file\">▤</span>Architecture.md</a>");
+        let _ = write!(html, "<div class=\"document-row{bundled_class}\"><a class=\"document-link\" href=\"wolfmark://document/bundled\" title=\"Bundled Wolfmark architecture\"><span class=\"doc-file\">▤</span>Architecture.md</a></div>");
         for (index, document) in self.open_documents.iter().enumerate() {
             let selected = if self.active_document == Some(index) { " selected" } else { "" };
             let label = document.path.file_name().unwrap_or_default().to_string_lossy();
             let _ = write!(html,
-                "<a class=\"document-link{selected}\" href=\"wolfmark://document/{index}\" title=\"{}\"><span class=\"doc-file\">▤</span>{}</a>",
-                escape_attr(&document.path.to_string_lossy()), escape(&label));
+                "<div class=\"document-row{selected}\"><a class=\"document-link\" href=\"wolfmark://document/{index}\" title=\"{}\"><span class=\"doc-file\">▤</span>{}</a><a class=\"document-close\" href=\"wolfmark://close/{index}\" title=\"Close document\" aria-label=\"Close {}\">×</a></div>",
+                escape_attr(&document.path.to_string_lossy()), escape(&label), escape_attr(&label));
         }
         html.push_str("</nav>");
         html.push_str("<p class=\"section-title\">Outline</p><nav class=\"outline-scroll\" aria-label=\"Document outline\">");
@@ -211,7 +292,18 @@ impl Session {
         html.push_str("</nav></div><footer class=\"sidebar-footer\">");
         let _ = write!(html, "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>Servo UI experiment</small></div></div>");
         html.push_str("</footer></aside><main class=\"main\">");
-        html.push_str("<div class=\"viewbar\"><span class=\"nav-pair\"><span class=\"icon-button\" title=\"History navigation pending\">←</span><span class=\"icon-button\" title=\"History navigation pending\">→</span></span>");
+        html.push_str("<div class=\"viewbar\"><nav class=\"nav-pair\" aria-label=\"Document history\">");
+        if self.can_go_back() {
+            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/back\" title=\"Back to previous document\">←</a>");
+        } else {
+            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No previous document\">←</span>");
+        }
+        if self.can_go_forward() {
+            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/forward\" title=\"Forward to next document\">→</a>");
+        } else {
+            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No next document\">→</span>");
+        }
+        html.push_str("</nav>");
         html.push_str("<nav class=\"mode-picker\" aria-label=\"Document mode\">");
         let reader = if self.mode == Mode::Reader {" selected"} else {""};
         let source = if self.mode == Mode::Source {" selected"} else {""};
@@ -453,6 +545,55 @@ mod tests {
         assert!(session.path.is_none());
         session.open(&one);
         assert_eq!(session.open_documents.len(), 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn history_and_close_adjust_document_indexes() {
+        let dir = std::env::temp_dir().join(format!("wolfmark-servo-history-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = dir.join("alpha.md");
+        let two = dir.join("beta.md");
+        let three = dir.join("gamma.md");
+        for (path, text) in [(&one, "# Alpha"), (&two, "# Beta"), (&three, "# Gamma")] {
+            std::fs::write(path, text).unwrap();
+        }
+        let mut session = Session::default();
+        session.open(&one);
+        session.open(&two);
+        session.open(&three);
+        assert!(session.can_go_back());
+        session.back();
+        assert!(session.source.contains("Beta"));
+        session.back();
+        assert!(session.source.contains("Alpha"));
+        session.forward();
+        assert!(session.source.contains("Beta"));
+        // Removing a nonactive document shifts indexes but not the active buffer.
+        session.close(0);
+        assert!(session.source.contains("Beta"));
+        assert!(session.render_html().contains("wolfmark://close/1"));
+        session.close_active();
+        assert!(session.source.contains("Gamma"));
+        session.close_active();
+        assert!(session.path.is_none());
+        assert_eq!(session.open_documents.len(), 0);
+        assert!(session.can_go_back());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn adjacent_navigation_wraps_through_bundled_reader() {
+        let dir = std::env::temp_dir().join(format!("wolfmark-servo-cycle-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = dir.join("single.md");
+        std::fs::write(&one, "# Single").unwrap();
+        let mut session = Session::default();
+        session.open(&one);
+        session.select_adjacent(false);
+        assert!(session.path.is_none());
+        session.select_adjacent(true);
+        assert!(session.source.contains("Single"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
