@@ -14,6 +14,14 @@ surfman::declare_surfman!();
 use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
+use std::path::PathBuf;
+
+// Shared Rust code from the existing Wolfmark core, without linking Qt.
+#[path = "../../../src/markdown/model.rs"] mod model;
+#[path = "../../../src/markdown/parser.rs"] mod parser;
+#[path = "../../../src/markdown/highlight.rs"] mod highlight;
+#[path = "../../../src/presentation.rs"] mod presentation;
+mod ui;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -44,7 +52,26 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // No Qt link, localhost web server, loose HTML file, or system WebView2.
     let loop_ = EventLoop::<Wake>::with_user_event().build()?;
-    let mut app = App::Initial(Waker(loop_.create_proxy()));
+    // The accepted UI is now the default. Keep the tiny original page as an
+    // explicit graphics diagnostic, not as the Wolfmark replacement.
+    let mut session = ui::Session::default();
+    let mut smoke_page = false;
+    let mut args = std::env::args_os().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--smoke-page" {
+            smoke_page = true;
+        } else if arg == "--document" {
+            if let Some(path) = args.next() {
+                session.open(&PathBuf::from(path));
+            }
+        } else {
+            let path = PathBuf::from(arg);
+            if ui::supported_document(&path) {
+                session.open(&path);
+            }
+        }
+    }
+    let mut app = App::Initial(Waker(loop_.create_proxy()), session, smoke_page);
     loop_.run_app(&mut app)?;
     Ok(())
 }
@@ -56,6 +83,9 @@ struct State {
     view: RefCell<Vec<WebView>>,
     cursor: RefCell<DevicePoint>,
     modifiers: RefCell<ServoModifiers>,
+    document: RefCell<ui::Session>,
+    pending: RefCell<Option<Action>>,
+    smoke_page: bool,
 }
 
 impl servo::WebViewDelegate for State {
@@ -85,12 +115,18 @@ impl servo::WebViewDelegate for State {
     }
 
     fn request_navigation(&self, _webview: WebView, request: NavigationRequest) {
-        // Only data: navigation is permitted by this trial delegate.
-        // This does NOT block all HTTP resource or background network paths.
-        if request.url.scheme() == "data" {
+        // Rust remains authoritative: UI links enqueue a command for the host,
+        // rather than giving the document script or filesystem privileges.
+        if request.url.scheme() == "wolfmark" {
+            *self.pending.borrow_mut() = Action::from_url(&request.url);
+            if self.pending.borrow().is_some() {
+                self.window.request_redraw();
+            }
+            request.deny();
+        } else if request.url.scheme() == "data" {
             request.allow();
         } else {
-            eprintln!("Blocked Servo document navigation: {}", request.url);
+            eprintln!("Blocked external document navigation (scheme: {})", request.url.scheme());
             request.deny();
         }
     }
@@ -132,13 +168,84 @@ mod offline_resource_tests {
 }
 
 enum App {
-    Initial(Waker),
+    Initial(Waker, ui::Session, bool),
     Running(Rc<State>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Action {
+    Open, Refresh, Reader, Source, ZoomIn, ZoomOut,
+}
+
+impl Action {
+    fn from_url(url: &Url) -> Option<Self> {
+        if url.scheme() != "wolfmark" { return None; }
+        match (url.host_str()?, url.path()) {
+            ("open", "/") => Some(Self::Open),
+            ("refresh", "/") => Some(Self::Refresh),
+            ("mode", "/reader") => Some(Self::Reader),
+            ("mode", "/source") => Some(Self::Source),
+            ("zoom", "/in") => Some(Self::ZoomIn),
+            ("zoom", "/out") => Some(Self::ZoomOut),
+            _ => None,
+        }
+    }
+}
+
+impl State {
+    fn apply_action(&self, action: Action) {
+        if self.smoke_page { return; }
+        match action {
+            Action::Open => {
+                // Local native OS dialog, not a browser/web file chooser.
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Markdown and text", &["md", "markdown", "txt"])
+                    .pick_file()
+                {
+                    self.document.borrow_mut().open(&path);
+                } else {
+                    return;
+                }
+            }
+            Action::Refresh => self.document.borrow_mut().reload(),
+            Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
+            Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
+            Action::ZoomIn => self.document.borrow_mut().change_zoom(10),
+            Action::ZoomOut => self.document.borrow_mut().change_zoom(-10),
+        }
+        let url = self.document.borrow().page_url();
+        if let Some(view) = self.view.borrow().last() {
+            view.load(url);
+        }
+        self.servo.spin_event_loop();
+    }
+
+    fn take_pending_action(&self) {
+        // Avoid invoking Servo WebView operations from inside the delegate's
+        // navigation callback (reentrant callbacks can borrow the webview).
+        let action = self.pending.borrow_mut().take();
+        if let Some(action) = action { self.apply_action(action); }
+    }
+}
+
+#[cfg(test)]
+mod host_actions_tests {
+    use super::Action;
+    use url::Url;
+
+    #[test]
+    fn only_known_ui_commands_dispatch() {
+        let good = Url::parse("wolfmark://mode/source").unwrap();
+        assert_eq!(Action::from_url(&good), Some(Action::Source));
+        for bad in ["https://example.com/", "wolfmark://evil/", "wolfmark://mode/remove", "file:///C:/windows"] {
+            assert_eq!(Action::from_url(&Url::parse(bad).unwrap()), None);
+        }
+    }
 }
 
 impl ApplicationHandler<Wake> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let App::Initial(waker) = self {
+        if let App::Initial(waker, session, smoke_page) = self {
             let display = event_loop.display_handle().expect("display handle");
             let window = event_loop
                 .create_window(
@@ -175,9 +282,12 @@ impl ApplicationHandler<Wake> for App {
                 view: RefCell::new(Vec::new()),
                 cursor: RefCell::new(DevicePoint::new(0.0, 0.0)),
                 modifiers: RefCell::new(ServoModifiers::empty()),
+                document: RefCell::new(std::mem::take(session)),
+                pending: RefCell::new(None),
+                smoke_page: *smoke_page,
             });
 
-            let page_url = local_probe_url();
+            let page_url = if state.smoke_page { local_probe_url() } else { state.document.borrow().page_url() };
             let view = WebViewBuilder::new(&state.servo, state.context.clone())
                 .url(page_url)
                 .hidpi_scale_factor(Scale::new(state.window.scale_factor() as f32))
@@ -191,6 +301,7 @@ impl ApplicationHandler<Wake> for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
         if let App::Running(state) = self {
             state.servo.spin_event_loop();
+            state.take_pending_action();
         }
     }
 
@@ -206,8 +317,20 @@ impl ApplicationHandler<Wake> for App {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::DroppedFile(path) => {
+                if let App::Running(state) = self {
+                    if !state.smoke_page {
+                        state.document.borrow_mut().open(&path);
+                        if let Some(view) = state.view.borrow().last() {
+                            view.load(state.document.borrow().page_url());
+                        }
+                        state.servo.spin_event_loop();
+                    }
+                }
+            }
             WindowEvent::RedrawRequested => {
                 if let App::Running(state) = self {
+                    state.take_pending_action();
                     if let Some(view) = state.view.borrow().last() {
                         view.paint();
                         state.context.present();
