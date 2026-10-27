@@ -55,7 +55,10 @@ cargo servo-test -- --smoke-page
 ```
 
 Use **Open document**, or drag a `.md`, `.markdown` or `.txt` file onto
-the application window. Reload re-reads the file. Reader and Source switch
+the application window. Multiple opened documents remain in the left sidebar;
+selecting a document restores its Rust-owned read-only buffer. The bundled
+architecture example remains available from the first sidebar entry. Reload
+re-reads the selected file without discarding other opened documents. Reader and Source switch
 read-only presentation modes. Plus/minus changes document text zoom. The
 sidebar shows document headings and anchors from Wolfmark's existing Rust
 Comrak model. Code blocks use Wolfmark's existing two-face/Syntect classifier.
@@ -66,12 +69,21 @@ not accessed over the network or via `file:` requests.
 limited to 2 MiB and each local image to 2 MiB; images must be relative and
 resolve beneath the document directory (canonical path). HTML is displayed
 inertly. External links are inactive. Live Preview editing, text search,
-settings, multiple retained document sessions, polished clipboard/IME,
-image-cache parity, accessibility, custom Windows caption/snap and smooth
-scrolling are not yet complete. The native picker uses the OS desktop dialog.
+settings, persisted cross-restart sessions, polished clipboard/IME,
+image-cache parity, accessibility, custom Windows caption/snap and native-Qt-equivalent smooth scrolling are not yet complete. The native picker uses the OS desktop dialog.
 Neither strict offline network isolation nor Android portability is proven.
 Avoid comparing memory/performance with production Qt until a release build
 and equivalent document/input paths are available.
+
+### Scrolling investigation
+
+The early Servo test forwarded `winit::MouseScrollDelta::LineDelta` values
+multiplied by 76 while also declaring `WheelMode::DeltaLine`, which can cause
+the recipient to multiply by a line-height factor again. The current probe
+normalizes wheel notches to a 48-pixel estimate and sends
+`WheelMode::DeltaPixel`; precise trackpad pixel deltas pass through unchanged.
+This needs a fresh physical comparison on the same hardware: it is **not yet
+proof of smooth-scrolling parity** with the existing Qt frontend.
 
 The experiment imports Wolfmark's existing `src/markdown/model.rs`,
 `parser.rs`, `highlight.rs` and `src/presentation.rs` directly from Rust,
