@@ -418,8 +418,13 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::MouseWheel { delta, .. } => {
                 if let App::Running(state) = self {
                     let (x, y, mode) = match delta {
+                        // Winit reports wheel notches in lines. The previous
+                        // embedding multiplied by 76 *and* tagged them as
+                        // lines, causing Servo to apply line scaling again.
+                        // Convert to pixels once; preserve precise trackpad
+                        // pixel deltas unmodified.
                         MouseScrollDelta::LineDelta(x, y) =>
-                            ((x * 76.0) as f64, (y * 76.0) as f64, WheelMode::DeltaLine),
+                            (f64::from(x) * 48.0, f64::from(y) * 48.0, WheelMode::DeltaPixel),
                         MouseScrollDelta::PixelDelta(p) =>
                             (p.x, p.y, WheelMode::DeltaPixel),
                     };
