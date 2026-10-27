@@ -175,7 +175,8 @@ enum App {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
     Open, Refresh, Reader, Source, ZoomIn, ZoomOut,
-    SelectDocument(usize), SelectBundled,
+    SelectDocument(usize), SelectBundled, CloseDocument(usize), CloseActive,
+    HistoryBack, HistoryForward, AdjacentDocument(bool),
 }
 
 impl Action {
@@ -189,6 +190,11 @@ impl Action {
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
             ("document", "/bundled") => Some(Self::SelectBundled),
+            ("history", "/back") => Some(Self::HistoryBack),
+            ("history", "/forward") => Some(Self::HistoryForward),
+            ("close", path) => path.strip_prefix('/')
+                .and_then(|index| index.parse::<usize>().ok())
+                .map(Self::CloseDocument),
             ("document", path) => path.strip_prefix('/')
                 .and_then(|index| index.parse::<usize>().ok())
                 .map(Self::SelectDocument),
@@ -219,6 +225,11 @@ impl State {
             Action::ZoomOut => self.document.borrow_mut().change_zoom(-10),
             Action::SelectDocument(index) => self.document.borrow_mut().select(index),
             Action::SelectBundled => self.document.borrow_mut().select_bundled(),
+            Action::CloseDocument(index) => self.document.borrow_mut().close(index),
+            Action::CloseActive => self.document.borrow_mut().close_active(),
+            Action::HistoryBack => self.document.borrow_mut().back(),
+            Action::HistoryForward => self.document.borrow_mut().forward(),
+            Action::AdjacentDocument(backward) => self.document.borrow_mut().select_adjacent(backward),
         }
         let url = self.document.borrow().page_url();
         if let Some(view) = self.view.borrow().last() {
@@ -246,6 +257,9 @@ mod host_actions_tests {
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://document/3").unwrap()), Some(Action::SelectDocument(3)));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://document/bundled").unwrap()), Some(Action::SelectBundled));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://close/2").unwrap()), Some(Action::CloseDocument(2)));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://history/back").unwrap()), Some(Action::HistoryBack));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://history/forward").unwrap()), Some(Action::HistoryForward));
         for bad in ["https://example.com/", "wolfmark://evil/", "wolfmark://mode/remove", "file:///C:/windows"] {
             assert_eq!(Action::from_url(&Url::parse(bad).unwrap()), None);
         }
@@ -373,7 +387,14 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let App::Running(state) = self {
-                    if let Some(input) = keyboard_input(&event, *state.modifiers.borrow()) {
+                    let modifiers = *state.modifiers.borrow();
+                    if !state.smoke_page {
+                        if let Some(action) = application_shortcut(&event, modifiers) {
+                            state.apply_action(action);
+                            return;
+                        }
+                    }
+                    if let Some(input) = keyboard_input(&event, modifiers) {
                         if let Some(view) = state.view.borrow().last() {
                             view.notify_input_event(input);
                             state.servo.spin_event_loop();
@@ -438,6 +459,40 @@ impl ApplicationHandler<Wake> for App {
                 }
             }
             _ => {}
+        }
+    }
+}
+
+// Command shortcuts always terminate in Rust and never become arbitrary
+// browser key combinations. Normal text keys still go to Servo below.
+fn application_shortcut(event: &KeyEvent, modifiers: ServoModifiers) -> Option<Action> {
+    if event.state != ElementState::Pressed || event.repeat {
+        return None;
+    }
+    let ctrl = modifiers.contains(ServoModifiers::CONTROL);
+    let alt = modifiers.contains(ServoModifiers::ALT);
+    let shift = modifiers.contains(ServoModifiers::SHIFT);
+    match event.physical_key {
+        PhysicalKey::Code(KeyCode::KeyO) if ctrl && !alt => Some(Action::Open),
+        PhysicalKey::Code(KeyCode::KeyW) if ctrl && !alt => Some(Action::CloseActive),
+        PhysicalKey::Code(KeyCode::KeyR) if ctrl && !alt => Some(Action::Refresh),
+        PhysicalKey::Code(KeyCode::Tab) if ctrl && !alt => Some(Action::AdjacentDocument(shift)),
+        PhysicalKey::Code(KeyCode::ArrowLeft) if alt && !ctrl => Some(Action::HistoryBack),
+        PhysicalKey::Code(KeyCode::ArrowRight) if alt && !ctrl => Some(Action::HistoryForward),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod application_shortcut_tests {
+    use super::*;
+    #[test]
+    fn expected_shortcuts_are_local_and_nonrepeating() {
+        // Full winit event construction is platform-version-specific; parsing
+        // host actions above is checked separately. This verifies the navigation
+        // event transport does not permit external URLs or arbitrary commands.
+        for source in ["wolfmark://close/../../../windows", "wolfmark://history/delete", "wolfmark://close/99999999999999999999999999"] {
+            assert!(Action::from_url(&Url::parse(source).unwrap()).is_none());
         }
     }
 }
