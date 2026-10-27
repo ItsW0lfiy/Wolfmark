@@ -30,6 +30,14 @@ pub struct Session {
     pub mode: Mode,
     pub zoom: u16,
     pub notice: Option<String>,
+    // Sidebar document history belongs to Rust, never to browser storage.
+    open_documents: Vec<SavedDocument>,
+    active_document: Option<usize>,
+}
+
+struct SavedDocument {
+    path: PathBuf,
+    source: String,
 }
 
 impl Default for Session {
@@ -40,6 +48,8 @@ impl Default for Session {
             mode: Mode::Reader,
             zoom: 100,
             notice: Some("Bundled architecture document — drag and drop a .md/.txt file or use Open document to test your own files.".into()),
+            open_documents: Vec::new(),
+            active_document: None,
         }
     }
 }
@@ -50,7 +60,12 @@ impl Session {
             self.notice = Some("Only .md, .markdown and .txt documents are supported in this prototype.".into());
             return;
         }
-        match std::fs::metadata(path) {
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        if let Some(index) = self.open_documents.iter().position(|doc| doc.path == path) {
+            self.select(index);
+            return;
+        }
+        match std::fs::metadata(&path) {
             Ok(metadata) if metadata.len() > MAX_DOCUMENT_BYTES => {
                 self.notice = Some("This initial UI prototype limits documents to 2 MiB; the production reader must remove this limitation without freezing.".into());
                 return;
@@ -61,22 +76,56 @@ impl Session {
             }
             _ => {}
         }
-        match std::fs::read_to_string(path) {
+        match std::fs::read_to_string(&path) {
             Ok(source) => {
-                self.path = Some(std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()));
-                self.source = source;
-                self.mode = Mode::Reader;
-                self.notice = None;
+                self.open_documents.push(SavedDocument { path, source });
+                self.select(self.open_documents.len() - 1);
             }
             Err(error) => self.notice = Some(format!("Unable to open document: {error}")),
         }
     }
 
+    pub fn select(&mut self, index: usize) {
+        let Some(document) = self.open_documents.get(index) else { return };
+        self.path = Some(document.path.clone());
+        self.source = document.source.clone();
+        self.active_document = Some(index);
+        self.mode = Mode::Reader;
+        self.notice = None;
+    }
+
+    pub fn select_bundled(&mut self) {
+        self.path = None;
+        self.source = BUNDLED_SOURCE.to_owned();
+        self.active_document = None;
+        self.mode = Mode::Reader;
+        self.notice = None;
+    }
+
     pub fn reload(&mut self) {
-        if let Some(path) = self.path.clone() {
-            self.open(&path);
-        } else {
+        let Some(index) = self.active_document else {
             self.notice = Some("The bundled demonstration is already current.".into());
+            return;
+        };
+        let path = &self.open_documents[index].path;
+        match std::fs::metadata(path) {
+            Ok(metadata) if metadata.len() > MAX_DOCUMENT_BYTES => {
+                self.notice = Some("Document exceeds the 2 MiB prototype limit.".into());
+                return;
+            }
+            Err(error) => {
+                self.notice = Some(format!("Unable to inspect document: {error}"));
+                return;
+            }
+            _ => {}
+        }
+        match std::fs::read_to_string(path) {
+            Ok(source) => {
+                self.open_documents[index].source = source.clone();
+                self.source = source;
+                self.notice = None;
+            }
+            Err(error) => self.notice = Some(format!("Unable to reload document: {error}")),
         }
     }
 
@@ -136,7 +185,17 @@ impl Session {
         html.push_str("</header><aside class=\"sidebar\"><div class=\"sidebar-inner\">");
         html.push_str("<a class=\"open-doc\" href=\"wolfmark://open/\" title=\"Select a local Markdown or text document\"><span class=\"glyph\">▱</span>Open document</a>");
         html.push_str("<p class=\"section-title\">Open Documents</p>");
-        let _ = write!(html, "<span class=\"document-link selected\" title=\"{}\"><span class=\"doc-file\">▤</span>{}</span>", escape_attr(&title), escape(&title));
+        html.push_str("<nav class=\"document-list\" aria-label=\"Open documents\">");
+        let bundled_class = if self.active_document.is_none() { " selected" } else { "" };
+        let _ = write!(html, "<a class=\"document-link{bundled_class}\" href=\"wolfmark://document/bundled\" title=\"Bundled Wolfmark architecture\"><span class=\"doc-file\">▤</span>Architecture.md</a>");
+        for (index, document) in self.open_documents.iter().enumerate() {
+            let selected = if self.active_document == Some(index) { " selected" } else { "" };
+            let label = document.path.file_name().unwrap_or_default().to_string_lossy();
+            let _ = write!(html,
+                "<a class=\"document-link{selected}\" href=\"wolfmark://document/{index}\" title=\"{}\"><span class=\"doc-file\">▤</span>{}</a>",
+                escape_attr(&document.path.to_string_lossy()), escape(&label));
+        }
+        html.push_str("</nav>");
         html.push_str("<p class=\"section-title\">Outline</p><nav class=\"outline-scroll\" aria-label=\"Document outline\">");
         if self.mode == Mode::Reader {
             if toc.is_empty() {
@@ -372,6 +431,29 @@ mod tests {
         assert!(html.contains("wolfmark://mode/source"));
         assert!(html.contains("wolfmark://refresh/"));
         assert!(html.contains("footer-art"));
+    }
+
+    #[test]
+    fn sidebar_selection_reuses_distinct_document_buffers() {
+        let dir = std::env::temp_dir().join(format!("wolfmark-servo-multidoc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let one = dir.join("one.md");
+        let two = dir.join("two.md");
+        std::fs::write(&one, "# First").unwrap();
+        std::fs::write(&two, "# Second").unwrap();
+        let mut session = Session::default();
+        session.open(&one);
+        session.open(&two);
+        assert_eq!(session.open_documents.len(), 2);
+        assert!(session.source.contains("Second"));
+        session.select(0);
+        assert!(session.source.contains("First"));
+        assert!(session.render_html().contains("wolfmark://document/1"));
+        session.select_bundled();
+        assert!(session.path.is_none());
+        session.open(&one);
+        assert_eq!(session.open_documents.len(), 2);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
