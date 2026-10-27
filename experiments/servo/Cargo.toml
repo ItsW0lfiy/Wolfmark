@@ -23,6 +23,13 @@ url = "2.5"
 webrender_api = "0.70"
 winit = "0.30.13"
 surfman = "=0.14.0"
+# Reuse Wolfmark's existing Rust markdown/model/highlighter source; no Qt linker.
+comrak = { version = "=0.54.0", default-features = false }
+two-face = { version = "=0.5.1", default-features = false, features = ["syntect-onig"] }
+serde = { version = "1.0.228", features = ["derive"] }
+base64 = "0.22"
+# Native desktop file picker; no localhost or external browser.
+rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal"] }
 
 # Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
 [patch.crates-io]
