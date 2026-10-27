@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use base64::Engine;
 use url::Url;
 
-use crate::{highlight, model, parser};
+use crate::{highlight, image_paths, model, parser};
 
 const CSS: &str = include_str!("ui.css");
 const LOGO: &[u8] = include_bytes!("../../../assets/icons/wolfmark-128x128.png");
@@ -487,20 +487,21 @@ fn wrapped_inlines(html: &mut String, tag: &str, contents: &[model::Inline], doc
 }
 
 fn local_image_data(source: &str, document: Option<&Path>) -> Option<String> {
-    let base = document?.parent()?;
-    let decoded = percent_encoding::percent_decode_str(source).decode_utf8().ok()?;
-    let relative = Path::new(decoded.as_ref());
-    if relative.is_absolute() || decoded.contains('\0') || decoded.contains("://") {
+    // The production Wolfmark file-policy module recognizes relative paths,
+    // percent-encoded spaces, native absolute paths and file: URIs.
+    // Reuse it instead of imposing a second incompatible Servo path policy.
+    let resolution = image_paths::resolve_local_image(document?, source);
+    if resolution.state != image_paths::AssetState::Allowed {
         return None;
     }
-    let file = std::fs::canonicalize(base.join(relative)).ok()?;
-    let base = std::fs::canonicalize(base).ok()?;
-    if !file.starts_with(&base) { return None; }
+    let file = resolution.canonical_path?;
     let mime = match file.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        // SVG still needs the bounded native rasterization pipeline.
+        // Never hand untrusted active SVG markup directly to the HTML engine.
         _ => return None,
     };
     if std::fs::metadata(&file).ok()?.len() > MAX_IMAGE_BYTES { return None; }
@@ -606,6 +607,28 @@ mod tests {
         assert!(html.contains("<strong>wolf</strong>"));
         assert!(html.contains("class=\"codebox\""));
         assert!(html.contains("color:rgb("));
+    }
+
+    #[test]
+    fn image_resources_follow_wolfmark_path_rules() {
+        let root = std::env::temp_dir().join(format!("wolfmark-servo-images-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let document = root.join("document.md");
+        let image = root.join("wolf symbol.png");
+        std::fs::write(&document, "# Image").unwrap();
+        std::fs::write(&image, include_bytes!("../../../assets/icons/wolfmark-128x128.png")).unwrap();
+        for src in [
+            "wolf symbol.png".to_string(),
+            "wolf%20symbol.png".to_string(),
+            image.to_string_lossy().into_owned(),
+            Url::from_file_path(&image).unwrap().to_string(),
+        ] {
+            let data = local_image_data(&src, Some(&document)).expect("locally allowed image");
+            assert!(data.starts_with("data:image/png;base64,"));
+        }
+        assert!(local_image_data("https://example.com/image.png", Some(&document)).is_none());
+        assert!(local_image_data("file:///nonexistent/wolf.png", Some(&document)).is_none());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
