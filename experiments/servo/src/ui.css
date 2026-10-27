@@ -27,6 +27,15 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .open-doc:hover{background:linear-gradient(110deg,#a32b4b,#8b2c4c)}
 .section-title{color:#a0a7b7;font-size:11px;letter-spacing:.11em;text-transform:uppercase;margin:29px 0 12px}
 .document-list{display:flex;flex-direction:column;gap:3px;flex:none;max-height:35vh;min-height:0;overflow-y:auto;scrollbar-color:#74283d transparent;scrollbar-width:thin;padding-right:2px}
+.document-row{display:flex;align-items:center;min-width:0;position:relative;border-left:3px solid transparent;border-radius:5px}
+.document-row:hover{background:#29232b}
+.document-row.selected{background:linear-gradient(90deg,#44212c,#3e2028);border-left-color:#d63465}
+.document-row .document-link{flex:1;min-width:0;border:0;border-radius:0;background:none;padding:5px 8px}
+.document-row .document-link:hover{background:none}
+.document-close{flex:none;display:flex;justify-content:center;align-items:center;width:26px;height:28px;color:#b1a2ad;font-size:17px;border-radius:5px;margin-right:3px;opacity:.15}
+.document-row:hover .document-close,.document-row.selected .document-close,.document-close:focus-visible{opacity:1}
+.document-close:hover{background:#69243c;color:#fff}
+.nav-pair .nav-disabled{opacity:.35;cursor:default;pointer-events:none}
 .document-link{display:flex;align-items:center;gap:10px;min-height:35px;padding:5px 11px;border-radius:5px;color:#d2d2d8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-size:12px}
 .document-link.selected{background:linear-gradient(90deg,#44212c,#3e2028);border-left:3px solid #d63465;padding-left:8px;color:#fff}
 .doc-file{font-size:14px;opacity:.85}
