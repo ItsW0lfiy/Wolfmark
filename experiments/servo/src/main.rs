@@ -48,6 +48,8 @@ mod updates;
 mod update_checks;
 #[cfg(target_os = "windows")]
 mod windows_chrome;
+#[cfg(target_os = "linux")]
+mod linux_chrome;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -1706,7 +1708,14 @@ impl ApplicationHandler<Wake> for App {
                         let height = f64::from(size.height) / scale;
                         if !state.window.is_maximized() {
                             if let Some(edge) = resize_at(x, y, width, height) {
-                                let _ = state.window.drag_resize_window(edge);
+                                if let Err(error) = state.window.drag_resize_window(edge) {
+                                    #[cfg(target_os = "linux")]
+                                    if let Err(fallback) = linux_chrome::begin_resize(&state.window, edge) {
+                                        eprintln!("Native Linux resize unavailable: {fallback}; winit: {error}");
+                                    }
+                                    #[cfg(not(target_os = "linux"))]
+                                    eprintln!("Native resize unavailable: {error}");
+                                }
                                 return;
                             }
                         }
