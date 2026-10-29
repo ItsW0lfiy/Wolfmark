@@ -926,10 +926,13 @@ impl State {
             }
             Action::Open => {
                 // Local native OS dialog, not a browser/web file chooser.
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Markdown and text", &["md", "markdown", "txt"])
-                    .pick_file()
-                {
+                let last_directory = self.document.borrow().preferences.last_open_directory.clone();
+                let mut dialog = rfd::FileDialog::new()
+                    .add_filter("Markdown and text", &["md", "markdown", "txt"]);
+                if !last_directory.is_empty() && std::path::Path::new(&last_directory).is_dir() {
+                    dialog = dialog.set_directory(&last_directory);
+                }
+                if let Some(path) = dialog.pick_file() {
                     self.document.borrow_mut().open(&path);
                 } else {
                     return;
