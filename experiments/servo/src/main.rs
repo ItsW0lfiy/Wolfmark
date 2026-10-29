@@ -855,7 +855,7 @@ impl State {
                         document.querySelector('.zoom-value').textContent = '{zoom}%';
                         viewport.scrollTop = oldTop * ratio;
                     }})()"#, size = f64::from(zoom) * 0.17, padding = f64::from(zoom) * 0.48,
-                        top = f64::from(zoom) * 0.22, bottom = f64::from(zoom) * 0.34),
+                        top = f64::from(zoom) * 0.32, bottom = f64::from(zoom) * 0.34),
                         |result| { if let Err(error) = result { eprintln!("Zoom update failed: {error:?}"); } });
                     self.servo.spin_event_loop();
                 }
@@ -1118,7 +1118,7 @@ fn resize_at(x: f64, y: f64, width: f64, height: f64) -> Option<ResizeDirection>
 fn title_drag_area(x: f64, y: f64, width: f64) -> bool {
     // Avoid brand/breadcrumb on the left and settings/caption controls on
     // the right; only the otherwise-empty header region starts system move.
-    y >= 8.0 && y < 54.0 && x > width.min(330.0) * 0.85 && x < width - 425.0
+    y >= 8.0 && y < 48.0 && x > width.min(330.0) * 0.85 && x < width - 425.0
 }
 
 #[cfg(test)]
@@ -1202,7 +1202,7 @@ impl ApplicationHandler<Wake> for App {
                                         .unwrap_or(928.0),
                                 )
                             } else {
-                                winit::dpi::LogicalSize::new(1100.0, 760.0)
+                                winit::dpi::LogicalSize::new(1280.0, 820.0)
                             },
                         ),
                 )
@@ -1457,8 +1457,8 @@ impl ApplicationHandler<Wake> for App {
                             let scale = state.window.scale_factor();
                             let x = f64::from(cursor.x) / scale;
                             let y = f64::from(cursor.y) / scale;
-                            let sidebar = if state.document.borrow().sidebar_collapsed { 0.0 } else { 294.0 };
-                            if x > sidebar && y >= 115.0 {
+                            let sidebar = if state.document.borrow().sidebar_collapsed { 0.0 } else { 304.0 };
+                            if x > sidebar && y >= 96.0 {
                                 let active = state.middle_scroll.borrow_mut().toggle(
                                     (f64::from(cursor.x), f64::from(cursor.y)), Instant::now());
                                 if active {
