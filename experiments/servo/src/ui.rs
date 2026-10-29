@@ -500,6 +500,14 @@ impl Session {
             Ok(()) => {
                 let document = &mut self.open_documents[index];
                 document.disk_stamp = DiskStamp::at(&document.path);
+                if save_as {
+                    if let Some(parent) = document.path.parent() {
+                        self.preferences.last_open_directory = parent.to_string_lossy().into_owned();
+                        if let Err(error) = self.preferences.save() {
+                            eprintln!("Could not remember Save As location: {error}");
+                        }
+                    }
+                }
                 self.notice = None;
                 true
             }
