@@ -286,7 +286,7 @@ impl servo::WebViewDelegate for State {
         document.set_editor_view((start, end, top));
         if let Err(error) = document.apply_editor_view(&value) {
             document.notice = Some(error);
-        } else if document.mode == ui::Mode::Live {
+        } else if matches!(document.mode, ui::Mode::Live | ui::Mode::Source) {
             // Value is already the normalized textarea view; using raw source
             // here would shift decoration offsets for BOM/mixed line endings.
             let markup = ui::decorated_source(&value);
