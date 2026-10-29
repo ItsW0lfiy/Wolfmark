@@ -196,3 +196,6 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .live-token-8{color:#dac0ac}
 .live-token-9{color:#a4a1a8}
 .live-token-10{color:#a96a80}
+
+.live-stage.live-wrap .live-highlights,
+.live-stage.live-wrap .live-edit-surface .source-editor{white-space:pre-wrap!important;overflow-wrap:anywhere!important}
