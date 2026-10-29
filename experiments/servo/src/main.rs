@@ -137,6 +137,7 @@ struct State {
     frameless: bool,
     close_requested: Rc<Cell<bool>>,
     snapshot_requested: Cell<bool>,
+    next_file_scan: Cell<Instant>,
     pre_fullscreen_maximized: Cell<bool>,
     last_caption_click: Cell<Option<(Instant, f64, f64)>>,
     clipboard: Rc<RefCell<Option<arboard::Clipboard>>>,
@@ -1226,6 +1227,28 @@ impl ApplicationHandler<Wake> for App {
                 event_loop.exit();
                 return;
             }
+            // Fallback filesystem watcher: bounded metadata polling, only
+            // while documents are open. Source/Live and unsaved buffers cannot
+            // be overwritten by an external edit.
+            let files_open = state.document.borrow().has_open_files();
+            if files_open && Instant::now() >= state.next_file_scan.get() {
+                state.next_file_scan.set(Instant::now() + std::time::Duration::from_millis(900));
+                if !state.syncing.get() && !state.document.borrow().settings_open {
+                    let refreshed = state.document.borrow_mut().poll_external_files();
+                    if refreshed {
+                        let (url, title) = {
+                            let document = state.document.borrow();
+                            (document.page_url(), document.title())
+                        };
+                        state.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
+                        if let Some(view) = state.view.borrow().last() {
+                            view.load(url);
+                        }
+                        state.servo.spin_event_loop();
+                        state.window.request_redraw();
+                    }
+                }
+            }
             let image_pending = state
                 .document
                 .borrow()
@@ -1233,6 +1256,10 @@ impl ApplicationHandler<Wake> for App {
                 .iter()
                 .fold(false, |pending, resources| resources.poll() || pending);
             let mut due = state.smooth_wheel.borrow().next_tick();
+            if files_open {
+                let file_due = state.next_file_scan.get();
+                due = Some(due.map_or(file_due, |due| due.min(file_due)));
+            }
             if let Some(middle_due) = state.middle_scroll.borrow().next_tick() {
                 due = Some(due.map_or(middle_due, |due| due.min(middle_due)));
             }
@@ -1329,6 +1356,7 @@ impl ApplicationHandler<Wake> for App {
                 frameless,
                 close_requested: Rc::new(Cell::new(false)),
                 snapshot_requested: Cell::new(false),
+                next_file_scan: Cell::new(Instant::now() + std::time::Duration::from_millis(900)),
                 pre_fullscreen_maximized: Cell::new(false),
                 last_caption_click: Cell::new(None),
                 clipboard: Rc::new(RefCell::new(None)),
