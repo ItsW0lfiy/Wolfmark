@@ -113,8 +113,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    if std::env::var("WOLFMARK_SNAPSHOT_MODE").is_ok_and(|mode| mode == "source") {
-        session.mode = ui::Mode::Source;
+    match std::env::var("WOLFMARK_SNAPSHOT_MODE").as_deref() {
+        Ok("source") => session.mode = ui::Mode::Source,
+        Ok("live") => session.mode = ui::Mode::Live,
+        Ok("settings") => session.begin_settings(),
+        _ => {}
     }
     let mut app = App::Initial(Waker(loop_.create_proxy()), session, smoke_page);
     loop_.run_app(&mut app)?;
