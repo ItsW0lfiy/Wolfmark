@@ -240,8 +240,10 @@ impl servo::WebViewDelegate for State {
             // here would shift decoration offsets for BOM/mixed line endings.
             let markup = ui::decorated_source(&value);
             let escaped = serde_json::to_string(&markup).unwrap_or_else(|_| "\"\"".into());
+            let line_numbers = (1..=value.split('\n').count()).map(|line| line.to_string()).collect::<Vec<_>>().join("\n");
+            let number_json = serde_json::to_string(&line_numbers).unwrap_or_else(|_| "\"\"".into());
             self.scripts.borrow_mut().push((webview.clone(),
-                format!("if(document.getElementById('live-highlights')) document.getElementById('live-highlights').innerHTML={escaped};")));
+                format!("if(document.getElementById('live-highlights')) document.getElementById('live-highlights').innerHTML={escaped};if(document.getElementById('live-line-numbers')) document.getElementById('live-line-numbers').textContent={number_json};")));
             let _ = self.waker.0.send_event(Wake);
         }
         self.window.set_title(&format!(
