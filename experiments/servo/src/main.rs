@@ -72,6 +72,14 @@ use winit::keyboard::{
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::{ResizeDirection, Window};
 
+fn native_wolfmark_icon() -> Option<winit::window::Icon> {
+    let artwork = image::load_from_memory(
+        include_bytes!("../../../assets/icons/wolfmark-128x128.png"),
+    ).ok()?.to_rgba8();
+    let (width, height) = artwork.dimensions();
+    winit::window::Icon::from_rgba(artwork.into_raw(), width, height).ok()
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -1218,7 +1226,9 @@ impl ApplicationHandler<Wake> for App {
                 .create_window(
                     Window::default_attributes()
                         .with_title(caption)
+                        .with_window_icon(native_wolfmark_icon())
                         .with_decorations(!frameless)
+                        .with_min_inner_size(winit::dpi::LogicalSize::new(720.0, 480.0))
                         .with_inner_size(
                             if std::env::var_os("WOLFMARK_SERVO_SNAPSHOT").is_some() {
                                 winit::dpi::LogicalSize::new(
