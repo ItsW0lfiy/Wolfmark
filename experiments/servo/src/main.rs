@@ -15,6 +15,7 @@ use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::Instant;
 
 // Shared Rust code from the existing Wolfmark core, without linking Qt.
@@ -42,6 +43,9 @@ mod smooth_scroll;
 mod middle_scroll;
 mod ui;
 mod user_settings;
+#[path = "../../../src/updates.rs"]
+mod updates;
+mod update_checks;
 #[cfg(target_os = "windows")]
 mod windows_chrome;
 
@@ -129,6 +133,7 @@ struct State {
     last_caption_click: Cell<Option<(Instant, f64, f64)>>,
     clipboard: Rc<RefCell<Option<arboard::Clipboard>>>,
     search: Rc<RefCell<search::Search>>,
+    update_receiver: RefCell<Option<mpsc::Receiver<Result<update_checks::Report, String>>>>,
     synced_action: RefCell<Option<Action>>,
     syncing: Cell<bool>,
     waker: Waker,
@@ -406,6 +411,7 @@ enum Action {
     FindOpen,
     FindClose,
     FindNext(bool),
+    CheckUpdates,
     SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
     SidebarToggle,
     OutlineLine(usize),
@@ -434,6 +440,7 @@ impl Action {
             ("find", "/close") => Some(Self::FindClose),
             ("find", "/next") => Some(Self::FindNext(false)),
             ("find", "/previous") => Some(Self::FindNext(true)),
+            ("updates", "/check") => Some(Self::CheckUpdates),
             ("settings", "/open") => Some(Self::SettingsOpen),
             ("sidebar", "/toggle") => Some(Self::SidebarToggle),
             ("outline", path) => path.strip_prefix("/line/")
@@ -552,7 +559,8 @@ impl State {
         // commands must not act behind it while a draft is being edited.
         if self.document.borrow().settings_open
             && !matches!(action, Action::SettingsOpen | Action::SettingsClose
-                | Action::SettingsSave | Action::SettingsPage(_) | Action::SettingsToggle(_))
+                | Action::SettingsSave | Action::SettingsPage(_) | Action::SettingsToggle(_)
+                | Action::CheckUpdates)
         {
             return;
         }
@@ -567,6 +575,10 @@ impl State {
         // Window commands do not reload the document and cannot be delegated
         // to untrusted HTML or JavaScript.
         match action {
+            Action::CheckUpdates => {
+                self.request_update_check();
+                return;
+            }
             Action::SettingsOpen => {
                 self.document.borrow_mut().begin_settings();
                 let html = self.document.borrow().settings_html();
@@ -882,6 +894,7 @@ impl State {
             | Action::SettingsSave
             | Action::SettingsPage(_)
             | Action::SettingsToggle(_)
+            | Action::CheckUpdates
             | Action::OutlineLine(_)
             | Action::SidebarToggle => unreachable!(),
         }
@@ -897,7 +910,57 @@ impl State {
         self.servo.spin_event_loop();
     }
 
+    fn request_update_check(&self) {
+        if self.update_receiver.borrow().is_some() {
+            return;
+        }
+        let include_prereleases = self.document.borrow().preferences.include_prereleases;
+        self.document.borrow_mut().update_status = "Checking GitHub Releases…".into();
+        if let Some(view) = self.view.borrow().last() {
+            view.evaluate_javascript(
+                "if(document.getElementById('update-status'))document.getElementById('update-status').textContent='Checking GitHub Releases…';",
+                |_| {});
+        }
+        let (send, receive) = mpsc::channel();
+        *self.update_receiver.borrow_mut() = Some(receive);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let result = update_checks::check(include_prereleases);
+            let _ = send.send(result);
+            let _ = waker.0.send_event(Wake);
+        });
+    }
+
+    fn collect_update_check(&self) {
+        let finished = {
+            let receiver = self.update_receiver.borrow();
+            receiver.as_ref().and_then(|receiver| {
+                match receiver.try_recv() {
+                    Ok(result) => Some(result),
+                    Err(mpsc::TryRecvError::Disconnected) =>
+                        Some(Err("The update check stopped unexpectedly.".into())),
+                    Err(mpsc::TryRecvError::Empty) => None,
+                }
+            })
+        };
+        if let Some(result) = finished {
+            self.update_receiver.borrow_mut().take();
+            let message = match result {
+                Ok(report) => report.message,
+                Err(error) => error,
+            };
+            self.document.borrow_mut().update_status = message.clone();
+            if let Some(view) = self.view.borrow().last() {
+                let payload = serde_json::to_string(&message).unwrap_or_default();
+                view.evaluate_javascript(format!(
+                    "if(document.getElementById('update-status'))document.getElementById('update-status').textContent={payload};"
+                ), |_| {});
+            }
+        }
+    }
+
     fn take_pending_action(self: &Rc<Self>) {
+        self.collect_update_check();
         let scripts = std::mem::take(&mut *self.scripts.borrow_mut());
         for (view, script) in scripts {
             view.evaluate_javascript(script, |result| {
@@ -929,6 +992,7 @@ mod host_actions_tests {
         let good = Url::parse("wolfmark://mode/source").unwrap();
         assert_eq!(Action::from_url(&Url::parse("wolfmark://mode/live").unwrap()), Some(Action::Live));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://outline/line/13").unwrap()),Some(Action::OutlineLine(13)));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://updates/check").unwrap()),Some(Action::CheckUpdates));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://sidebar/toggle").unwrap()), Some(Action::SidebarToggle));
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(
@@ -1142,6 +1206,7 @@ impl ApplicationHandler<Wake> for App {
                 last_caption_click: Cell::new(None),
                 clipboard: Rc::new(RefCell::new(None)),
                 search: Rc::new(RefCell::new(search::Search::default())),
+                update_receiver: RefCell::new(None),
                 synced_action: RefCell::new(None),
                 syncing: Cell::new(false),
                 waker: waker.clone(),
@@ -1152,6 +1217,12 @@ impl ApplicationHandler<Wake> for App {
                 smoke_page: *smoke_page,
             });
 
+            if !state.smoke_page
+                && state.document.borrow().preferences.check_on_startup
+                && std::env::var_os("WOLFMARK_DISABLE_UPDATE_CHECKS").is_none()
+            {
+                state.request_update_check();
+            }
             let page_url = if state.smoke_page {
                 local_probe_url()
             } else {
