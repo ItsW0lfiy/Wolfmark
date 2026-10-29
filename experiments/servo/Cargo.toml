@@ -1,0 +1,36 @@
+[package]
+name = "wolfmark-servo-test"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "MPL-2.0"
+description = "Isolated, optional Servo embedding experiment for Wolfmark"
+
+# Nested workspace: never compile Servo for normal Wolfmark/Qt commands.
+[workspace]
+resolver = "3"
+
+[dependencies]
+servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard", "js_jit"] }
+embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
+euclid = "0.22"
+http = "1.4"
+percent-encoding = "2.3"
+rustls = { version = "0.23", features = ["aws-lc-rs"] }
+tracing = "0.1.44"
+url = "2.5"
+webrender_api = "0.70"
+winit = "0.30.13"
+surfman = "=0.14.0"
+# Reuse Wolfmark's existing Rust markdown/model/highlighter source; no Qt linker.
+comrak = { version = "=0.54.0", default-features = false }
+two-face = { version = "=0.5.1", default-features = false, features = ["syntect-onig"] }
+serde = { version = "1.0.228", features = ["derive"] }
+base64 = "0.22"
+# Native desktop file picker; no localhost or external browser.
+rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", "async-std"] }
+
+# Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
+[patch.crates-io]
+servo-paint-api = { path = "vendor/servo-paint-api" }
