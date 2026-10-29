@@ -14,7 +14,7 @@ use crate::{highlight, image_paths, model, parser};
 
 const CSS: &str = include_str!("ui.css");
 const LOGO: &[u8] = include_bytes!("../../../assets/icons/wolfmark-128x128.png");
-const FOOTER: &[u8] = include_bytes!("../../../assets/branding/wolfmark-banner.png");
+const FOOTER: &str = include_str!("footer_mountains.svg");
 const BUNDLED_SOURCE: &str = include_str!("../../../docs/architecture/overview.md");
 const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES: u64 = 2 * 1024 * 1024;
@@ -253,7 +253,7 @@ impl Session {
         static LOGO_URI: OnceLock<String> = OnceLock::new();
         static FOOTER_URI: OnceLock<String> = OnceLock::new();
         let logo = LOGO_URI.get_or_init(|| data_png(LOGO));
-        let footer = FOOTER_URI.get_or_init(|| data_png(FOOTER));
+        let footer = FOOTER_URI.get_or_init(|| data_svg(FOOTER));
         let mut html = String::with_capacity(CSS.len() + body.len() + 4000);
         html.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
         html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
@@ -318,7 +318,10 @@ impl Session {
         html.push_str("</nav><span class=\"viewbar-spacer\"></span><nav class=\"zoom-controls\" aria-label=\"Document zoom\">");
         let _ = write!(html, "<a href=\"wolfmark://zoom/out\" title=\"Zoom out\">−</a><span>{}%</span><a href=\"wolfmark://zoom/in\" title=\"Zoom in\">+</a></nav>", self.zoom);
         html.push_str("<span class=\"icon-button more\" title=\"Additional actions not yet implemented\">⋯</span></div>");
-        html.push_str("<div class=\"document-viewport\"><div class=\"document-inner\">");
+        let document_padding = (48.0 * f64::from(self.zoom) / 100.0).round();
+        let top_padding = (22.0 * f64::from(self.zoom) / 100.0).round();
+        let bottom_padding = (34.0 * f64::from(self.zoom) / 100.0).round();
+        let _ = write!(html, "<div class=\"document-viewport\"><div class=\"document-inner\" style=\"--qt-padding:{document_padding}px;--qt-top:{top_padding}px;--qt-bottom:{bottom_padding}px\">");
         if let Some(notice) = &self.notice {
             let _ = write!(html, "<div class=\"notice\" role=\"status\">{}</div>", escape(notice));
         }
@@ -355,6 +358,11 @@ pub fn escape(value: &str) -> String {
 
 fn escape_attr(value: &str) -> String {
     escape(value)
+}
+
+fn data_svg(source: &str) -> String {
+    // Bundled static artwork, never untrusted Markdown content.
+    format!("data:image/svg+xml;base64,{}", base64::engine::general_purpose::STANDARD.encode(source.as_bytes()))
 }
 
 fn data_png(bytes: &[u8]) -> String {
@@ -529,6 +537,18 @@ mod tests {
         assert!(html.contains("wolfmark://mode/source"));
         assert!(html.contains("wolfmark://refresh/"));
         assert!(html.contains("footer-art"));
+    }
+
+    #[test]
+    fn reader_uses_full_width_and_mountain_footer() {
+        let ui = Session::default();
+        let html = ui.render_html();
+        assert!(html.contains("--qt-padding:48px"));
+        assert!(html.contains("--qt-top:22px"));
+        assert!(html.contains("data:image/svg+xml;base64,"));
+        assert!(!html.contains("wolfmark-banner.png"));
+        assert!(!CSS.contains("max-width:1150px"));
+        assert!(CSS.contains("white-space:pre;word-break:normal"));
     }
 
     #[test]
