@@ -816,7 +816,7 @@ impl Session {
         );
         html.push_str("</div><div class=\"findbar\" hidden><input id=\"find-query\" aria-label=\"Find in document\" placeholder=\"Find text\"><a href=\"wolfmark://find/previous\">Previous</a><a href=\"wolfmark://find/next\">Next</a><span id=\"find-count\" role=\"status\"></span><a href=\"wolfmark://find/close\" aria-label=\"Close search\">Close</a></div>");
         let document_padding = (48.0 * f64::from(self.zoom) / 100.0).round();
-        let top_padding = (22.0 * f64::from(self.zoom) / 100.0).round();
+        let top_padding = (32.0 * f64::from(self.zoom) / 100.0).round();
         let bottom_padding = (34.0 * f64::from(self.zoom) / 100.0).round();
         let _ = write!(
             html,
@@ -1261,7 +1261,7 @@ mod tests {
         let ui = Session::default();
         let html = ui.render_html();
         assert!(html.contains("--qt-padding:48px"));
-        assert!(html.contains("--qt-top:22px"));
+        assert!(html.contains("--qt-top:32px"));
         assert!(html.contains("data:image/svg+xml;base64,"));
         assert!(!html.contains("wolfmark-banner.png"));
         assert!(!CSS.contains("max-width:1150px"));
