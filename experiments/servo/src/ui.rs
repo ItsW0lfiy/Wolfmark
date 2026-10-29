@@ -402,6 +402,12 @@ impl Session {
         }
         Ok(())
     }
+    pub fn editor_visible_source(&self) -> String {
+        self.active_document
+            .map(|index| self.open_documents[index].editor.view())
+            .unwrap_or_else(|| self.source.clone())
+    }
+
     pub fn dirty(&self) -> bool {
         self.active_document
             .is_some_and(|index| self.open_documents[index].editor.dirty())
