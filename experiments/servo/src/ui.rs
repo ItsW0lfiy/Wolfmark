@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! First Wolfmark/Servo UI parity slice. Document semantics and syntax
-//! highlighting are shared with Wolfmark's existing Rust modules.
-//! This is a read-only prototype, not the production editor.
+//! Servo's Rust-owned Wolfmark reader, Source and Live Preview frontend.
+//! Shared Markdown, image and editor state are sourced from Wolfmark's Rust modules.
+//! Parity with the production Qt UI remains under integration testing.
 
 use std::cell::RefCell;
 use std::fmt::Write;
@@ -19,7 +19,10 @@ const CSS: &str = include_str!("ui.css");
 const LOGO: &[u8] = include_bytes!("../../../assets/icons/wolfmark-128x128.png");
 const FOOTER: &str = include_str!("footer_mountains.svg");
 const BUNDLED_SOURCE: &str = include_str!("../../../docs/architecture/overview.md");
-const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
+// Until rendering/editing large files is fully streamed, enforce a bounded
+// allocation limit rather than freezing or running out of memory. This limit
+// is a deliberate migration gap, not an assertion of Qt feature parity.
+const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -128,7 +131,7 @@ impl Session {
     pub fn open(&mut self, path: &Path) {
         if !supported_document(path) {
             self.notice = Some(
-                "Only .md, .markdown and .txt documents are supported in this prototype.".into(),
+                "Only Markdown (.md, .markdown) and plain-text (.txt) documents are supported.".into(),
             );
             return;
         }
@@ -139,7 +142,7 @@ impl Session {
         }
         match std::fs::metadata(&path) {
             Ok(metadata) if metadata.len() > MAX_DOCUMENT_BYTES => {
-                self.notice = Some("This initial UI prototype limits documents to 2 MiB; the production reader must remove this limitation without freezing.".into());
+                self.notice = Some("This document exceeds the current 16 MiB safety limit. Large-document streaming is still being integrated.".into());
                 return;
             }
             Err(error) => {
@@ -547,7 +550,7 @@ impl Session {
         let path = &self.open_documents[index].path;
         match std::fs::metadata(path) {
             Ok(metadata) if metadata.len() > MAX_DOCUMENT_BYTES => {
-                self.notice = Some("Document exceeds the 2 MiB prototype limit.".into());
+                self.notice = Some("Document exceeds the current 16 MiB safety limit.".into());
                 return;
             }
             Err(error) => {
@@ -1207,7 +1210,7 @@ fn render_inlines(
                 } else {
                     let _ = write!(
                         html,
-                        "<span class=\"image-error\" role=\"img\" aria-label=\"{}\">Image unavailable in prototype: {}</span>",
+                        "<span class=\"image-error\" role=\"img\" aria-label=\"{}\">Image unavailable: {}</span>",
                         escape_attr(alt),
                         escape(source)
                     );
@@ -1361,6 +1364,14 @@ mod tests {
         assert!(html.contains("wolfmark://window/minimize"));
         assert!(html.contains("wolfmark://window/maximize"));
         assert!(html.contains("wolfmark://window/close"));
+    }
+
+    #[test]
+    fn current_reader_has_no_prototype_only_user_messages() {
+        let html = Session::default().render_html();
+        assert!(!html.contains("Image unavailable in prototype"));
+        assert!(!html.contains("Bundled architecture document — drag and drop"));
+        assert_eq!(MAX_DOCUMENT_BYTES, 16 * 1024 * 1024);
     }
 
     #[test]
