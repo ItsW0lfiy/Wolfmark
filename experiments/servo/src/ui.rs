@@ -40,6 +40,7 @@ pub struct Session {
     pub settings_page: &'static str,
     pub settings_draft: Option<crate::user_settings::Preferences>,
     pub preferences: crate::user_settings::Preferences,
+    pub update_status: String,
     pub view_revision: std::cell::Cell<u64>,
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
@@ -91,6 +92,7 @@ impl Default for Session {
             settings_page: "updates",
             settings_draft: None,
             preferences,
+            update_status: "Not checked".to_owned(),
             view_revision: std::cell::Cell::new(0),
             notice,
             open_documents: Vec::new(),
@@ -372,7 +374,9 @@ impl Session {
                 html.push_str("<h2>Update preferences</h2>");
                 let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check for updates automatically</strong><small>Check quietly after Wolfmark opens when the GitHub updater is connected.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.check_on_startup,checked(draft.check_on_startup));
                 let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/prereleases\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Include pre-release versions</strong><small>Development builds may be less stable than regular releases.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.include_prereleases,checked(draft.include_prereleases));
-                html.push_str("<h2>Current version</h2><div class=\"settings-about\"><strong>Wolfmark 0.1.0-dev.7</strong><span>The GitHub update-check and download transport has not been connected to Servo yet.</span></div>");
+                html.push_str("<h2>Current version</h2><div class=\"settings-about\"><strong>Wolfmark 0.1.0-dev.7</strong>");
+                let _ = write!(html,"<span id=\"update-status\" role=\"status\">{}</span></div>",escape(&self.update_status));
+                html.push_str("<a href=\"wolfmark://updates/check\" class=\"settings-check-now\" title=\"Check GitHub Releases now\">Check now</a>");
             }
         }
         html.push_str("</div></div><footer class=\"settings-footer\"><span>Changes are saved only when you select Save</span><div class=\"settings-actions\"><a class=\"settings-cancel\" href=\"wolfmark://settings/close\">Cancel</a><a class=\"settings-save\" href=\"wolfmark://settings/save\">Save</a></div></footer></div></section>");
@@ -1163,6 +1167,15 @@ mod tests {
         assert!(html.contains("app sidebar-collapsed"));
         assert!(html.contains("wolfmark://sidebar/toggle"));
         assert!(!html.contains("documentTabRow"));
+    }
+
+    #[test]
+    fn updates_page_has_explicit_check_action_and_status() {
+        let mut ui = Session::default();
+        ui.begin_settings();
+        let html = ui.render_html();
+        assert!(html.contains("wolfmark://updates/check"));
+        assert!(html.contains("id=\"update-status\""));
     }
 
     #[test]
