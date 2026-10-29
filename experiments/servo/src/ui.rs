@@ -592,13 +592,14 @@ impl Session {
             body.push_str("</textarea>");
             if self.mode == Mode::Live {
                 let preview = decorated_source(&view);
-                let lines = view.lines().count().max(1);
+                let lines = view.split('\n').count().max(1);
                 let line_numbers = (1..=lines).map(|n| n.to_string()).collect::<Vec<_>>().join("\n");
                 let number_html = escape(&line_numbers);
+                let live_wrap = if self.preferences.editor_word_wrap { " live-wrap" } else { "" };
                 // The editable textarea is the real input; the preview layer
                 // uses the same raw text and only changes visual token colors.
                 // Markdown source is NEVER rewritten by the decoration layer.
-                body = format!("<div class=\"live-stage\"><pre class=\"live-line-numbers\" aria-hidden=\"true\" id=\"live-line-numbers\">{number_html}</pre><div class=\"live-edit-surface\"><pre class=\"live-highlights\" aria-hidden=\"true\" id=\"live-highlights\">{preview}</pre>{body}</div></div>");
+                body = format!("<div class=\"live-stage{live_wrap}\"><pre class=\"live-line-numbers\" aria-hidden=\"true\" id=\"live-line-numbers\">{number_html}</pre><div class=\"live-edit-surface\"><pre class=\"live-highlights\" aria-hidden=\"true\" id=\"live-highlights\">{preview}</pre>{body}</div></div>");
             }
         } else if plain {
             body.push_str("<pre class=\"plain-text\">");
