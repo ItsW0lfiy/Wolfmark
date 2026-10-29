@@ -72,6 +72,27 @@ jobs:
               test "$(stat -c%s "$WOLFMARK_SERVO_SNAPSHOT")" -ge 10000
             done
           '
+      - name: Test Reader search/zoom and Source editing through actual GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
+            set -euo pipefail
+            unset WOLFMARK_SERVO_SNAPSHOT
+            export WOLFMARK_SERVO_GUI_TEST=reader
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-reader.log 2>&1 || { cat /tmp/wm-reader.log; exit 1; }
+            grep -F "SERVO_GUI reader search selection and retained-DOM zoom passed" /tmp/wm-reader.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-reader.log
+            export WOLFMARK_SERVO_GUI_TEST=source-save
+            export WOLFMARK_SNAPSHOT_MODE=source
+            echo "# Integration source document" > /tmp/wm-servo-gui-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-gui-fixture.md > /tmp/wm-source.log 2>&1 || { cat /tmp/wm-source.log; exit 1; }
+            grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-source.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-source.log
+            grep -F "Servo GUI edit" /tmp/wm-servo-gui-fixture.md
+          '
+
       - name: Save graphical evidence even if the renderer fails
         if: always()
         uses: actions/upload-artifact@v4
