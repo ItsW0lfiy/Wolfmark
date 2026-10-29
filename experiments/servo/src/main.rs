@@ -302,8 +302,9 @@ impl servo::WebViewDelegate for State {
             let escaped = serde_json::to_string(&markup).unwrap_or_else(|_| "\"\"".into());
             let line_numbers = (1..=value.split('\n').count()).map(|line| line.to_string()).collect::<Vec<_>>().join("\n");
             let number_json = serde_json::to_string(&line_numbers).unwrap_or_else(|_| "\"\"".into());
+            let dirty = document.dirty();
             self.scripts.borrow_mut().push((webview.clone(),
-                format!("if(document.getElementById('live-highlights')) document.getElementById('live-highlights').innerHTML={escaped};if(document.getElementById('live-line-numbers')) document.getElementById('live-line-numbers').textContent={number_json};")));
+                format!("if(document.getElementById('live-highlights')) document.getElementById('live-highlights').innerHTML={escaped};if(document.getElementById('live-line-numbers')) document.getElementById('live-line-numbers').textContent={number_json};document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});")));
             let _ = self.waker.0.send_event(Wake);
         }
         self.window.set_title(&format!(
@@ -977,6 +978,7 @@ impl State {
                         const gutter=document.getElementById('live-line-numbers');
                         if(gutter)gutter.textContent=Array.from({{length:editor.value.split('\n').length}},
                             (_,index)=>index+1).join('\n');
+                        document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});
                         const status=document.getElementById('editor-status');
                         if(status){{
                             const before=editor.value.slice(0,editor.selectionStart);
