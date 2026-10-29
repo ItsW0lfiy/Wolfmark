@@ -231,3 +231,14 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .live-line-numbers,.live-edit-surface{font-size:calc(var(--doc-size,17px) * .85)}
 .live-edit-surface,.live-line-numbers{line-height:1.65}
 .live-edit-surface .source-editor,.live-highlights{font-size:inherit!important}
+
+/* Qt uses an editorial sans-serif face for contextual Live Preview and a
+   monospace source font. The mirror and real textarea always share metrics. */
+.live-stage:not(.source-stage) .live-edit-surface,
+.live-stage:not(.source-stage) .live-line-numbers{
+    font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif
+}
+.live-stage.source-stage .live-edit-surface,
+.live-stage.source-stage .live-line-numbers{
+    font-family:"Cascadia Code",Consolas,ui-monospace,monospace
+}
