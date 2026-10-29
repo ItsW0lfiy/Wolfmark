@@ -376,7 +376,7 @@ enum Action {
     FindOpen,
     FindClose,
     FindNext(bool),
-    SettingsOpen, SettingsClose, SettingsToggle(&'static str),
+    SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
     SelectDocument(usize),
     SelectBundled,
     CloseDocument(usize),
@@ -404,6 +404,10 @@ impl Action {
             ("find", "/previous") => Some(Self::FindNext(true)),
             ("settings", "/open") => Some(Self::SettingsOpen),
             ("settings", "/close") => Some(Self::SettingsClose),
+            ("settings", "/save") => Some(Self::SettingsSave),
+            ("settings", "/page-updates") => Some(Self::SettingsPage("updates")),
+            ("settings", "/page-editor") => Some(Self::SettingsPage("editor")),
+            ("settings", "/page-about") => Some(Self::SettingsPage("about")),
             ("settings", "/word-wrap") => Some(Self::SettingsToggle("word-wrap")),
             ("settings", "/check-updates") => Some(Self::SettingsToggle("check-updates")),
             ("settings", "/prereleases") => Some(Self::SettingsToggle("prereleases")),
@@ -485,7 +489,7 @@ impl State {
         // to untrusted HTML or JavaScript.
         match action {
             Action::SettingsOpen => {
-                self.document.borrow_mut().settings_open = true;
+                self.document.borrow_mut().begin_settings();
                 let url = self.document.borrow().page_url();
                 if let Some(view) = self.view.borrow().last() {
                     view.load(url);
@@ -494,11 +498,33 @@ impl State {
                 return;
             }
             Action::SettingsClose => {
-                self.document.borrow_mut().settings_open = false;
+                self.document.borrow_mut().cancel_settings();
                 let url = self.document.borrow().page_url();
                 if let Some(view) = self.view.borrow().last() {
                     view.load(url);
                     self.servo.spin_event_loop();
+                }
+                return;
+            }
+            Action::SettingsSave => {
+                if let Err(error) = self.document.borrow_mut().save_settings() {
+                    eprintln!("Settings save failed: {error}");
+                }
+                let url = self.document.borrow().page_url();
+                if let Some(view) = self.view.borrow().last() {
+                    view.load(url);
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
+            Action::SettingsPage(page) => {
+                if self.document.borrow().settings_open {
+                    self.document.borrow_mut().settings_page(page);
+                    let url = self.document.borrow().page_url();
+                    if let Some(view) = self.view.borrow().last() {
+                        view.load(url);
+                        self.servo.spin_event_loop();
+                    }
                 }
                 return;
             }
@@ -701,6 +727,8 @@ impl State {
             | Action::FindNext(_)
             | Action::SettingsOpen
             | Action::SettingsClose
+            | Action::SettingsSave
+            | Action::SettingsPage(_)
             | Action::SettingsToggle(_) => unreachable!(),
         }
         let (url, title) = {
