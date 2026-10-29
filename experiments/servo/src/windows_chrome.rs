@@ -108,7 +108,7 @@ unsafe extern "system" fn wolfmark_subclass(
             }
             // On Windows, Wolfmark's 3 caption buttons are 44 CSS px wide.
             // HTMAXBUTTON, not HTCLIENT, is required for the native Snap flyout.
-            let caption_height = 54.0 * dpi;
+            let caption_height = 48.0 * dpi;
             if y >= 0.0 && y < caption_height
                 && x >= width - 88.0 * dpi && x < width - 44.0 * dpi
             {
