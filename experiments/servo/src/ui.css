@@ -208,3 +208,8 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .app.sidebar-collapsed{grid-template-columns:0 minmax(0,1fr)}
 .sidebar-collapsed .sidebar{display:none}
 .sidebar-collapsed .main{grid-column:2}
+
+/* Native Qt middle-autoscroll cue. Fixed to viewport-local click coordinates
+   so movement of the document never shifts the anchor. */
+#wolfmark-autoscroll{position:fixed;z-index:45;width:34px;height:34px;margin-left:-17px;margin-top:-17px;border:1px solid #9b8994;border-radius:50%;background:rgba(34,35,42,.92);color:#d4cbd0;box-shadow:0 2px 13px #000a;display:flex;align-items:center;justify-content:center;pointer-events:none}
+#wolfmark-autoscroll svg{width:28px;height:28px}
