@@ -949,7 +949,45 @@ impl State {
             Action::Save(save_as) => {
                 self.document.borrow_mut().save(save_as);
             }
-            Action::Undo(redo) => self.document.borrow_mut().undo(redo),
+            Action::Undo(redo) => {
+                let (value, markup, dirty) = {
+                    let mut document = self.document.borrow_mut();
+                    document.undo(redo);
+                    let value = document.editor_visible_source();
+                    let markup = ui::decorated_source(&value);
+                    (value, markup, document.dirty())
+                };
+                if let Some(view) = self.view.borrow().last() {
+                    let value_json = serde_json::to_string(&value).unwrap_or_default();
+                    let markup_json = serde_json::to_string(&markup).unwrap_or_default();
+                    view.evaluate_javascript(format!(r#"(() => {{
+                        const editor=document.getElementById('source-editor');
+                        if(!editor)return;
+                        const previousY=editor.scrollTop;
+                        const previousX=editor.scrollLeft;
+                        const start=editor.selectionStart;
+                        const end=editor.selectionEnd;
+                        editor.value={value_json};
+                        editor.setSelectionRange(Math.min(start,editor.value.length),
+                            Math.min(end,editor.value.length));
+                        editor.scrollTop=previousY;editor.scrollLeft=previousX;
+                        const mirror=document.getElementById('live-highlights');
+                        if(mirror){{mirror.innerHTML={markup_json};mirror.scrollTop=previousY;mirror.scrollLeft=previousX;}}
+                        const gutter=document.getElementById('live-line-numbers');
+                        if(gutter)gutter.textContent=Array.from({{length:editor.value.split('\n').length}},
+                            (_,index)=>index+1).join('\n');
+                        const status=document.getElementById('editor-status');
+                        if(status){{
+                            const before=editor.value.slice(0,editor.selectionStart);
+                            const line=before.split('\n').length;
+                            const col=before.length-before.lastIndexOf('\n');
+                            status.textContent='Ln '+line+':'+col+({dirty}?' · Unsaved':'');
+                        }}
+                    }})()"#), |_| {});
+                    self.servo.spin_event_loop();
+                }
+                return;
+            },
             Action::Refresh => self.document.borrow_mut().reload(),
             Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
             Action::Live => self.document.borrow_mut().mode = ui::Mode::Live,
