@@ -52,7 +52,7 @@ impl Preferences {
                 return settings;
             }
         };
-        let root: Value = match serde_json::from_slice(&bytes) {
+        let root: Value = match serde_json::from_slice::<Value>(&bytes) {
             Ok(value) if value.is_object() => value,
             _ => {
                 let timestamp = SystemTime::now()
