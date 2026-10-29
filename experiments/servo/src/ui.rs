@@ -366,7 +366,7 @@ impl Session {
         html.push_str("<div class=\"settings-window\"><header class=\"settings-header\">");
         html.push_str("<span class=\"settings-brand\">Wolfmark <span>/ Settings</span></span>");
         html.push_str("<a href=\"wolfmark://settings/close\" class=\"settings-close\" aria-label=\"Cancel and close Settings\" title=\"Cancel\">");
-        html.push_str("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"m6 6 12 12 M18 6 6 18\"/></svg></a></header>");
+        html.push_str("<svg xmlns=\"http://www.w3.org/2000/svg\" aria-hidden=\"true\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\"><path d=\"M6 6L18 18M18 6L6 18\" stroke=\"#ffffff\" stroke-width=\"2.3\" stroke-linecap=\"round\"/></svg></a></header>");
         html.push_str("<div class=\"settings-columns\"><nav class=\"settings-navigation\" aria-label=\"Settings categories\">");
         html.push_str("<div class=\"settings-identity\">Wolfmark</div>");
         for (page, label) in [("updates", "Updates"), ("editor", "Reader &amp; Editor"), ("about", "About")] {
