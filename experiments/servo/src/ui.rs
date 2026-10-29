@@ -8,6 +8,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::OnceLock;
+use std::time::SystemTime;
 
 use base64::Engine;
 use url::Url;
@@ -62,7 +63,21 @@ struct CachedReader {
     toc: Vec<(u8, String, String)>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DiskStamp {
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+impl DiskStamp {
+    fn at(path: &Path) -> Option<Self> {
+        let metadata = std::fs::metadata(path).ok()?;
+        Some(Self { len: metadata.len(), modified: metadata.modified().ok() })
+    }
+}
+
 struct SavedDocument {
+    disk_stamp: Option<DiskStamp>,
     resources: Rc<crate::image_resources::Resources>,
     editor: crate::editor::Buffer,
     editor_view: (usize, usize, f64),
@@ -142,7 +157,9 @@ impl Session {
                         return;
                     }
                 };
+                let disk_stamp = DiskStamp::at(&path);
                 self.open_documents.push(SavedDocument {
+                    disk_stamp,
                     editor,
                     editor_view: (0, 0, 0.0),
                     reader_scroll: 0.0,
@@ -478,6 +495,8 @@ impl Session {
         };
         match result {
             Ok(()) => {
+                let document = &mut self.open_documents[index];
+                document.disk_stamp = DiskStamp::at(&document.path);
                 self.notice = None;
                 true
             }
@@ -548,6 +567,7 @@ impl Session {
                 };
                 self.open_documents[index].editor = editor;
                 self.open_documents[index].source = source.clone();
+                self.open_documents[index].disk_stamp = DiskStamp::at(&self.open_documents[index].path);
                 self.source = source;
                 self.reader_cache.borrow_mut().take();
                 self.resources = Rc::new(crate::image_resources::Resources::default());
@@ -556,6 +576,75 @@ impl Session {
             }
             Err(error) => self.notice = Some(format!("Unable to reload document: {error}")),
         }
+    }
+
+    /// Poll retained file sessions without an OS-specific watcher or server.
+    /// Only unmodified documents auto-reload. Dirty documents keep all edits;
+    /// subsequent save still checks the original disk fingerprint and refuses
+    /// to overwrite external changes.
+    ///
+    /// Returns true only if the active document requires a visual refresh.
+    pub fn poll_external_files(&mut self) -> bool {
+        let mut active_reloaded = false;
+        for index in 0..self.open_documents.len() {
+            let path = self.open_documents[index].path.clone();
+            let latest = DiskStamp::at(&path);
+            if self.open_documents[index].disk_stamp == latest { continue; }
+            let dirty = self.open_documents[index].editor.dirty();
+            if dirty {
+                self.open_documents[index].disk_stamp = latest;
+                if self.active_document == Some(index) {
+                    self.notice = Some("This file changed outside Wolfmark. Unsaved edits were preserved; Save As is recommended.".into());
+                }
+                continue;
+            }
+            let Some(metadata) = latest else {
+                if self.active_document == Some(index) {
+                    self.notice = Some("This document has been removed or is unavailable on disk. Its in-memory contents are preserved.".into());
+                }
+                self.open_documents[index].disk_stamp = None;
+                continue;
+            };
+            if metadata.len > MAX_DOCUMENT_BYTES {
+                if self.active_document == Some(index) {
+                    self.notice = Some("The externally modified file exceeds the size limit; in-memory contents are preserved.".into());
+                }
+                self.open_documents[index].disk_stamp = latest;
+                continue;
+            }
+            let Ok(source) = std::fs::read_to_string(&path) else {
+                self.open_documents[index].disk_stamp = latest;
+                if self.active_document == Some(index) {
+                    self.notice = Some("The externally modified file could not be read. In-memory contents are preserved.".into());
+                }
+                continue;
+            };
+            if source == self.open_documents[index].source {
+                self.open_documents[index].disk_stamp = latest;
+                continue;
+            }
+            let Ok(editor) = crate::editor::Buffer::new(source.clone()) else {
+                self.open_documents[index].disk_stamp = latest;
+                continue;
+            };
+            let resources = Rc::new(crate::image_resources::Resources::default());
+            {
+                let document = &mut self.open_documents[index];
+                document.source = source.clone();
+                document.editor = editor;
+                document.resources = resources.clone();
+                document.reader_cache.borrow_mut().take();
+                document.disk_stamp = latest;
+            }
+            if self.active_document == Some(index) {
+                self.source = source;
+                self.resources = resources;
+                self.reader_cache = self.open_documents[index].reader_cache.clone();
+                self.notice = None;
+                active_reloaded = true;
+            }
+        }
+        active_reloaded
     }
 
     pub fn all_resources(&self) -> Vec<Rc<crate::image_resources::Resources>> {
@@ -1272,6 +1361,25 @@ mod tests {
         assert!(!html.contains("wolfmark-banner.png"));
         assert!(!CSS.contains("max-width:1150px"));
         assert!(CSS.contains("white-space:pre;word-break:normal"));
+    }
+
+    #[test]
+    fn externally_modified_clean_file_reloads_but_dirty_file_is_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("watch.md");
+        std::fs::write(&path, "# Initial").unwrap();
+        let mut ui = Session::default();
+        ui.open(&path);
+        ui.reader_scroll = 43.0;
+        std::fs::write(&path, "# Longer external modification").unwrap();
+        assert!(ui.poll_external_files());
+        assert!(ui.source.contains("Longer external"));
+        assert_eq!(ui.reader_scroll, 43.0);
+        ui.apply_editor_view("# Local unsaved").unwrap();
+        std::fs::write(&path, "# Further external changes and different size").unwrap();
+        assert!(!ui.poll_external_files());
+        assert!(ui.source.contains("Local unsaved"));
+        assert!(ui.notice.as_deref().unwrap_or("").contains("Unsaved edits were preserved"));
     }
 
     #[test]
