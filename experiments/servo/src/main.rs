@@ -38,6 +38,7 @@ mod image_resources;
 mod search;
 mod smooth_scroll;
 mod ui;
+mod user_settings;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -369,6 +370,7 @@ enum Action {
     FindOpen,
     FindClose,
     FindNext(bool),
+    SettingsOpen, SettingsClose, SettingsToggle(&'static str),
     SelectDocument(usize),
     SelectBundled,
     CloseDocument(usize),
@@ -394,6 +396,11 @@ impl Action {
             ("find", "/close") => Some(Self::FindClose),
             ("find", "/next") => Some(Self::FindNext(false)),
             ("find", "/previous") => Some(Self::FindNext(true)),
+            ("settings", "/open") => Some(Self::SettingsOpen),
+            ("settings", "/close") => Some(Self::SettingsClose),
+            ("settings", "/word-wrap") => Some(Self::SettingsToggle("word-wrap")),
+            ("settings", "/check-updates") => Some(Self::SettingsToggle("check-updates")),
+            ("settings", "/prereleases") => Some(Self::SettingsToggle("prereleases")),
             ("copy", path) => path
                 .strip_prefix('/')
                 .and_then(|id| id.parse().ok())
@@ -471,6 +478,37 @@ impl State {
         // Window commands do not reload the document and cannot be delegated
         // to untrusted HTML or JavaScript.
         match action {
+            Action::SettingsOpen => {
+                self.document.borrow_mut().settings_open = true;
+                let url = self.document.borrow().page_url();
+                if let Some(view) = self.view.borrow().last() {
+                    view.load(url);
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
+            Action::SettingsClose => {
+                self.document.borrow_mut().settings_open = false;
+                let url = self.document.borrow().page_url();
+                if let Some(view) = self.view.borrow().last() {
+                    view.load(url);
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
+            Action::SettingsToggle(field) => {
+                if self.document.borrow().settings_open {
+                    if let Err(error) = self.document.borrow_mut().toggle_setting(field) {
+                        eprintln!("Settings update failed: {error}");
+                    }
+                    let url = self.document.borrow().page_url();
+                    if let Some(view) = self.view.borrow().last() {
+                        view.load(url);
+                        self.servo.spin_event_loop();
+                    }
+                }
+                return;
+            }
             Action::CopyCode(id) => {
                 if let Some(view) = self.view.borrow().last() {
                     let clipboard = self.clipboard.clone();
@@ -654,7 +692,10 @@ impl State {
             | Action::CopyCode(_)
             | Action::FindOpen
             | Action::FindClose
-            | Action::FindNext(_) => unreachable!(),
+            | Action::FindNext(_)
+            | Action::SettingsOpen
+            | Action::SettingsClose
+            | Action::SettingsToggle(_) => unreachable!(),
         }
         let (url, title) = {
             let session = self.document.borrow();
@@ -730,6 +771,14 @@ mod host_actions_tests {
         assert_eq!(
             Action::from_url(&Url::parse("wolfmark://window/close").unwrap()),
             Some(Action::WindowClose)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://settings/open").unwrap()),
+            Some(Action::SettingsOpen)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://settings/word-wrap").unwrap()),
+            Some(Action::SettingsToggle("word-wrap"))
         );
         for bad in [
             "https://example.com/",
