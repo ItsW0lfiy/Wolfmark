@@ -35,6 +35,7 @@ pub struct Session {
     pub notice: Option<String>,
     pub frameless_test: bool,
     pub settings_open: bool,
+    pub sidebar_collapsed: bool,
     pub settings_page: &'static str,
     pub settings_draft: Option<crate::user_settings::Preferences>,
     pub preferences: crate::user_settings::Preferences,
@@ -82,6 +83,7 @@ impl Default for Session {
             zoom: 100,
             frameless_test: false,
             settings_open: false,
+            sidebar_collapsed: false,
             settings_page: "updates",
             settings_draft: None,
             preferences,
@@ -642,11 +644,14 @@ impl Session {
         html.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https://wolfmark.invalid; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">");
         html.push_str("<title>Wolfmark — Servo prototype</title><style>");
         html.push_str(CSS);
-        html.push_str("</style></head><body><div class=\"app\"><header class=\"header\">");
+        html.push_str("</style></head><body>");
+        let app_class = if self.sidebar_collapsed { " sidebar-collapsed" } else { "" };
+        let _ = write!(html, "<div class=\"app{app_class}\"><header class=\"header\">");
         let _ = write!(
             html,
             "<span class=\"brand\"><img alt=\"\" src=\"{logo}\"><span>Wolfmark</span></span>"
         );
+        html.push_str("<a class=\"sidebar-toggle\" href=\"wolfmark://sidebar/toggle\" title=\"Toggle sidebar\" aria-label=\"Toggle sidebar\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M9 4v16\"/></svg></a>");
         html.push_str("<span class=\"separator\"></span><span class=\"crumb\"><span>Documents</span><span class=\"chevron\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m9 5 7 7-7 7\"/></svg></span>");
         let _ = write!(
             html,
@@ -1108,6 +1113,16 @@ mod tests {
         assert!(html.contains("live-highlights"));
         assert!(html.contains("source-editor"));
         assert!(html.contains("wolfmark://mode/live"));
+    }
+
+    #[test]
+    fn sidebar_can_collapse_without_adding_document_tabs() {
+        let mut ui = Session::default();
+        ui.sidebar_collapsed = true;
+        let html = ui.render_html();
+        assert!(html.contains("app sidebar-collapsed"));
+        assert!(html.contains("wolfmark://sidebar/toggle"));
+        assert!(!html.contains("documentTabRow"));
     }
 
     #[test]
