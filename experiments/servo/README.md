@@ -1,7 +1,8 @@
 # Wolfmark / Servo embedding experiment
 
-This is a **technical probe**, not a new Wolfmark frontend. It deliberately does
-not copy or replace the locked Wolfmark design. It is an isolated Cargo workspace
+This is a **technical UI parity prototype**, not an approved replacement for
+the production Qt frontend. It follows Wolfmark's preferred visual structure
+on a separately built Servo backend. It is an isolated Cargo workspace
 with an entirely separate target directory, while the existing Qt frontend is
 still the default for bare Cargo commands.
 
@@ -120,6 +121,62 @@ The branch CI typechecks both the executable and Rust unit-test targets.
 It does **not** run the graphical UI. Run the full regression tests locally
 with `cargo test --manifest-path experiments/servo/Cargo.toml --target-dir
 out/servo-cargo/target` when build resources permit.
+
+## October 29 Qt-referenced UI parity pass
+
+The real Qt `main` build was compiled and launched on Debian 13 using Qt 6.8.2
+and the approved 1648×928 UI screenshot mode. This is the comparison baseline
+for the following changes on the **Servo experimental branch only**:
+
+- The reader no longer has the artificial `max-width:1150px` and centered
+  column. Its canvas fills the available viewport, with zoom-aware adaptive
+  margins inspired by Qt's `effectiveSideMargin()` function.
+- Literal `.txt` files use non-wrapping `pre` text and horizontal scrolling,
+  as in Qt's `QTextEdit::NoWrap`.
+- The previous footer image was a **Wolfmark wordmark**, not the mountain
+  scenery in the approved design reference. A bundled decorative mountain
+  SVG now sits behind the separate paw/version identity. The SVG uses no
+  scripting, external resource references, or network fetches.
+- Discrete mouse-wheel notches feed a Rust critically damped trajectory,
+  based on Qt's `SmoothScrollController`; repeated input extends the target
+  and reversals preserve the current velocity. Precision touchpad/pixel
+  deltas remain direct. `WOLFMARK_REDUCED_MOTION=1` bypasses the animation.
+  Winit frames are paced by `ControlFlow::WaitUntil`, without a busy spin.
+  Smoothness and CPU usage require physical graphical testing before approval.
+- A new **opt-in** frameless UI probe runs with
+  `cargo servo-test -- --frameless-test`. This removes OS decorations and
+  enables Rust/winit-backed minimize, maximize/restore, close, drag and
+  resize-edge actions behind the approved top-bar style. The regular
+  `cargo servo-test` still uses native OS window decorations.
+  **Do not adopt frameless mode yet:** Windows DWM Snap Layout hover, real
+  rounded corners, multiple monitors and per-DPI interaction are unverified.
+  Winit's `drag_resize_window` is not supported on X11, so Linux parity
+  still needs a native-window strategy; Qt remains the functional baseline.
+
+### Test commands on Windows
+
+```powershell
+cd C:\Projects\Wolfmark-Servo
+git fetch origin
+git switch --detach origin/experiment/servo-embedding-poc-20261026
+
+# Normal native-frame UI, new mountain footer/full-width reader/smooth wheel
+cargo servo-test
+
+# Separate, explicitly risky native window frame trial
+cargo servo-test -- --frameless-test
+
+# With a chosen local Markdown document
+cargo servo-test -- --document "C:\path\to\document.md"
+
+# Original isolated graphics diagnostic
+cargo servo-test -- --smoke-page
+```
+
+**CI compiles and typechecks the tests; it cannot validate a physical
+Windows title bar, present animations, measure scrolling latency or
+prove the Servo SVG is actually displayed.** Those are human acceptance
+gates on the same laptop that runs the Qt reference.
 
 ## Patched Servo paint component (upstream fix)
 
