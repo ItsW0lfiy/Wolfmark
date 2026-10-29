@@ -352,3 +352,17 @@ This isolated crate adapts Servo's v0.7.0
 The adapted file retains that license, independently of Wolfmark's
 GPL-3.0-only core. A dependency/source-license audit is mandatory before
 any production integration.
+
+### Migration UI integration checkpoint (29 October 2026)
+
+Continued development is on `codex/servo-migration-20261029`. The build now
+includes editable Source and contextual Live Preview, Qt-compatible Settings,
+a custom Windows caption with native message handling, middle-button
+scrolling, per-document scroll restoration, actual GitHub Releases checks,
+F11 document fullscreen, and compact Qt-referenced layout.
+
+These are **integration implementations, not proof of complete Qt parity**.
+The user is deferring manual GUI testing until the UI work is sufficiently
+finished, so Windows CI, Rust tests and repository/source review are the
+current verification gates. See `docs/architecture/servo-parity.md` for
+remaining items. Bare `cargo run` and `cargo build` remain Qt.
