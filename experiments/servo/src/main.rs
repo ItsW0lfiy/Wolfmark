@@ -15,6 +15,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
 use std::path::PathBuf;
+use std::time::Instant;
 
 // Shared Rust code from the existing Wolfmark core, without linking Qt.
 #[path = "../../../src/markdown/model.rs"] mod model;
@@ -23,6 +24,7 @@ use std::path::PathBuf;
 #[path = "../../../src/presentation.rs"] mod presentation;
 #[path = "../../../src/images/paths.rs"] mod image_paths;
 mod ui;
+mod smooth_scroll;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -42,7 +44,7 @@ use winit::event::{
     ElementState, KeyEvent, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent,
 };
 use winit::keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey as WinitNamedKey, PhysicalKey};
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
@@ -86,6 +88,8 @@ struct State {
     modifiers: RefCell<ServoModifiers>,
     document: RefCell<ui::Session>,
     pending: RefCell<Option<Action>>,
+    smooth_wheel: RefCell<smooth_scroll::SmoothWheel>,
+    reduced_motion: bool,
     smoke_page: bool,
 }
 
@@ -207,6 +211,7 @@ impl Action {
 impl State {
     fn apply_action(&self, action: Action) {
         if self.smoke_page { return; }
+        self.smooth_wheel.borrow_mut().cancel();
         match action {
             Action::Open => {
                 // Local native OS dialog, not a browser/web file chooser.
@@ -272,6 +277,20 @@ mod host_actions_tests {
 }
 
 impl ApplicationHandler<Wake> for App {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if let App::Running(state) = self {
+            let due = state.smooth_wheel.borrow().next_tick();
+            match due {
+                Some(due) if due <= Instant::now() => {
+                    state.window.request_redraw();
+                    event_loop.set_control_flow(ControlFlow::Wait);
+                }
+                Some(due) => event_loop.set_control_flow(ControlFlow::WaitUntil(due)),
+                None => event_loop.set_control_flow(ControlFlow::Wait),
+            }
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let App::Initial(waker, session, smoke_page) = self {
             let display = event_loop.display_handle().expect("display handle");
@@ -317,6 +336,8 @@ impl ApplicationHandler<Wake> for App {
                 modifiers: RefCell::new(ServoModifiers::empty()),
                 document: RefCell::new(std::mem::take(session)),
                 pending: RefCell::new(None),
+                smooth_wheel: RefCell::new(smooth_scroll::SmoothWheel::default()),
+                reduced_motion: std::env::var("WOLFMARK_REDUCED_MOTION").is_ok_and(|v| v == "1"),
                 smoke_page: *smoke_page,
             });
 
@@ -369,6 +390,17 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::RedrawRequested => {
                 if let App::Running(state) = self {
                     state.take_pending_action();
+                    if let Some((x, y)) = state.smooth_wheel.borrow_mut().tick(Instant::now()) {
+                        if (x.abs() > f64::EPSILON || y.abs() > f64::EPSILON)
+                            && let Some(view) = state.view.borrow().last()
+                        {
+                            view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                                WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
+                                (*state.cursor.borrow()).into(),
+                            )));
+                            state.servo.spin_event_loop();
+                        }
+                    }
                     if let Some(view) = state.view.borrow().last() {
                         view.paint();
                         state.context.present();
@@ -453,23 +485,28 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 if let App::Running(state) = self {
-                    let (x, y, mode) = match delta {
-                        // Winit reports wheel notches in lines. The previous
-                        // embedding multiplied by 76 *and* tagged them as
-                        // lines, causing Servo to apply line scaling again.
-                        // Convert to pixels once; preserve precise trackpad
-                        // pixel deltas unmodified.
-                        MouseScrollDelta::LineDelta(x, y) =>
-                            (f64::from(x) * 48.0, f64::from(y) * 48.0, WheelMode::DeltaPixel),
-                        MouseScrollDelta::PixelDelta(p) =>
-                            (p.x, p.y, WheelMode::DeltaPixel),
-                    };
-                    if let Some(view) = state.view.borrow().last() {
-                        view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                            WheelDelta { x, y, z: 0.0, mode },
-                            (*state.cursor.borrow()).into(),
-                        )));
-                        state.servo.spin_event_loop();
+                    match delta {
+                        MouseScrollDelta::LineDelta(x, y) if !state.reduced_motion => {
+                            // Match Qt's continuous wheel trajectory. Pixel/trackpad
+                            // events stay direct and never enter the integrator.
+                            state.smooth_wheel.borrow_mut().add_lines(x, y, Instant::now());
+                            state.window.request_redraw();
+                        }
+                        delta => {
+                            state.smooth_wheel.borrow_mut().cancel();
+                            let (x, y) = match delta {
+                                MouseScrollDelta::LineDelta(x, y) =>
+                                    (f64::from(x) * 48.0, f64::from(y) * 48.0),
+                                MouseScrollDelta::PixelDelta(pixel) => (pixel.x, pixel.y),
+                            };
+                            if let Some(view) = state.view.borrow().last() {
+                                view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                                    WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
+                                    (*state.cursor.borrow()).into(),
+                                )));
+                                state.servo.spin_event_loop();
+                            }
+                        }
                     }
                 }
             }
