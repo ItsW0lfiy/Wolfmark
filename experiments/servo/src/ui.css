@@ -217,3 +217,11 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .settings-check-now{display:inline-flex;align-items:center;justify-content:center;margin-top:14px;padding:9px 24px;border-radius:7px;background:#79223d;border:1px solid #ae3a5c;color:#f7edf1;font:600 13px "Segoe UI",sans-serif;text-decoration:none}
 .settings-check-now:hover{background:#a2264c;color:#fff}
 #update-status{display:block;line-height:1.5;overflow-wrap:anywhere}
+
+/* Qt F11 parity: the existing document fills the display. The navigation
+   widgets are hidden, not destroyed, so Escape can restore prior UI state. */
+.app.wm-fullscreen{grid-template-columns:0 minmax(0,1fr);grid-template-rows:0 minmax(0,1fr)}
+.wm-fullscreen .header,.wm-fullscreen .sidebar,.wm-fullscreen .viewbar,
+.wm-fullscreen .findbar{display:none!important}
+.wm-fullscreen .main{grid-column:2;grid-row:2}
+.wm-fullscreen .document-viewport{height:100%;scrollbar-gutter:stable}
