@@ -500,6 +500,14 @@ impl State {
         }
     }
     fn apply_synced_action(&self, action: Action) {
+        // The Settings overlay behaves as a modal dialog: document/navigation
+        // commands must not act behind it while a draft is being edited.
+        if self.document.borrow().settings_open
+            && !matches!(action, Action::SettingsOpen | Action::SettingsClose
+                | Action::SettingsSave | Action::SettingsPage(_) | Action::SettingsToggle(_))
+        {
+            return;
+        }
         if let Some(view) = self.view.borrow().last() {
             if self.document.borrow().path.is_some() {
                 view.evaluate_javascript("{const editor=document.getElementById('source-editor');if(editor)editor.readOnly=false;}", |_| {});
@@ -1053,7 +1061,12 @@ impl ApplicationHandler<Wake> for App {
         match event {
             WindowEvent::CloseRequested => {
                 if let App::Running(state) = self {
-                    state.apply_action(Action::WindowClose);
+                    let action = if state.document.borrow().settings_open {
+                        Action::SettingsClose
+                    } else {
+                        Action::WindowClose
+                    };
+                    state.apply_action(action);
                 } else {
                     event_loop.exit();
                 }
@@ -1117,7 +1130,14 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let App::Running(state) = self {
                     let modifiers = *state.modifiers.borrow();
-                    if !state.smoke_page {
+                    if state.document.borrow().settings_open {
+                        if event.state == ElementState::Pressed
+                            && event.logical_key == WinitKey::Named(WinitNamedKey::Escape)
+                        {
+                            state.apply_action(Action::SettingsClose);
+                            return;
+                        }
+                    } else if !state.smoke_page {
                         if let Some(action) = application_shortcut(&event, modifiers) {
                             state.apply_action(action);
                             return;
