@@ -219,7 +219,12 @@ impl servo::WebViewDelegate for State {
             updateStatus();
             const mirror=document.getElementById('live-highlights');
             if(mirror){{
-                const syncScroll=()=>{{mirror.scrollTop=editor.scrollTop;mirror.scrollLeft=editor.scrollLeft;}};
+                const gutter=document.getElementById('live-line-numbers');
+                const syncScroll=()=>{{
+                    mirror.scrollTop=editor.scrollTop;
+                    mirror.scrollLeft=editor.scrollLeft;
+                    if(gutter)gutter.scrollTop=editor.scrollTop;
+                }};
                 editor.addEventListener('scroll',syncScroll);
                 syncScroll();
             }}
@@ -1010,8 +1015,11 @@ impl State {
                         const mirror=document.getElementById('live-highlights');
                         if(mirror){{mirror.innerHTML={markup_json};mirror.scrollTop=previousY;mirror.scrollLeft=previousX;}}
                         const gutter=document.getElementById('live-line-numbers');
-                        if(gutter)gutter.textContent=Array.from({{length:editor.value.split('\n').length}},
-                            (_,index)=>index+1).join('\n');
+                        if(gutter){{
+                            gutter.textContent=Array.from({{length:editor.value.split('\n').length}},
+                                (_,index)=>index+1).join('\n');
+                            gutter.scrollTop=previousY;
+                        }}
                         document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});
                         const status=document.getElementById('editor-status');
                         if(status){{
