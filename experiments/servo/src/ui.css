@@ -225,3 +225,9 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .wm-fullscreen .findbar{display:none!important}
 .wm-fullscreen .main{grid-column:2;grid-row:2}
 .wm-fullscreen .document-viewport{height:100%;scrollbar-gutter:stable}
+
+/* Keep Live Preview's selection layer and its decoration/gutter layer on the
+   same document zoom, including in-place Ctrl+plus/minus updates. */
+.live-line-numbers,.live-edit-surface{font-size:calc(var(--doc-size,17px) * .85)}
+.live-edit-surface,.live-line-numbers{line-height:1.65}
+.live-edit-surface .source-editor,.live-highlights{font-size:inherit!important}
