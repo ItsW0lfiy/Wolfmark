@@ -1240,7 +1240,28 @@ impl ApplicationHandler<Wake> for App {
             if files_open && Instant::now() >= state.next_file_scan.get() {
                 state.next_file_scan.set(Instant::now() + std::time::Duration::from_millis(900));
                 if !state.syncing.get() && !state.document.borrow().settings_open {
-                    let refreshed = state.document.borrow_mut().poll_external_files();
+                    let (refreshed, new_warning) = {
+                        let mut document = state.document.borrow_mut();
+                        let old_warning = document.notice.clone();
+                        let refreshed = document.poll_external_files();
+                        let new_warning = (document.notice != old_warning)
+                            .then(|| document.notice.clone()).flatten();
+                        (refreshed, new_warning)
+                    };
+                    if let Some(message) = new_warning {
+                        if let Some(view) = state.view.borrow().last() {
+                            let escaped = serde_json::to_string(&message).unwrap_or_default();
+                            view.evaluate_javascript(format!(r#"(() => {{
+                                document.getElementById('wm-file-warning')?.remove();
+                                const notice=document.createElement('aside');
+                                notice.id='wm-file-warning';
+                                notice.className='wm-file-warning';
+                                notice.setAttribute('role','status');
+                                notice.textContent={escaped};
+                                document.body.appendChild(notice);
+                            }})()"#), |_| {});
+                        }
+                    }
                     if refreshed {
                         let (url, title) = {
                             let document = state.document.borrow();
