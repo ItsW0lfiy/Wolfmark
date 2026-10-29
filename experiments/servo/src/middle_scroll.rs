@@ -43,7 +43,7 @@ impl MiddleScroll {
         let due = self.due?;
         if now < due { return None; }
         let dt = now.saturating_duration_since(self.last_tick.unwrap_or(now))
-            .as_secs_f64().clamp(0.0, .05);
+            .as_secs_f64().clamp(0.0, 0.05);
         self.last_tick = Some(now);
         self.due = Some(now + Duration::from_millis(16));
         Some((
