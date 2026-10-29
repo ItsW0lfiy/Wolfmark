@@ -212,10 +212,27 @@ impl servo::WebViewDelegate for State {
                 syncScroll();
             }}
             editor.addEventListener('keydown',event=>{{
-                if(event.key==='Tab'){{
+                if(event.key==='Tab' && !event.ctrlKey && !event.altKey){{
                     event.preventDefault();
                     if(!event.shiftKey){{editor.setRangeText('    ',editor.selectionStart,editor.selectionEnd,'end');changed();}}
                     else{{const start=editor.selectionStart;const line=editor.value.lastIndexOf('\n',start-1)+1;const count=Math.min(4,(editor.value.slice(line).match(/^ */)||[''])[0].length);editor.setRangeText('',line,line+count,'preserve');changed();}}
+                }} else if((event.ctrlKey||event.metaKey) && !event.altKey
+                   && (event.key.toLowerCase()==='b'||event.key.toLowerCase()==='i')){{
+                    event.preventDefault();
+                    const marker=event.key.toLowerCase()==='b'?'**':'*';
+                    const start=editor.selectionStart,end=editor.selectionEnd;
+                    const selected=editor.value.slice(start,end);
+                    const already=selected.startsWith(marker)&&selected.endsWith(marker)
+                                  &&selected.length>=marker.length*2;
+                    const replacement=already?selected.slice(marker.length,-marker.length)
+                                             :marker+selected+marker;
+                    editor.setRangeText(replacement,start,end,'select');
+                    if(already){{
+                        editor.setSelectionRange(start,start+replacement.length);
+                    }}else{{
+                        editor.setSelectionRange(start+marker.length,start+marker.length+selected.length);
+                    }}
+                    changed();
                 }}
             }});
         }})()"#), |_| {});
@@ -1428,6 +1445,10 @@ impl ApplicationHandler<Wake> for App {
                 ..
             } => {
                 if let App::Running(state) = self {
+                    if pressed == ElementState::Released && button == WinitMouseButton::Middle
+                        && state.middle_scroll.borrow().active() {
+                        return;
+                    }
                     if pressed == ElementState::Pressed && button == WinitMouseButton::Middle {
                         if !state.document.borrow().settings_open
                             && state.document.borrow().mode == ui::Mode::Reader
