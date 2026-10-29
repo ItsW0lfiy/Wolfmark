@@ -1,0 +1,82 @@
+name: Servo migration — Linux software-rendered GUI
+
+on:
+  push:
+    branches:
+      - codex/servo-migration-20261029
+    paths:
+      - ".github/workflows/servo-linux-gui.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: servo-linux-gui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-gui:
+    name: Linux Mesa/Xvfb Servo UI screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    env:
+      CARGO_TERM_COLOR: always
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+      GDK_BACKEND: x11
+      WOLFMARK_SNAPSHOT_WIDTH: "1648"
+      WOLFMARK_SNAPSHOT_HEIGHT: "928"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Servo graphics and headless OpenGL prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang-18 llvm-18-dev libclang-18-dev pkg-config cmake ninja-build \
+            libfontconfig1-dev libfreetype-dev libdbus-1-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxcb1-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxkbcommon-dev libwayland-dev libgtk-3-dev libasound2-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libudev-dev libssl-dev xvfb xauth mesa-utils \
+            libgl1-mesa-dri libglx-mesa0
+      - name: Restore cached Linux Servo compilation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-linux-ubuntu24-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-linux-ubuntu24-v1-
+      - name: Build actual Servo executable
+        run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target
+      - name: Verify software OpenGL and capture four UI modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/servo-linux-screenshots
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
+            set -euo pipefail
+            glxinfo -B
+            for mode in reader source live settings; do
+              echo "Capturing Wolfmark Servo ${mode} using Mesa software GL"
+              export WOLFMARK_SNAPSHOT_MODE="$mode"
+              export WOLFMARK_SERVO_SNAPSHOT="out/servo-linux-screenshots/servo-${mode}.png"
+              timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test
+              test -s "$WOLFMARK_SERVO_SNAPSHOT"
+              test "$(stat -c%s "$WOLFMARK_SERVO_SNAPSHOT")" -ge 10000
+            done
+          '
+      - name: Save graphical evidence even if the renderer fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-servo-linux-ui-snapshots
+          path: out/servo-linux-screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 7
