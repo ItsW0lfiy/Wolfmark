@@ -786,7 +786,7 @@ impl Session {
         html.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
         html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
         html.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https://wolfmark.invalid; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">");
-        html.push_str("<title>Wolfmark — Servo prototype</title><style>");
+        html.push_str("<title>Wolfmark</title><style>");
         html.push_str(CSS);
         html.push_str("</style></head><body>");
         let app_class = if self.sidebar_collapsed { " sidebar-collapsed" } else { "" };
