@@ -400,6 +400,7 @@ enum Action {
     FindNext(bool),
     SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
     SidebarToggle,
+    OutlineLine(usize),
     SelectDocument(usize),
     SelectBundled,
     CloseDocument(usize),
@@ -427,6 +428,10 @@ impl Action {
             ("find", "/previous") => Some(Self::FindNext(true)),
             ("settings", "/open") => Some(Self::SettingsOpen),
             ("sidebar", "/toggle") => Some(Self::SidebarToggle),
+            ("outline", path) => path.strip_prefix("/line/")
+                .and_then(|line| line.parse::<usize>().ok())
+                .filter(|line| *line > 0)
+                .map(Self::OutlineLine),
             ("settings", "/close") => Some(Self::SettingsClose),
             ("settings", "/save") => Some(Self::SettingsSave),
             ("settings", "/page-updates") => Some(Self::SettingsPage("updates")),
@@ -569,6 +574,25 @@ impl State {
                     let url = self.document.borrow().page_url();
                     if let Some(view) = self.view.borrow().last() {
                         view.load(url);
+                        self.servo.spin_event_loop();
+                    }
+                }
+                return;
+            }
+            Action::OutlineLine(line) => {
+                if let Some(view) = self.view.borrow().last() {
+                    // This action is only offered for editable source outlines.
+                    // Restrict navigation to that mode and use numeric lines.
+                    if matches!(self.document.borrow().mode, ui::Mode::Source | ui::Mode::Live) {
+                        view.evaluate_javascript(format!(r#"(() => {{
+                            const editor=document.getElementById('source-editor');
+                            if(!editor)return;
+                            const start=editor.value.split('\n').slice(0,{before}).join('\n').length;
+                            const index={before}===0 ? 0 : Math.min(editor.value.length,start+1);
+                            editor.focus();editor.setSelectionRange(index,index);
+                            const height=parseFloat(getComputedStyle(editor).lineHeight)||21;
+                            editor.scrollTop=Math.max(0,{before}*height-editor.clientHeight*.35);
+                        }})()"#, before=line.saturating_sub(1)), |_| {});
                         self.servo.spin_event_loop();
                     }
                 }
@@ -769,7 +793,8 @@ impl State {
             | Action::SettingsClose
             | Action::SettingsSave
             | Action::SettingsPage(_)
-            | Action::SettingsToggle(_) => unreachable!(),
+            | Action::SettingsToggle(_)
+            | Action::OutlineLine(_) => unreachable!(),
         }
         let (url, title) = {
             let session = self.document.borrow();
@@ -814,6 +839,7 @@ mod host_actions_tests {
     fn only_known_ui_commands_dispatch() {
         let good = Url::parse("wolfmark://mode/source").unwrap();
         assert_eq!(Action::from_url(&Url::parse("wolfmark://mode/live").unwrap()), Some(Action::Live));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://outline/line/13").unwrap()),Some(Action::OutlineLine(13)));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://sidebar/toggle").unwrap()), Some(Action::SidebarToggle));
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(
