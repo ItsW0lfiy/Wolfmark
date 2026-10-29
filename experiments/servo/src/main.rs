@@ -125,10 +125,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 struct State {
-    window: Window,
+    // Explicit drop order is essential: WebView -> Servo -> GL context -> HWND.
+    // The WebView holds an Rc<State> as its delegate, so the view must also
+    // be cleared explicitly on exit to break that ownership cycle.
+    view: RefCell<Vec<WebView>>,
     servo: Servo,
     context: Rc<WindowRenderingContext>,
-    view: RefCell<Vec<WebView>>,
+    window: Window,
     cursor: RefCell<DevicePoint>,
     modifiers: RefCell<ServoModifiers>,
     document: RefCell<ui::Session>,
@@ -1273,6 +1276,16 @@ impl ApplicationHandler<Wake> for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let App::Running(state) = self {
             if state.close_requested.get() {
+                // WebView delegates keep Rc<State> alive. Without breaking
+                // this cycle Servo cannot finish its thread/JS shutdown
+                // before the process exits (observed as a SpiderMonkey
+                // pthread_mutex_destroy failure on Mesa/Xvfb).
+                state.scripts.borrow_mut().clear();
+                state.view.borrow_mut().clear();
+                if let Err(error) = state.context.make_current() {
+                    eprintln!("Servo shutdown could not make GL current: {error:?}");
+                }
+                state.servo.spin_event_loop();
                 event_loop.exit();
                 return;
             }
