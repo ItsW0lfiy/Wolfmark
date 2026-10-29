@@ -199,3 +199,12 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 
 .live-stage.live-wrap .live-highlights,
 .live-stage.live-wrap .live-edit-surface .source-editor{white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+
+/* Qt-style sidebar collapse remains in the same document window; no tabs,
+   hidden content copies, or reload-specific source state are introduced. */
+.sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;width:29px;height:32px;border-radius:5px;color:#c7c3cc;flex:none}
+.sidebar-toggle:hover{background:#3a3039}
+.sidebar-toggle .ui-icon{width:18px;height:18px}
+.app.sidebar-collapsed{grid-template-columns:0 minmax(0,1fr)}
+.sidebar-collapsed .sidebar{display:none}
+.sidebar-collapsed .main{grid-column:2}
