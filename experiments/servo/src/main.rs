@@ -647,7 +647,7 @@ impl State {
         // to untrusted HTML or JavaScript.
         match action {
             Action::CheckUpdates => {
-                self.request_update_check();
+                self.request_update_check(true);
                 return;
             }
             Action::SettingsOpen => {
@@ -1036,11 +1036,15 @@ impl State {
         self.servo.spin_event_loop();
     }
 
-    fn request_update_check(&self) {
+    fn request_update_check(&self, manual: bool) {
         if self.update_receiver.borrow().is_some() {
             return;
         }
-        let include_prereleases = self.document.borrow().preferences.include_prereleases;
+        let (include_prereleases, cache_path) = {
+            let document = self.document.borrow();
+            (document.preferences.include_prereleases,
+             document.preferences.path().with_file_name("update-state.json"))
+        };
         self.document.borrow_mut().update_status = "Checking GitHub Releases…".into();
         if let Some(view) = self.view.borrow().last() {
             view.evaluate_javascript(
@@ -1051,7 +1055,7 @@ impl State {
         *self.update_receiver.borrow_mut() = Some(receive);
         let waker = self.waker.clone();
         std::thread::spawn(move || {
-            let result = update_checks::check(include_prereleases);
+            let result = update_checks::check(include_prereleases, manual, &cache_path);
             let _ = send.send(result);
             let _ = waker.0.send_event(Wake);
         });
@@ -1376,7 +1380,7 @@ impl ApplicationHandler<Wake> for App {
                 && state.document.borrow().preferences.check_on_startup
                 && std::env::var_os("WOLFMARK_DISABLE_UPDATE_CHECKS").is_none()
             {
-                state.request_update_check();
+                state.request_update_check(false);
             }
             let page_url = if state.smoke_page {
                 local_probe_url()
