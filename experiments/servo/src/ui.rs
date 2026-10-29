@@ -32,6 +32,7 @@ pub struct Session {
     pub source: String,
     pub mode: Mode,
     pub zoom: u16,
+    pub reader_scroll: f64,
     pub notice: Option<String>,
     pub frameless_test: bool,
     pub settings_open: bool,
@@ -46,6 +47,7 @@ pub struct Session {
     history: Vec<Option<usize>>,
     history_position: usize,
     bundled_view: (Mode, u16),
+    bundled_reader_scroll: f64,
     reader_cache: Rc<RefCell<Option<CachedReader>>>,
     bundled_cache: Rc<RefCell<Option<CachedReader>>>,
     pub resources: Rc<crate::image_resources::Resources>,
@@ -63,6 +65,7 @@ struct SavedDocument {
     resources: Rc<crate::image_resources::Resources>,
     editor: crate::editor::Buffer,
     editor_view: (usize, usize, f64),
+    reader_scroll: f64,
     reader_cache: Rc<RefCell<Option<CachedReader>>>,
     path: PathBuf,
     source: String,
@@ -81,6 +84,7 @@ impl Default for Session {
             source: BUNDLED_SOURCE.to_owned(),
             mode: Mode::Reader,
             zoom: 100,
+            reader_scroll: 0.0,
             frameless_test: false,
             settings_open: false,
             sidebar_collapsed: false,
@@ -94,6 +98,7 @@ impl Default for Session {
             history: vec![None],
             history_position: 0,
             bundled_view: (Mode::Reader, 100),
+            bundled_reader_scroll: 0.0,
             bundled_resources: resources.clone(),
             resources,
             bundled_cache: reader_cache.clone(),
@@ -138,6 +143,7 @@ impl Session {
                 self.open_documents.push(SavedDocument {
                     editor,
                     editor_view: (0, 0, 0.0),
+                    reader_scroll: 0.0,
                     resources: Rc::new(crate::image_resources::Resources::default()),
                     reader_cache: Rc::new(RefCell::new(None)),
                     path,
@@ -182,12 +188,14 @@ impl Session {
             self.reader_cache = document.reader_cache.clone();
             self.mode = document.mode;
             self.zoom = document.zoom;
+            self.reader_scroll = document.reader_scroll;
         } else {
             self.path = None;
             self.resources = self.bundled_resources.clone();
             self.reader_cache = self.bundled_cache.clone();
             self.source = BUNDLED_SOURCE.to_owned();
             (self.mode, self.zoom) = self.bundled_view;
+            self.reader_scroll = self.bundled_reader_scroll;
         }
         self.active_document = target;
 
@@ -206,9 +214,11 @@ impl Session {
             if let Some(document) = self.open_documents.get_mut(index) {
                 document.mode = self.mode;
                 document.zoom = self.zoom;
+                document.reader_scroll = self.reader_scroll;
             }
         } else {
             self.bundled_view = (self.mode, self.zoom);
+            self.bundled_reader_scroll = self.reader_scroll;
         }
     }
 
@@ -1229,6 +1239,28 @@ mod tests {
         assert!(!html.contains("wolfmark-banner.png"));
         assert!(!CSS.contains("max-width:1150px"));
         assert!(CSS.contains("white-space:pre;word-break:normal"));
+    }
+
+    #[test]
+    fn reader_scroll_is_restored_per_document_and_bundled_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("a.md");
+        let second = dir.path().join("b.md");
+        std::fs::write(&first, "# One").unwrap();
+        std::fs::write(&second, "# Two").unwrap();
+        let mut ui = Session::default();
+        ui.reader_scroll = 78.0;
+        ui.open(&first);
+        assert_eq!(ui.reader_scroll, 0.0);
+        ui.reader_scroll = 411.0;
+        ui.open(&second);
+        ui.reader_scroll = 90.0;
+        ui.select(0);
+        assert_eq!(ui.reader_scroll, 411.0);
+        ui.select_bundled();
+        assert_eq!(ui.reader_scroll, 78.0);
+        ui.select(1);
+        assert_eq!(ui.reader_scroll, 90.0);
     }
 
     #[test]
