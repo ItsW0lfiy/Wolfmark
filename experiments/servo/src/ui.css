@@ -14,6 +14,15 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .crumb .filename{overflow:hidden;text-overflow:ellipsis;max-width:250px;color:#e3e0e6}
 .crumb .chevron{color:#787e88}
 .header-spacer{flex:1}
+/* Frameless trial uses native winit window actions, not JavaScript.
+   The real OS frame stays on by default until Snap/resize parity is proven. */
+.caption-controls{display:flex;align-items:stretch;align-self:stretch;flex:none;margin-right:-20px;margin-left:2px}
+.caption-button{width:44px;min-width:44px;height:54px;display:flex;align-items:center;justify-content:center;font:21px/1 "Segoe UI Symbol","Segoe UI",sans-serif;color:#d5d2d3;user-select:none}
+.caption-button:hover{background:#303036;color:#fff}
+.caption-button:active{background:#3a2029}
+.caption-close{background:#691d36;color:#eee6e9}
+.caption-close:hover{background:#a51e41;color:#fff}
+.caption-close:active{background:#79203e}
 .toolbar-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:32px;min-height:33px;padding:5px 9px;border-radius:7px;color:#d7d7de;border:1px solid transparent}
 .toolbar-link:hover,.icon-button:hover{background:#292b32;border-color:#44454e}
 .toolbar-link.disabled{opacity:.45;cursor:not-allowed}
