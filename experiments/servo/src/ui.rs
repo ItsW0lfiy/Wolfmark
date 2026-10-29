@@ -569,6 +569,7 @@ impl Session {
             .set(self.view_revision.get().wrapping_add(1));
         let title = self.title();
         let mut toc = Vec::new();
+        let mut edit_outline: Vec<(u8, String, usize)> = Vec::new();
         let mut body = String::new();
         let plain = self.path.as_ref().is_some_and(|path| {
             path.extension()
@@ -590,6 +591,16 @@ impl Session {
                 .active_document
                 .map(|index| self.open_documents[index].editor.view())
                 .unwrap_or_else(|| self.source.clone());
+            if !plain {
+                // Comrak's model includes original source line numbers. Unlike
+                // Reader anchors these navigate the editable buffer directly.
+                let outline_model = parser::parse(&view);
+                for (block, line) in outline_model.blocks.iter().zip(outline_model.source_lines.iter()) {
+                    if let model::Block::Heading { level, content } = block {
+                        edit_outline.push((*level, model::plain_text(content), *line));
+                    }
+                }
+            }
             body.push_str(&escape(&view));
             body.push_str("</textarea>");
             if self.mode == Mode::Live {
@@ -723,8 +734,14 @@ impl Session {
                     );
                 }
             }
+        } else if edit_outline.is_empty() {
+            html.push_str("<span class=\"outline-item\">No headings</span>");
         } else {
-            html.push_str("<span class=\"outline-item\">Switch to Reader for outline</span>");
+            for (level, heading, line) in &edit_outline {
+                let _ = write!(html,
+                    "<a class=\"outline-item depth-{level}\" href=\"wolfmark://outline/line/{line}\" title=\"{}\">{}</a>",
+                    escape_attr(heading), escape(heading));
+            }
         }
         html.push_str("</nav></div><footer class=\"sidebar-footer\">");
         let _ = write!(
@@ -1099,6 +1116,19 @@ fn wrapped_inlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editing_outline_links_to_source_lines_not_reader_anchors() {
+        let mut ui = Session::default();
+        ui.source = "# Start\n\n## Following\n\nRest".into();
+        ui.mode = Mode::Source;
+        let html = ui.render_html();
+        assert!(html.contains("wolfmark://outline/line/1"));
+        assert!(html.contains("wolfmark://outline/line/3"));
+        assert!(!html.contains("Switch to Reader for outline"));
+        ui.mode = Mode::Live;
+        assert!(ui.render_html().contains("wolfmark://outline/line/3"));
+    }
 
     #[test]
     fn live_preview_retains_raw_source_and_has_contextual_decoration() {
