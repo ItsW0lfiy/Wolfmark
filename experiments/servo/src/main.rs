@@ -459,6 +459,7 @@ enum Action {
     Save(bool),
     Undo(bool),
     CopyCode(usize),
+    CopySelection,
     FindOpen,
     FindClose,
     FindNext(bool),
@@ -775,6 +776,36 @@ impl State {
                 }
                 return;
             }
+            Action::CopySelection => {
+                if let Some(view) = self.view.borrow().last() {
+                    let clipboard = self.clipboard.clone();
+                    view.evaluate_javascript(
+                        r#"(() => {
+                            const editor=document.getElementById('source-editor');
+                            if(editor && document.activeElement===editor){
+                                return editor.value.slice(editor.selectionStart,editor.selectionEnd);
+                            }
+                            return window.getSelection()?.toString()||'';
+                        })()"#,
+                        move |result| {
+                            if let Ok(embedder_traits::JSValue::String(selected)) = result {
+                                if selected.is_empty() { return; }
+                                let mut clipboard = clipboard.borrow_mut();
+                                if clipboard.is_none() {
+                                    *clipboard = arboard::Clipboard::new().ok();
+                                }
+                                if let Some(clipboard) = clipboard.as_mut() {
+                                    if let Err(error) = clipboard.set_text(selected) {
+                                        eprintln!("Could not copy selection: {error}");
+                                    }
+                                }
+                            }
+                        },
+                    );
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
             Action::CopyCode(id) => {
                 if let Some(view) = self.view.borrow().last() {
                     let clipboard = self.clipboard.clone();
@@ -1017,6 +1048,7 @@ impl State {
             | Action::ZoomReset
             | Action::Fullscreen
             | Action::CopyCode(_)
+            | Action::CopySelection
             | Action::FindOpen
             | Action::FindClose
             | Action::FindNext(_)
@@ -1746,6 +1778,7 @@ fn application_shortcut(event: &KeyEvent, modifiers: ServoModifiers) -> Option<A
         PhysicalKey::Code(KeyCode::KeyZ) if ctrl && !alt => Some(Action::Undo(shift)),
         PhysicalKey::Code(KeyCode::KeyY) if ctrl && !alt => Some(Action::Undo(true)),
         PhysicalKey::Code(KeyCode::KeyF) if ctrl && !alt => Some(Action::FindOpen),
+        PhysicalKey::Code(KeyCode::KeyC) if ctrl && !alt => Some(Action::CopySelection),
         PhysicalKey::Code(KeyCode::F3) if !ctrl && !alt => Some(Action::FindNext(shift)),
         PhysicalKey::Code(KeyCode::Escape) if !ctrl && !alt => Some(Action::FindClose),
         PhysicalKey::Code(KeyCode::F11) if !ctrl && !alt => Some(Action::Fullscreen),
