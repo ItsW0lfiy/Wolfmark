@@ -39,6 +39,7 @@ mod editor;
 mod image_resources;
 mod search;
 mod smooth_scroll;
+mod middle_scroll;
 mod ui;
 mod user_settings;
 #[cfg(target_os = "windows")]
@@ -118,6 +119,7 @@ struct State {
     document: RefCell<ui::Session>,
     pending: RefCell<Option<Action>>,
     smooth_wheel: RefCell<smooth_scroll::SmoothWheel>,
+    middle_scroll: RefCell<middle_scroll::MiddleScroll>,
     scroll_origin: RefCell<DevicePoint>,
     reduced_motion: bool,
     frameless: bool,
@@ -822,6 +824,12 @@ impl State {
             _ => {}
         }
         self.smooth_wheel.borrow_mut().cancel();
+        if self.middle_scroll.borrow().active() {
+            self.middle_scroll.borrow_mut().cancel();
+            if let Some(view) = self.view.borrow().last() {
+                view.evaluate_javascript("document.getElementById('wolfmark-autoscroll')?.remove();", |_| {});
+            }
+        }
         match action {
             Action::OpenDropped => {
                 if let Some(path) = self.dropped_file.borrow_mut().take() {
@@ -1036,6 +1044,9 @@ impl ApplicationHandler<Wake> for App {
                 .iter()
                 .fold(false, |pending, resources| resources.poll() || pending);
             let mut due = state.smooth_wheel.borrow().next_tick();
+            if let Some(middle_due) = state.middle_scroll.borrow().next_tick() {
+                due = Some(due.map_or(middle_due, |due| due.min(middle_due)));
+            }
             if image_pending {
                 let image_tick = Instant::now() + std::time::Duration::from_millis(16);
                 due = Some(due.map_or(image_tick, |due| due.min(image_tick)));
@@ -1121,6 +1132,7 @@ impl ApplicationHandler<Wake> for App {
                 document: RefCell::new(std::mem::take(session)),
                 pending: RefCell::new(None),
                 smooth_wheel: RefCell::new(smooth_scroll::SmoothWheel::default()),
+                middle_scroll: RefCell::new(middle_scroll::MiddleScroll::default()),
                 scroll_origin: RefCell::new(DevicePoint::new(0.0, 0.0)),
                 reduced_motion: std::env::var("WOLFMARK_REDUCED_MOTION").is_ok_and(|v| v == "1"),
                 frameless,
@@ -1210,6 +1222,18 @@ impl ApplicationHandler<Wake> for App {
                             state.servo.spin_event_loop();
                         }
                     }
+                    if let Some((x, y)) = state.middle_scroll.borrow_mut().tick(Instant::now()) {
+                        if (x.abs() > 0.01 || y.abs() > 0.01)
+                            && let Some(view) = state.view.borrow().last()
+                        {
+                            let (cx, cy) = state.middle_scroll.borrow().origin();
+                            view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                                WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
+                                DevicePoint::new(cx as f32, cy as f32).into(),
+                            )));
+                            state.servo.spin_event_loop();
+                        }
+                    }
                     if let Some(view) = state.view.borrow().last() {
                         view.paint();
                         state.context.present();
@@ -1244,6 +1268,16 @@ impl ApplicationHandler<Wake> for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let App::Running(state) = self {
                     let modifiers = *state.modifiers.borrow();
+                    if event.state == ElementState::Pressed
+                        && event.logical_key == WinitKey::Named(WinitNamedKey::Escape)
+                        && state.middle_scroll.borrow().active()
+                    {
+                        state.middle_scroll.borrow_mut().cancel();
+                        if let Some(view) = state.view.borrow().last() {
+                            view.evaluate_javascript("document.getElementById('wolfmark-autoscroll')?.remove();", |_| {});
+                        }
+                        return;
+                    }
                     if state.document.borrow().settings_open {
                         if event.state == ElementState::Pressed
                             && event.logical_key == WinitKey::Named(WinitNamedKey::Escape)
@@ -1269,6 +1303,7 @@ impl ApplicationHandler<Wake> for App {
                 if let App::Running(state) = self {
                     let point = DevicePoint::new(position.x as f32, position.y as f32);
                     *state.cursor.borrow_mut() = point;
+                    state.middle_scroll.borrow_mut().update_cursor((position.x, position.y));
                     if let Some(view) = state.view.borrow().last() {
                         view.notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
                             point.into(),
@@ -1283,6 +1318,48 @@ impl ApplicationHandler<Wake> for App {
                 ..
             } => {
                 if let App::Running(state) = self {
+                    if pressed == ElementState::Pressed && button == WinitMouseButton::Middle {
+                        if !state.document.borrow().settings_open
+                            && state.document.borrow().mode == ui::Mode::Reader
+                        {
+                            let cursor = *state.cursor.borrow();
+                            let scale = state.window.scale_factor();
+                            let x = f64::from(cursor.x) / scale;
+                            let y = f64::from(cursor.y) / scale;
+                            let sidebar = if state.document.borrow().sidebar_collapsed { 0.0 } else { 294.0 };
+                            if x > sidebar && y >= 115.0 {
+                                let active = state.middle_scroll.borrow_mut().toggle(
+                                    (f64::from(cursor.x), f64::from(cursor.y)), Instant::now());
+                                if active {
+                                    state.smooth_wheel.borrow_mut().cancel();
+                                }
+                                if let Some(view) = state.view.borrow().last() {
+                                    let script = if active {
+                                        format!(r#"(() => {{
+                                            document.getElementById('wolfmark-autoscroll')?.remove();
+                                            document.body.insertAdjacentHTML('beforeend',
+                                              '<span id="wolfmark-autoscroll" aria-hidden="true" style="left:{x}px;top:{y}px"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="16" cy="16" r="11"/><path d="m11 10 5-5 5 5m-10 12 5 5 5-5"/></svg></span>');
+                                        }})()"#)
+                                    } else {
+                                        "document.getElementById('wolfmark-autoscroll')?.remove();".to_owned()
+                                    };
+                                    view.evaluate_javascript(script, |_| {});
+                                }
+                                state.window.request_redraw();
+                                return;
+                            }
+                        }
+                    }
+                    if pressed == ElementState::Pressed
+                        && state.middle_scroll.borrow().active()
+                    {
+                        state.middle_scroll.borrow_mut().cancel();
+                        if let Some(view) = state.view.borrow().last() {
+                            view.evaluate_javascript("document.getElementById('wolfmark-autoscroll')?.remove();", |_| {});
+                        }
+                        state.window.request_redraw();
+                        return;
+                    }
                     if state.frameless
                         && pressed == ElementState::Pressed
                         && button == WinitMouseButton::Left
