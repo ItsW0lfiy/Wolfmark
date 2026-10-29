@@ -245,3 +245,6 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 
 /* Dirty state mirrors Qt's sidebar icon semantics without duplicating tabs. */
 .document-row.dirty .document-link::after{content:"";flex:none;margin-left:auto;width:6px;height:6px;border-radius:50%;background:#e44b74;box-shadow:0 0 7px #d6275480}
+
+/* Non-modal file-change feedback: no permanent Reader-wide banner. */
+.wm-file-warning{position:fixed;z-index:54;top:106px;right:20px;max-width:min(460px,calc(100vw - 36px));padding:13px 17px;background:rgba(42,30,40,.97);color:#f1e3e9;border:1px solid #99506c;border-left:3px solid #d83c68;border-radius:8px;box-shadow:0 8px 32px #0008;font:12px/1.5 "Segoe UI",system-ui,sans-serif;pointer-events:none;overflow-wrap:anywhere}
