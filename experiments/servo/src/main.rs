@@ -399,6 +399,7 @@ enum Action {
     FindClose,
     FindNext(bool),
     SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
+    SidebarToggle,
     SelectDocument(usize),
     SelectBundled,
     CloseDocument(usize),
@@ -425,6 +426,7 @@ impl Action {
             ("find", "/next") => Some(Self::FindNext(false)),
             ("find", "/previous") => Some(Self::FindNext(true)),
             ("settings", "/open") => Some(Self::SettingsOpen),
+            ("sidebar", "/toggle") => Some(Self::SidebarToggle),
             ("settings", "/close") => Some(Self::SettingsClose),
             ("settings", "/save") => Some(Self::SettingsSave),
             ("settings", "/page-updates") => Some(Self::SettingsPage("updates")),
@@ -738,6 +740,10 @@ impl State {
             Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
             Action::Live => self.document.borrow_mut().mode = ui::Mode::Live,
             Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
+            Action::SidebarToggle => {
+                let mut doc = self.document.borrow_mut();
+                doc.sidebar_collapsed = !doc.sidebar_collapsed;
+            },
 
             Action::SelectDocument(index) => self.document.borrow_mut().select(index),
             Action::SelectBundled => self.document.borrow_mut().select_bundled(),
@@ -808,6 +814,7 @@ mod host_actions_tests {
     fn only_known_ui_commands_dispatch() {
         let good = Url::parse("wolfmark://mode/source").unwrap();
         assert_eq!(Action::from_url(&Url::parse("wolfmark://mode/live").unwrap()), Some(Action::Live));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://sidebar/toggle").unwrap()), Some(Action::SidebarToggle));
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(
             Action::from_url(&Url::parse("wolfmark://document/3").unwrap()),
