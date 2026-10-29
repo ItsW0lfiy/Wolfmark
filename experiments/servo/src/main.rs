@@ -159,6 +159,12 @@ impl servo::WebViewDelegate for State {
             self.scripts.borrow_mut().push((webview.clone(),"document.querySelector('.findbar').hidden=false;document.getElementById('find-query').value='Wolfmark';console.debug('WOLFMARK_GUI_FIND');".into()));
             let _ = self.waker.0.send_event(Wake);
         }
+        if self.document.borrow().mode == ui::Mode::Reader {
+            let top = self.document.borrow().reader_scroll.max(0.0);
+            webview.evaluate_javascript(format!(
+                "if(document.querySelector('.document-viewport'))document.querySelector('.document-viewport').scrollTop={top};"
+            ), |_| {});
+        }
         let revision = self.document.borrow().view_revision.get();
         let (selection_start, selection_end, scroll_top) = self.document.borrow().editor_view();
         // Only host-supplied bridge code executes. Markdown and CSS cannot supply scripts.
@@ -472,6 +478,39 @@ impl Action {
 
 impl State {
     fn apply_action(self: &Rc<Self>, action: Action) {
+        // Qt restores the Reader scroll for each opened document. Snapshot the
+        // actual Servo scroll offset before any page-replacing navigation.
+        // In-place toolbar actions and Settings must not trigger a reload.
+        let reader_navigation = matches!(action,
+            Action::Open | Action::OpenDropped | Action::Refresh
+            | Action::SelectDocument(_) | Action::SelectBundled
+            | Action::CloseDocument(_) | Action::CloseActive
+            | Action::HistoryBack | Action::HistoryForward
+            | Action::AdjacentDocument(_) | Action::Source | Action::Live);
+        if self.document.borrow().mode == ui::Mode::Reader && reader_navigation {
+            if self.syncing.replace(true) { return; }
+            if let Some(view) = self.view.borrow().last() {
+                let weak = Rc::downgrade(self);
+                view.evaluate_javascript(
+                    "JSON.stringify(document.querySelector('.document-viewport')?.scrollTop ?? 0)",
+                    move |result| {
+                        let Some(state) = weak.upgrade() else { return; };
+                        if let Ok(embedder_traits::JSValue::String(value)) = result {
+                            if let Ok(top) = serde_json::from_str::<f64>(&value) {
+                                if top.is_finite() && top >= 0.0 {
+                                    state.document.borrow_mut().reader_scroll = top;
+                                }
+                            }
+                        }
+                        state.syncing.set(false);
+                        *state.synced_action.borrow_mut() = Some(action);
+                        let _ = state.waker.0.send_event(Wake);
+                    },
+                );
+                return;
+            }
+            self.syncing.set(false);
+        }
         if !matches!(self.document.borrow().mode, ui::Mode::Source | ui::Mode::Live) || self.document.borrow().path.is_none()
         {
             self.apply_synced_action(action);
@@ -606,6 +645,20 @@ impl State {
                         ), |_| {});
                         self.servo.spin_event_loop();
                     }
+                }
+                return;
+            }
+            Action::SidebarToggle => {
+                let collapsed = {
+                    let mut document = self.document.borrow_mut();
+                    document.sidebar_collapsed = !document.sidebar_collapsed;
+                    document.sidebar_collapsed
+                };
+                if let Some(view) = self.view.borrow().last() {
+                    view.evaluate_javascript(format!(
+                        "document.querySelector('.app')?.classList.toggle('sidebar-collapsed',{collapsed});"
+                    ), |_| {});
+                    self.servo.spin_event_loop();
                 }
                 return;
             }
@@ -794,10 +847,7 @@ impl State {
             Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
             Action::Live => self.document.borrow_mut().mode = ui::Mode::Live,
             Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
-            Action::SidebarToggle => {
-                let mut doc = self.document.borrow_mut();
-                doc.sidebar_collapsed = !doc.sidebar_collapsed;
-            },
+
 
             Action::SelectDocument(index) => self.document.borrow_mut().select(index),
             Action::SelectBundled => self.document.borrow_mut().select_bundled(),
@@ -824,7 +874,8 @@ impl State {
             | Action::SettingsSave
             | Action::SettingsPage(_)
             | Action::SettingsToggle(_)
-            | Action::OutlineLine(_) => unreachable!(),
+            | Action::OutlineLine(_)
+            | Action::SidebarToggle => unreachable!(),
         }
         let (url, title) = {
             let session = self.document.borrow();
