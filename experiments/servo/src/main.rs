@@ -592,6 +592,30 @@ impl State {
             });
         }
     }
+    // Qt Settings is modal. Keyboard focus must not fall through to a Source
+    // editor while the settings overlay owns input. Only these host-supplied
+    // scripts may execute; document Markdown remains inert.
+    fn settings_focus_script() -> &'static str {
+        r#"(() => {
+            const overlay=document.querySelector('.settings-overlay');
+            if(!overlay)return;
+            overlay.setAttribute('tabindex','-1');
+            overlay.addEventListener('keydown',event=>{
+                if(event.key!=='Tab')return;
+                const items=Array.from(overlay.querySelectorAll('a[href]'))
+                    .filter(item=>item.getClientRects().length>0);
+                if(!items.length){event.preventDefault();overlay.focus();return;}
+                const current=items.indexOf(document.activeElement);
+                const next=event.shiftKey
+                    ? (current<=0?items.length-1:current-1)
+                    : (current<0||current===items.length-1?0:current+1);
+                event.preventDefault();items[next].focus();
+            });
+            (overlay.querySelector('.settings-nav-current')
+              ||overlay.querySelector('.settings-close')||overlay).focus();
+        })()"#
+    }
+
     fn apply_synced_action(&self, action: Action) {
         // The Settings overlay behaves as a modal dialog: document/navigation
         // commands must not act behind it while a draft is being edited.
@@ -624,7 +648,8 @@ impl State {
                 if let Some(view) = self.view.borrow().last() {
                     // Do not navigate/reparse/reload images just to show a dialog.
                     view.evaluate_javascript(format!(
-                        "document.querySelector('.settings-overlay')?.remove();document.querySelector('.app')?.insertAdjacentHTML('beforeend',{serialized});"
+                        "window.__wmSettingsPreviousFocus=document.activeElement;document.querySelector('.settings-overlay')?.remove();document.querySelector('.app')?.insertAdjacentHTML('beforeend',{serialized});{}",
+                        Self::settings_focus_script()
                     ), |_| {});
                     self.servo.spin_event_loop();
                 }
@@ -633,7 +658,7 @@ impl State {
             Action::SettingsClose => {
                 self.document.borrow_mut().cancel_settings();
                 if let Some(view) = self.view.borrow().last() {
-                    view.evaluate_javascript("document.querySelector('.settings-overlay')?.remove();", |_| {});
+                    view.evaluate_javascript("document.querySelector('.settings-overlay')?.remove();if(window.__wmSettingsPreviousFocus?.isConnected)window.__wmSettingsPreviousFocus.focus();window.__wmSettingsPreviousFocus=null;", |_| {});
                     self.servo.spin_event_loop();
                 }
                 return;
@@ -646,6 +671,8 @@ impl State {
                             let wrapping = self.document.borrow().preferences.editor_word_wrap;
                             view.evaluate_javascript(format!(r#"(() => {{
                                 document.querySelector('.settings-overlay')?.remove();
+                                if(window.__wmSettingsPreviousFocus?.isConnected)window.__wmSettingsPreviousFocus.focus();
+                                window.__wmSettingsPreviousFocus=null;
                                 const editor=document.getElementById('source-editor');
                                 if(editor) {{
                                     editor.wrap='{wrap}';
@@ -677,7 +704,8 @@ impl State {
                     let serialized = serde_json::to_string(&html).expect("settings HTML serializable");
                     if let Some(view) = self.view.borrow().last() {
                         view.evaluate_javascript(format!(
-                            "document.querySelector('.settings-overlay').outerHTML={serialized};"
+                            "document.querySelector('.settings-overlay').outerHTML={serialized};{}",
+                            Self::settings_focus_script()
                         ), |_| {});
                         self.servo.spin_event_loop();
                     }
@@ -693,7 +721,8 @@ impl State {
                     let serialized = serde_json::to_string(&html).expect("settings HTML serializable");
                     if let Some(view) = self.view.borrow().last() {
                         view.evaluate_javascript(format!(
-                            "document.querySelector('.settings-overlay').outerHTML={serialized};"
+                            "document.querySelector('.settings-overlay').outerHTML={serialized};{}",
+                            Self::settings_focus_script()
                         ), |_| {});
                         self.servo.spin_event_loop();
                     }
