@@ -366,3 +366,12 @@ The user is deferring manual GUI testing until the UI work is sufficiently
 finished, so Windows CI, Rust tests and repository/source review are the
 current verification gates. See `docs/architecture/servo-parity.md` for
 remaining items. Bare `cargo run` and `cargo build` remain Qt.
+
+### Additional parity work after the Windows compile baseline
+
+The working branch additionally includes per-document file modification monitoring,
+non-reloading Rust Undo/Redo, Qt-equivalent Settings focus management, a
+native taskbar/window icon and persisted Open Document folder, and six-hour
+ETag-cached automatic/manual GitHub Releases checks. These changes are not
+accepted until the new Windows CI compile/test gates and graphical reference
+comparisons are complete.
