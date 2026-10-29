@@ -69,7 +69,7 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .zoom-controls a:hover{background:#303139;border-radius:5px}
 .more{margin-left:7px;color:#b5b6bd}
 .document-viewport{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-color:#852b47 transparent;scrollbar-width:thin;background:#101012}
-.document-inner{width:100%;max-width:none;margin:0;padding:var(--qt-top,22px) min(var(--qt-padding,48px), max(20px, (100vw - 694px) / 12)) var(--qt-bottom,34px);min-height:100%;box-sizing:border-box}
+.document-inner{width:100%;max-width:none;margin:0;padding:var(--qt-top,22px) min(var(--qt-padding,48px), max(20px, calc((100vw - 694px) / 12))) var(--qt-bottom,34px);min-height:100%;box-sizing:border-box}
 .document-body{font-family:var(--serif);font-size:var(--doc-size,17px);line-height:1.52;color:#e6e5e8;overflow-wrap:break-word}
 .document-body h1,.document-body h2,.document-body h3,.document-body h4{font-family:var(--serif);font-weight:700;color:#e9e6ec;line-height:1.16;scroll-margin-top:28px}
 .document-body h1{font-size:2.55em;letter-spacing:.005em;margin:1px 0 15px}
