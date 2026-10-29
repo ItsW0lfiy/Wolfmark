@@ -91,6 +91,7 @@ struct State {
     document: RefCell<ui::Session>,
     pending: RefCell<Option<Action>>,
     smooth_wheel: RefCell<smooth_scroll::SmoothWheel>,
+    scroll_origin: RefCell<DevicePoint>,
     reduced_motion: bool,
     frameless: bool,
     close_requested: Cell<bool>,
@@ -417,6 +418,7 @@ impl ApplicationHandler<Wake> for App {
                 document: RefCell::new(std::mem::take(session)),
                 pending: RefCell::new(None),
                 smooth_wheel: RefCell::new(smooth_scroll::SmoothWheel::default()),
+                scroll_origin: RefCell::new(DevicePoint::new(0.0, 0.0)),
                 reduced_motion: std::env::var("WOLFMARK_REDUCED_MOTION").is_ok_and(|v| v == "1"),
                 frameless,
                 close_requested: Cell::new(false),
@@ -478,7 +480,7 @@ impl ApplicationHandler<Wake> for App {
                         {
                             view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
                                 WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
-                                (*state.cursor.borrow()).into(),
+                                (*state.scroll_origin.borrow()).into(),
                             )));
                             state.servo.spin_event_loop();
                         }
@@ -591,6 +593,10 @@ impl ApplicationHandler<Wake> for App {
                 if let App::Running(state) = self {
                     match delta {
                         MouseScrollDelta::LineDelta(x, y) if !state.reduced_motion => {
+                            // Keep the wheel's target under the pointer position
+                            // at input time; later mouse movement must not move
+                            // in-flight scroll deltas into a different panel.
+                            *state.scroll_origin.borrow_mut() = *state.cursor.borrow();
                             // Match Qt's continuous wheel trajectory. Pixel/trackpad
                             // events stay direct and never enter the integrator.
                             state.smooth_wheel.borrow_mut().add_lines(x, y, Instant::now());
