@@ -73,6 +73,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // The accepted UI is now the default. Keep the tiny original page as an
     // explicit graphics diagnostic, not as the Wolfmark replacement.
     let mut session = ui::Session::default();
+    // On Windows use Wolfmark's own caption by default. Keep the OS frame on
+    // X11/Linux pending actual native resize/snap parity.
+    session.frameless_test = cfg!(target_os = "windows");
     let mut smoke_page = false;
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
@@ -80,6 +83,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             smoke_page = true;
         } else if arg == "--frameless-test" {
             session.frameless_test = true;
+        } else if arg == "--native-frame" {
+            session.frameless_test = false;
         } else if arg == "--document" {
             if let Some(path) = args.next() {
                 session.open(&PathBuf::from(path));
@@ -115,6 +120,7 @@ struct State {
     close_requested: Rc<Cell<bool>>,
     snapshot_requested: Cell<bool>,
     pre_fullscreen_maximized: Cell<bool>,
+    last_caption_click: Cell<Option<(Instant, f64, f64)>>,
     clipboard: Rc<RefCell<Option<arboard::Clipboard>>>,
     search: Rc<RefCell<search::Search>>,
     synced_action: RefCell<Option<Action>>,
@@ -940,6 +946,7 @@ impl ApplicationHandler<Wake> for App {
                 close_requested: Rc::new(Cell::new(false)),
                 snapshot_requested: Cell::new(false),
                 pre_fullscreen_maximized: Cell::new(false),
+                last_caption_click: Cell::new(None),
                 clipboard: Rc::new(RefCell::new(None)),
                 search: Rc::new(RefCell::new(search::Search::default())),
                 synced_action: RefCell::new(None),
@@ -1101,6 +1108,20 @@ impl ApplicationHandler<Wake> for App {
                             }
                         }
                         if title_drag_area(x, y, width) {
+                            let now = Instant::now();
+                            let double_click = state.last_caption_click.get().is_some_and(
+                                |(when, old_x, old_y)| {
+                                    now.duration_since(when).as_millis() <= 400
+                                        && (x - old_x).abs() <= 6.0
+                                        && (y - old_y).abs() <= 6.0
+                                },
+                            );
+                            if double_click {
+                                state.last_caption_click.set(None);
+                                state.window.set_maximized(!state.window.is_maximized());
+                                return;
+                            }
+                            state.last_caption_click.set(Some((now, x, y)));
                             let _ = state.window.drag_window();
                             return;
                         }
