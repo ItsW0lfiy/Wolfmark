@@ -792,7 +792,8 @@ impl State {
                 return;
             }
             Action::Fullscreen => {
-                if self.window.fullscreen().is_some() {
+                let entering = self.window.fullscreen().is_none();
+                if !entering {
                     self.window.set_fullscreen(None);
                     self.window
                         .set_maximized(self.pre_fullscreen_maximized.get());
@@ -801,6 +802,14 @@ impl State {
                         .set(self.window.is_maximized());
                     self.window
                         .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                }
+                #[cfg(target_os = "windows")]
+                windows_chrome::refresh_corners(&self.window);
+                if let Some(view) = self.view.borrow().last() {
+                    view.evaluate_javascript(format!(
+                        "document.querySelector('.app')?.classList.toggle('wm-fullscreen',{entering});"
+                    ), |_| {});
+                    self.servo.spin_event_loop();
                 }
                 return;
             }
@@ -1369,6 +1378,14 @@ impl ApplicationHandler<Wake> for App {
                         if let Some(view) = state.view.borrow().last() {
                             view.evaluate_javascript("document.getElementById('wolfmark-autoscroll')?.remove();", |_| {});
                         }
+                        return;
+                    }
+                    if !state.document.borrow().settings_open
+                        && event.state == ElementState::Pressed
+                        && event.logical_key == WinitKey::Named(WinitNamedKey::Escape)
+                        && state.window.fullscreen().is_some()
+                    {
+                        state.apply_action(Action::Fullscreen);
                         return;
                     }
                     if state.document.borrow().settings_open {
