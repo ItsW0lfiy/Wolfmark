@@ -1222,7 +1222,8 @@ impl ApplicationHandler<Wake> for App {
                             state.servo.spin_event_loop();
                         }
                     }
-                    if let Some((x, y)) = state.middle_scroll.borrow_mut().tick(Instant::now()) {
+                    let middle_motion = { state.middle_scroll.borrow_mut().tick(Instant::now()) };
+                    if let Some((x, y)) = middle_motion {
                         if (x.abs() > 0.01 || y.abs() > 0.01)
                             && let Some(view) = state.view.borrow().last()
                         {
