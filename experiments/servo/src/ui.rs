@@ -392,7 +392,7 @@ impl Session {
                 html.push_str("<span class=\"settings-eyebrow\">WOLFMARK / PREFERENCES</span><h1 id=\"settings-title\">Updates</h1>");
                 html.push_str("<p class=\"settings-description\">Wolfmark's update source is public GitHub Releases, without an account or telemetry.</p>");
                 html.push_str("<h2>Update preferences</h2>");
-                let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check for updates automatically</strong><small>Check quietly after Wolfmark opens when the GitHub updater is connected.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.check_on_startup,checked(draft.check_on_startup));
+                let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check for updates automatically</strong><small>Check GitHub Releases at startup, reusing results for six hours.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.check_on_startup,checked(draft.check_on_startup));
                 let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/prereleases\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Include pre-release versions</strong><small>Development builds may be less stable than regular releases.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.include_prereleases,checked(draft.include_prereleases));
                 html.push_str("<h2>Current version</h2><div class=\"settings-about\"><strong>Wolfmark 0.1.0-dev.7</strong>");
                 let _ = write!(html,"<span id=\"update-status\" role=\"status\">{}</span></div>",escape(&self.update_status));
@@ -1299,6 +1299,29 @@ mod tests {
         assert!(html.contains("app sidebar-collapsed"));
         assert!(html.contains("wolfmark://sidebar/toggle"));
         assert!(!html.contains("documentTabRow"));
+    }
+
+    #[test]
+    fn settings_are_explicitly_saved_and_can_be_cancelled() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let mut ui = Session::default();
+        ui.preferences = crate::user_settings::Preferences::at_path(path.clone(), false);
+        let original = ui.preferences.editor_word_wrap;
+        ui.begin_settings();
+        ui.settings_page("editor");
+        ui.toggle_setting("word-wrap").unwrap();
+        assert_eq!(ui.preferences.editor_word_wrap, original);
+        ui.cancel_settings();
+        assert_eq!(ui.preferences.editor_word_wrap, original);
+        assert!(!path.exists(), "cancel must not persist changes");
+        ui.begin_settings();
+        ui.toggle_setting("word-wrap").unwrap();
+        ui.save_settings().unwrap();
+        assert_eq!(ui.preferences.editor_word_wrap, !original);
+        assert!(path.exists());
+        let disk = crate::user_settings::Preferences::load_from(path, false);
+        assert_eq!(disk.editor_word_wrap, !original);
     }
 
     #[test]
