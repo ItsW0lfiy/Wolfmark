@@ -11,7 +11,7 @@
 // Without them it warns and may choose an unsuitable adapter.
 surfman::declare_surfman!();
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::rc::Rc;
 use std::path::PathBuf;
@@ -46,7 +46,7 @@ use winit::event::{
 use winit::keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey as WinitNamedKey, PhysicalKey};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use winit::window::Window;
+use winit::window::{ResizeDirection, Window};
 
 fn main() -> Result<(), Box<dyn Error>> {
     rustls::crypto::aws_lc_rs::default_provider()
@@ -63,6 +63,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     while let Some(arg) = args.next() {
         if arg == "--smoke-page" {
             smoke_page = true;
+        } else if arg == "--frameless-test" {
+            session.frameless_test = true;
         } else if arg == "--document" {
             if let Some(path) = args.next() {
                 session.open(&PathBuf::from(path));
@@ -90,6 +92,8 @@ struct State {
     pending: RefCell<Option<Action>>,
     smooth_wheel: RefCell<smooth_scroll::SmoothWheel>,
     reduced_motion: bool,
+    frameless: bool,
+    close_requested: Cell<bool>,
     smoke_page: bool,
 }
 
@@ -182,6 +186,7 @@ enum Action {
     Open, Refresh, Reader, Source, ZoomIn, ZoomOut,
     SelectDocument(usize), SelectBundled, CloseDocument(usize), CloseActive,
     HistoryBack, HistoryForward, AdjacentDocument(bool),
+    WindowMinimize, WindowMaximize, WindowClose,
 }
 
 impl Action {
@@ -197,6 +202,9 @@ impl Action {
             ("document", "/bundled") => Some(Self::SelectBundled),
             ("history", "/back") => Some(Self::HistoryBack),
             ("history", "/forward") => Some(Self::HistoryForward),
+            ("window", "/minimize") => Some(Self::WindowMinimize),
+            ("window", "/maximize") => Some(Self::WindowMaximize),
+            ("window", "/close") => Some(Self::WindowClose),
             ("close", path) => path.strip_prefix('/')
                 .and_then(|index| index.parse::<usize>().ok())
                 .map(Self::CloseDocument),
@@ -211,6 +219,25 @@ impl Action {
 impl State {
     fn apply_action(&self, action: Action) {
         if self.smoke_page { return; }
+        // Window commands do not reload the document and cannot be delegated
+        // to untrusted HTML or JavaScript.
+        match action {
+            Action::WindowMinimize if self.frameless => {
+                self.window.set_minimized(true);
+                return;
+            }
+            Action::WindowMaximize if self.frameless => {
+                self.window.set_maximized(!self.window.is_maximized());
+                return;
+            }
+            Action::WindowClose if self.frameless => {
+                self.close_requested.set(true);
+                self.window.request_redraw();
+                return;
+            }
+            Action::WindowMinimize | Action::WindowMaximize | Action::WindowClose => return,
+            _ => {}
+        }
         self.smooth_wheel.borrow_mut().cancel();
         match action {
             Action::Open => {
@@ -236,6 +263,7 @@ impl State {
             Action::HistoryBack => self.document.borrow_mut().back(),
             Action::HistoryForward => self.document.borrow_mut().forward(),
             Action::AdjacentDocument(backward) => self.document.borrow_mut().select_adjacent(backward),
+            Action::WindowMinimize | Action::WindowMaximize | Action::WindowClose => unreachable!(),
         }
         let (url, title) = {
             let session = self.document.borrow();
@@ -270,15 +298,65 @@ mod host_actions_tests {
         assert_eq!(Action::from_url(&Url::parse("wolfmark://close/2").unwrap()), Some(Action::CloseDocument(2)));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://history/back").unwrap()), Some(Action::HistoryBack));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://history/forward").unwrap()), Some(Action::HistoryForward));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/minimize").unwrap()), Some(Action::WindowMinimize));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/maximize").unwrap()), Some(Action::WindowMaximize));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/close").unwrap()), Some(Action::WindowClose));
         for bad in ["https://example.com/", "wolfmark://evil/", "wolfmark://mode/remove", "file:///C:/windows"] {
             assert_eq!(Action::from_url(&Url::parse(bad).unwrap()), None);
         }
     }
 }
 
+// Winit delegates actual resize/move operations to the window manager.
+// This is a deliberately *opt-in* native-frame parity experiment: Windows
+// DWM Snap Layout hover, rounded corners, mixed-DPI and system menus remain
+// unverified, so normal Servo launches retain their working OS decorations.
+fn resize_at(x: f64, y: f64, width: f64, height: f64) -> Option<ResizeDirection> {
+    let left = x < 7.0;
+    let right = x >= width - 7.0;
+    let top = y < 7.0;
+    let bottom = y >= height - 7.0;
+    match (top, bottom, left, right) {
+        (true, _, true, _) => Some(ResizeDirection::NorthWest),
+        (true, _, _, true) => Some(ResizeDirection::NorthEast),
+        (_, true, true, _) => Some(ResizeDirection::SouthWest),
+        (_, true, _, true) => Some(ResizeDirection::SouthEast),
+        (true, _, _, _) => Some(ResizeDirection::North),
+        (_, true, _, _) => Some(ResizeDirection::South),
+        (_, _, true, _) => Some(ResizeDirection::West),
+        (_, _, _, true) => Some(ResizeDirection::East),
+        _ => None,
+    }
+}
+
+fn title_drag_area(x: f64, y: f64, width: f64) -> bool {
+    // Avoid brand/breadcrumb on the left and settings/caption controls on
+    // the right; only the otherwise-empty header region starts system move.
+    y >= 8.0 && y < 54.0 && x > width.min(330.0) * 0.85
+        && x < width - 425.0
+}
+
+#[cfg(test)]
+mod window_hit_tests {
+    use super::*;
+    #[test]
+    fn resize_edges_are_distinct_from_caption_drag() {
+        assert_eq!(resize_at(1.0, 1.0, 1100.0, 760.0), Some(ResizeDirection::NorthWest));
+        assert_eq!(resize_at(1098.0, 759.0, 1100.0, 760.0), Some(ResizeDirection::SouthEast));
+        assert!(resize_at(550.0, 250.0, 1100.0, 760.0).is_none());
+        assert!(title_drag_area(450.0, 25.0, 1100.0));
+        assert!(!title_drag_area(1070.0, 25.0, 1100.0));
+        assert!(!title_drag_area(450.0, 80.0, 1100.0));
+    }
+}
+
 impl ApplicationHandler<Wake> for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let App::Running(state) = self {
+            if state.close_requested.get() {
+                event_loop.exit();
+                return;
+            }
             let due = state.smooth_wheel.borrow().next_tick();
             match due {
                 Some(due) if due <= Instant::now() => {
@@ -293,6 +371,7 @@ impl ApplicationHandler<Wake> for App {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let App::Initial(waker, session, smoke_page) = self {
+            let frameless = session.frameless_test && !*smoke_page;
             let display = event_loop.display_handle().expect("display handle");
             let caption = if *smoke_page {
                 "Wolfmark — Servo graphics diagnostic".to_owned()
@@ -303,6 +382,7 @@ impl ApplicationHandler<Wake> for App {
                 .create_window(
                     Window::default_attributes()
                         .with_title(caption)
+                        .with_decorations(!frameless)
                         .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 760.0)),
                 )
                 .expect("test window");
@@ -338,6 +418,8 @@ impl ApplicationHandler<Wake> for App {
                 pending: RefCell::new(None),
                 smooth_wheel: RefCell::new(smooth_scroll::SmoothWheel::default()),
                 reduced_motion: std::env::var("WOLFMARK_REDUCED_MOTION").is_ok_and(|v| v == "1"),
+                frameless,
+                close_requested: Cell::new(false),
                 smoke_page: *smoke_page,
             });
 
@@ -463,6 +545,28 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::MouseInput { state: pressed, button, .. } => {
                 if let App::Running(state) = self {
+                    if state.frameless
+                        && pressed == ElementState::Pressed
+                        && button == WinitMouseButton::Left
+                    {
+                        let scale = state.window.scale_factor();
+                        let cursor = state.cursor.borrow();
+                        let x = f64::from(cursor.x) / scale;
+                        let y = f64::from(cursor.y) / scale;
+                        let size = state.window.inner_size();
+                        let width = f64::from(size.width) / scale;
+                        let height = f64::from(size.height) / scale;
+                        if !state.window.is_maximized() {
+                            if let Some(edge) = resize_at(x, y, width, height) {
+                                let _ = state.window.drag_resize_window(edge);
+                                return;
+                            }
+                        }
+                        if title_drag_area(x, y, width) {
+                            let _ = state.window.drag_window();
+                            return;
+                        }
+                    }
                     let button = match button {
                         WinitMouseButton::Left => ServoMouseButton::Primary,
                         WinitMouseButton::Right => ServoMouseButton::Secondary,
