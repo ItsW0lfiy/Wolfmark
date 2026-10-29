@@ -31,6 +31,7 @@ pub struct Session {
     pub mode: Mode,
     pub zoom: u16,
     pub notice: Option<String>,
+    pub frameless_test: bool,
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
     active_document: Option<usize>,
@@ -50,6 +51,7 @@ impl Default for Session {
             source: BUNDLED_SOURCE.to_owned(),
             mode: Mode::Reader,
             zoom: 100,
+            frameless_test: false,
             notice: Some("Bundled architecture document — drag and drop a .md/.txt file or use Open document to test your own files.".into()),
             open_documents: Vec::new(),
             active_document: None,
@@ -268,6 +270,13 @@ impl Session {
         html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://refresh/\" title=\"Reload document from disk\"><span class=\"glyph\">↻</span></a>");
         html.push_str("<span class=\"top-search\" title=\"Search is not wired in this first prototype\">⌕ &nbsp; Search in document… <span class=\"shortcut\">Ctrl+F</span></span>");
         html.push_str("<span class=\"separator\"></span><span class=\"toolbar-link top-settings disabled\" title=\"Settings integration pending\"><span class=\"glyph\">⚙</span><span class=\"label\">Settings</span></span>");
+        if self.frameless_test {
+            html.push_str("<nav class=\"caption-controls\" aria-label=\"Window controls\">");
+            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/minimize\" title=\"Minimize\" aria-label=\"Minimize\">−</a>");
+            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/maximize\" title=\"Maximize or restore\" aria-label=\"Maximize or restore\">□</a>");
+            html.push_str("<a class=\"caption-button caption-close\" href=\"wolfmark://window/close\" title=\"Close\" aria-label=\"Close\">×</a>");
+            html.push_str("</nav>");
+        }
         html.push_str("</header><aside class=\"sidebar\"><div class=\"sidebar-inner\">");
         html.push_str("<a class=\"open-doc\" href=\"wolfmark://open/\" title=\"Select a local Markdown or text document\"><span class=\"glyph\">▱</span>Open document</a>");
         html.push_str("<p class=\"section-title\">Open Documents</p>");
@@ -295,7 +304,7 @@ impl Session {
             html.push_str("<span class=\"outline-item\">Switch to Reader for outline</span>");
         }
         html.push_str("</nav></div><footer class=\"sidebar-footer\">");
-        let _ = write!(html, "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>Servo UI experiment</small></div></div>");
+        let _ = write!(html, "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>v0.1.0-dev.7 · Servo</small></div></div>");
         html.push_str("</footer></aside><main class=\"main\">");
         html.push_str("<div class=\"viewbar\"><nav class=\"nav-pair\" aria-label=\"Document history\">");
         if self.can_go_back() {
@@ -537,6 +546,17 @@ mod tests {
         assert!(html.contains("wolfmark://mode/source"));
         assert!(html.contains("wolfmark://refresh/"));
         assert!(html.contains("footer-art"));
+    }
+
+    #[test]
+    fn frameless_controls_exist_only_in_opt_in_experiment() {
+        let mut ui = Session::default();
+        assert!(!ui.render_html().contains("wolfmark://window/minimize"));
+        ui.frameless_test = true;
+        let html = ui.render_html();
+        assert!(html.contains("wolfmark://window/minimize"));
+        assert!(html.contains("wolfmark://window/maximize"));
+        assert!(html.contains("wolfmark://window/close"));
     }
 
     #[test]
