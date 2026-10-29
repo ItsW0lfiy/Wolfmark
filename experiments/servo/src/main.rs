@@ -179,11 +179,32 @@ impl servo::WebViewDelegate for State {
             const editor=document.getElementById('source-editor');
             if(!editor || editor.readOnly)return;
             editor.setSelectionRange({selection_start},{selection_end});editor.scrollTop={scroll_top};
+            let dirty=document.getElementById('editor-status')?.textContent.includes('Unsaved')||false;
+            let pendingUpdate=null;
+            const updateStatus=()=>{{
+                const before=editor.value.slice(0,editor.selectionStart);
+                const line=before.split('\n').length;
+                const column=before.length-before.lastIndexOf('\n');
+                const label='Ln '+line+':'+column+(dirty?' · Unsaved':'');
+                const status=document.getElementById('editor-status');
+                if(status)status.textContent=label;
+            }};
             const changed=()=>{{
-                console.debug('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
-                document.getElementById('editor-status').textContent='Unsaved';
+                dirty=true;
+                updateStatus();
+                if(pendingUpdate!==null)clearTimeout(pendingUpdate);
+                // Large files must not be re-serialized/reparsed on every
+                // physical key stroke. Save/switch still forces a fresh sync.
+                pendingUpdate=setTimeout(()=>{{
+                    console.debug('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
+                    pendingUpdate=null;
+                }},75);
             }};
             editor.addEventListener('input',changed);
+            editor.addEventListener('click',updateStatus);
+            editor.addEventListener('keyup',updateStatus);
+            editor.addEventListener('select',updateStatus);
+            updateStatus();
             const mirror=document.getElementById('live-highlights');
             if(mirror){{
                 const syncScroll=()=>{{mirror.scrollTop=editor.scrollTop;mirror.scrollLeft=editor.scrollLeft;}};
