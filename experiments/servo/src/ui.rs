@@ -33,6 +33,8 @@ pub struct Session {
     pub zoom: u16,
     pub notice: Option<String>,
     pub frameless_test: bool,
+    pub settings_open: bool,
+    pub preferences: crate::user_settings::Preferences,
     pub view_revision: std::cell::Cell<u64>,
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
@@ -68,14 +70,18 @@ impl Default for Session {
     fn default() -> Self {
         let reader_cache = Rc::new(RefCell::new(None));
         let resources = Rc::new(crate::image_resources::Resources::default());
+        let preferences = crate::user_settings::Preferences::load();
+        let notice = preferences.recovery_warning.clone();
         Self {
             path: None,
             source: BUNDLED_SOURCE.to_owned(),
             mode: Mode::Reader,
             zoom: 100,
             frameless_test: false,
+            settings_open: false,
+            preferences,
             view_revision: std::cell::Cell::new(0),
-            notice: None,
+            notice,
             open_documents: Vec::new(),
             active_document: None,
             history: vec![None],
@@ -133,6 +139,12 @@ impl Session {
                     zoom: 100,
                 });
                 self.select(self.open_documents.len() - 1);
+                if let Some(parent) = self.path.as_deref().and_then(Path::parent) {
+                    self.preferences.last_open_directory = parent.to_string_lossy().into_owned();
+                    if let Err(error) = self.preferences.save() {
+                        self.notice = Some(format!("Unable to remember the last directory: {error}"));
+                    }
+                }
             }
             Err(error) => self.notice = Some(format!("Unable to open document: {error}")),
         }
@@ -265,6 +277,44 @@ impl Session {
             (current + 1) % count
         };
         self.activate(next.checked_sub(1), true);
+    }
+
+    pub fn toggle_setting(&mut self, field: &str) -> Result<(), String> {
+        match field {
+            "word-wrap" => self.preferences.editor_word_wrap = !self.preferences.editor_word_wrap,
+            "check-updates" => self.preferences.check_on_startup = !self.preferences.check_on_startup,
+            "prereleases" => self.preferences.include_prereleases = !self.preferences.include_prereleases,
+            _ => return Err("Unknown settings field".into()),
+        }
+        self.preferences.save().map_err(|error| {
+            self.notice = Some(format!("Could not save settings: {error}"));
+            error
+        })?;
+        self.notice = None;
+        Ok(())
+    }
+
+    pub fn settings_html(&self) -> String {
+        let mut html = String::new();
+        let checked = |enabled: bool| if enabled { "checked" } else { "" };
+        html.push_str("<section class=\"settings-overlay\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"settings-title\">");
+        html.push_str("<div class=\"settings-window\"><header class=\"settings-header\">");
+        html.push_str("<span class=\"settings-brand\">Wolfmark <span>/ Settings</span></span>");
+        html.push_str("<a href=\"wolfmark://settings/close\" class=\"settings-close\" aria-label=\"Close Settings\" title=\"Close Settings\">");
+        html.push_str("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"m6 6 12 12 M18 6 6 18\"/></svg></a></header>");
+        html.push_str("<div class=\"settings-columns\"><nav class=\"settings-navigation\" aria-label=\"Settings categories\">");
+        html.push_str("<span class=\"settings-nav-current\">General</span><span>Editor</span><span>Updates</span><span>About</span></nav>");
+        html.push_str("<div class=\"settings-content\"><h1 id=\"settings-title\">Settings</h1>");
+        html.push_str("<p class=\"settings-description\">Personalize Wolfmark without changing the underlying Markdown files.</p>");
+        html.push_str("<h2>Editor</h2><p class=\"settings-note\">Changes apply to Source mode.</p>");
+        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/word-wrap\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Word wrap</strong><small>Wrap long lines within the editor viewport</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.editor_word_wrap,checked(self.preferences.editor_word_wrap));
+        html.push_str("<h2>Updates</h2><p class=\"settings-note\">Preferences are saved immediately. Automatic GitHub update transport is not yet connected in the Servo frontend.</p>");
+        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check on startup</strong><small>Allow Wolfmark to check for GitHub updates when the updater is integrated</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.check_on_startup,checked(self.preferences.check_on_startup));
+        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/prereleases\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Include prereleases</strong><small>Allow development-channel releases in future update checks</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.include_prereleases,checked(self.preferences.include_prereleases));
+        html.push_str("<h2>About</h2><div class=\"settings-about\"><strong>Wolfmark</strong><span>0.1.0-dev.7 — Servo migration prototype</span>");
+        let _ = write!(html,"<span>Settings storage: {}</span><span>{}</span></div>",escape(&self.preferences.path().to_string_lossy()),if self.preferences.portable{"Portable mode"}else{"Installed/user mode"});
+        html.push_str("</div></div><footer class=\"settings-footer\"><span>Changes are saved automatically</span><a href=\"wolfmark://settings/close\">Done</a></footer></div></section>");
+        html
     }
 
     pub fn editor_view(&self) -> (usize, usize, f64) {
@@ -540,7 +590,7 @@ impl Session {
         html.push_str("<span class=\"header-spacer\"></span>");
         html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://refresh/\" title=\"Reload document from disk\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 7v5h-5M20 12a8 8 0 1 0-2 6\"/></svg></span></a>");
         html.push_str("<a class=\"top-search\" href=\"wolfmark://find/open\" title=\"Search in document\">Search in document… <span class=\"shortcut\">Ctrl+F</span></a>");
-        html.push_str("<span class=\"separator\"></span><span class=\"toolbar-link top-settings disabled\" aria-disabled=\"true\" title=\"Settings integration pending\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0\"/></svg></span><span class=\"label\">Settings</span></span>");
+        html.push_str("<span class=\"separator\"></span><a class=\"toolbar-link top-settings\" href=\"wolfmark://settings/open\" title=\"Open Wolfmark Settings\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0\"/></svg></span><span class=\"label\">Settings</span></a>");
         if self.frameless_test {
             html.push_str("<nav class=\"caption-controls\" aria-label=\"Window controls\">");
             html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/minimize\" title=\"Minimize\" aria-label=\"Minimize\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a>");
@@ -680,7 +730,11 @@ impl Session {
             "<article class=\"document-body\" style=\"--doc-size:{size:.1}px\">{body}</article>"
         );
 
-        html.push_str("</div></div></main></div></body></html>");
+        html.push_str("</div></div></main>");
+        if self.settings_open {
+            html.push_str(&self.settings_html());
+        }
+        html.push_str("</div></body></html>");
         html
     }
 }
@@ -923,6 +977,23 @@ fn wrapped_inlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_screen_is_actionable_and_matches_qt_schema() {
+        let mut session = Session::default();
+        assert!(session.render_html().contains("wolfmark://settings/open"));
+        session.settings_open = true;
+        let html = session.render_html();
+        for url in [
+            "wolfmark://settings/close",
+            "wolfmark://settings/word-wrap",
+            "wolfmark://settings/check-updates",
+            "wolfmark://settings/prereleases",
+        ] {
+            assert!(html.contains(url), "missing {url}");
+        }
+        assert!(html.contains("Changes are saved automatically"));
+    }
 
     #[test]
     fn bundled_reader_has_no_development_notice_but_errors_remain_visible() {
