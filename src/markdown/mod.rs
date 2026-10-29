@@ -1,3 +1,4 @@
+pub mod anchors;
 pub mod convert;
 pub mod editor;
 mod highlight;

@@ -13,28 +13,40 @@ surfman::declare_surfman!();
 
 use std::cell::{Cell, RefCell};
 use std::error::Error;
-use std::rc::Rc;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Instant;
 
 // Shared Rust code from the existing Wolfmark core, without linking Qt.
-#[path = "../../../src/markdown/model.rs"] mod model;
-#[path = "../../../src/markdown/parser.rs"] mod parser;
-#[path = "../../../src/markdown/highlight.rs"] mod highlight;
-#[path = "../../../src/presentation.rs"] mod presentation;
-#[path = "../../../src/images/paths.rs"] mod image_paths;
-mod ui;
+#[path = "../../../src/markdown/highlight.rs"]
+mod highlight;
+#[allow(dead_code, unused_imports)]
+#[path = "../../../src/images/mod.rs"]
+mod images;
+#[path = "../../../src/markdown/model.rs"]
+mod model;
+#[path = "../../../src/markdown/parser.rs"]
+mod parser;
+#[allow(dead_code)]
+#[path = "../../../src/presentation.rs"]
+mod presentation;
+
+#[path = "../../../src/markdown/anchors.rs"]
+mod anchors;
+mod editor;
+mod image_resources;
+mod search;
 mod smooth_scroll;
+mod ui;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use servo::{
     Code as ServoCode, InputEvent, Key as ServoKey, KeyState as ServoKeyState,
-    KeyboardEvent as ServoKeyboardEvent, Location as ServoLocation,
-    Modifiers as ServoModifiers, MouseButton as ServoMouseButton, MouseButtonAction,
-    MouseButtonEvent, MouseMoveEvent, NamedKey as ServoNamedKey, NavigationRequest,
-    RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder, WheelDelta, WheelEvent,
-    WheelMode, WindowRenderingContext,
+    KeyboardEvent as ServoKeyboardEvent, Location as ServoLocation, Modifiers as ServoModifiers,
+    MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent, MouseMoveEvent,
+    NamedKey as ServoNamedKey, NavigationRequest, RenderingContext, Servo, ServoBuilder, WebView,
+    WebViewBuilder, WheelDelta, WheelEvent, WheelMode, WindowRenderingContext,
 };
 use tracing::warn;
 use url::Url;
@@ -43,8 +55,10 @@ use winit::application::ApplicationHandler;
 use winit::event::{
     ElementState, KeyEvent, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent,
 };
-use winit::keyboard::{Key as WinitKey, KeyCode, KeyLocation, NamedKey as WinitNamedKey, PhysicalKey};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
+use winit::keyboard::{
+    Key as WinitKey, KeyCode, KeyLocation, NamedKey as WinitNamedKey, PhysicalKey,
+};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::{ResizeDirection, Window};
 
@@ -76,6 +90,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    if std::env::var("WOLFMARK_SNAPSHOT_MODE").is_ok_and(|mode| mode == "source") {
+        session.mode = ui::Mode::Source;
+    }
     let mut app = App::Initial(Waker(loop_.create_proxy()), session, smoke_page);
     loop_.run_app(&mut app)?;
     Ok(())
@@ -94,12 +111,142 @@ struct State {
     scroll_origin: RefCell<DevicePoint>,
     reduced_motion: bool,
     frameless: bool,
-    close_requested: Cell<bool>,
+    close_requested: Rc<Cell<bool>>,
+    snapshot_requested: Cell<bool>,
+    pre_fullscreen_maximized: Cell<bool>,
+    clipboard: Rc<RefCell<Option<arboard::Clipboard>>>,
+    search: Rc<RefCell<search::Search>>,
+    synced_action: RefCell<Option<Action>>,
+    syncing: Cell<bool>,
+    waker: Waker,
+    dropped_file: RefCell<Option<PathBuf>>,
+    scripts: Rc<RefCell<Vec<(WebView, String)>>>,
+    gui_probe_started: Cell<bool>,
+    gui_probe_done: Cell<bool>,
     smoke_page: bool,
 }
 
 impl servo::WebViewDelegate for State {
-    fn notify_new_frame_ready(&self, _webview: WebView) {
+    fn notify_load_status_changed(&self, webview: WebView, status: embedder_traits::LoadStatus) {
+        if status != embedder_traits::LoadStatus::Complete || self.smoke_page {
+            return;
+        }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save") {
+            if !self.gui_probe_started.replace(true) {
+                webview.evaluate_javascript("{const e=document.getElementById('source-editor');if(e){e.value+='\\nServo GUI edit ✓\\n';console.debug('WOLFMARK_GUI_SAVE');}}", |_| {});
+            } else if !self.document.borrow().dirty()
+                && self.document.borrow().source.contains("Servo GUI edit ✓")
+            {
+                eprintln!("SERVO_GUI source edit synchronized and saved");
+                self.gui_probe_done.set(true);
+                self.window.request_redraw();
+            }
+        }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader")
+            && !self.gui_probe_started.replace(true)
+        {
+            self.scripts.borrow_mut().push((webview.clone(),"document.querySelector('.findbar').hidden=false;document.getElementById('find-query').value='Wolfmark';console.debug('WOLFMARK_GUI_FIND');".into()));
+            let _ = self.waker.0.send_event(Wake);
+        }
+        let revision = self.document.borrow().view_revision.get();
+        let (selection_start, selection_end, scroll_top) = self.document.borrow().editor_view();
+        // Only host-supplied bridge code executes. Markdown and CSS cannot supply scripts.
+        webview.evaluate_javascript(format!(r#"(() => {{
+            const editor=document.getElementById('source-editor');
+            if(!editor || editor.readOnly)return;
+            editor.setSelectionRange({selection_start},{selection_end});editor.scrollTop={scroll_top};
+            const changed=()=>{{
+                console.debug('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
+                document.getElementById('editor-status').textContent='Unsaved';
+            }};
+            editor.addEventListener('input',changed);
+            editor.addEventListener('keydown',event=>{{
+                if(event.key==='Tab'){{
+                    event.preventDefault();
+                    if(!event.shiftKey){{editor.setRangeText('    ',editor.selectionStart,editor.selectionEnd,'end');changed();}}
+                    else{{const start=editor.selectionStart;const line=editor.value.lastIndexOf('\n',start-1)+1;const count=Math.min(4,(editor.value.slice(line).match(/^ */)||[''])[0].length);editor.setRangeText('',line,line+count,'preserve');changed();}}
+                }}
+            }});
+        }})()"#), |_| {});
+    }
+    fn show_console_message(
+        &self,
+        _webview: WebView,
+        _level: embedder_traits::ConsoleLogLevel,
+        message: String,
+    ) {
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader") {
+            if message == "WOLFMARK_GUI_FIND" {
+                *self.synced_action.borrow_mut() = Some(Action::ZoomIn);
+                *self.pending.borrow_mut() = Some(Action::FindNext(false));
+                self.window.request_redraw();
+                return;
+            }
+            if let Some(json) = message.strip_prefix("WOLFMARK_GUI_READER:") {
+                if let Ok([selection, zoom, count]) = serde_json::from_str::<[String; 3]>(json) {
+                    if selection == "Wolfmark" && zoom == "110%" && count.starts_with("1 /") {
+                        eprintln!("SERVO_GUI reader search selection and retained-DOM zoom passed");
+                        self.gui_probe_done.set(true);
+                        self.window.request_redraw();
+                    } else {
+                        eprintln!("SERVO_GUI reader failed: {selection:?} {zoom:?} {count:?}");
+                    }
+                }
+                return;
+            }
+        }
+        if message == "WOLFMARK_GUI_SAVE"
+            && std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
+        {
+            *self.pending.borrow_mut() = Some(Action::Save(false));
+            self.window.request_redraw();
+            return;
+        }
+        let Some(payload) = message.strip_prefix("WOLFMARK_EDITOR:") else {
+            return;
+        };
+        let Ok((revision, value, start, end, top)) =
+            serde_json::from_str::<(u64, String, usize, usize, f64)>(payload)
+        else {
+            return;
+        };
+        let mut document = self.document.borrow_mut();
+        if revision != document.view_revision.get() || document.mode != ui::Mode::Source {
+            return;
+        }
+        document.set_editor_view((start, end, top));
+        if let Err(error) = document.apply_editor_view(&value) {
+            document.notice = Some(error);
+        }
+        self.window.set_title(&format!(
+            "{}{} — Wolfmark (Servo experiment)",
+            document.title(),
+            if document.dirty() { " *" } else { "" }
+        ));
+    }
+    fn notify_new_frame_ready(&self, webview: WebView) {
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST")
+            .is_ok_and(|value| matches!(value.as_str(), "reader" | "source-save"))
+            && !self.gui_probe_done.get()
+        {
+            self.window.request_redraw();
+            return;
+        }
+        if let Some(path) = std::env::var_os("WOLFMARK_SERVO_SNAPSHOT") {
+            if !self.snapshot_requested.replace(true) {
+                let done = self.close_requested.clone();
+                webview.take_screenshot(None, move |result| {
+                    match result {
+                        Ok(image) => match image.save(PathBuf::from(path)) {
+                            Ok(()) => eprintln!("SERVO_SNAPSHOT saved"),
+                            Err(error) => eprintln!("SERVO_SNAPSHOT save failed: {error}"),
+                        },
+                        Err(error) => eprintln!("SERVO_SNAPSHOT capture failed: {error:?}"),
+                    }
+                    done.set(true);
+                });
+            }
+        }
         self.window.request_redraw();
     }
 
@@ -109,6 +256,17 @@ impl servo::WebViewDelegate for State {
         // Intercept all other loads while network access remains forbidden.
         // ServoDelegate's non-webview/background requests need a separate audit.
         let url = load.request().url.clone();
+        if let Some(resources) = self
+            .document
+            .borrow()
+            .all_resources()
+            .into_iter()
+            .find(|resources| resources.contains(&url))
+        {
+            resources.load(load);
+            self.window.request_redraw();
+            return;
+        }
         if allow_local_probe_resource(&url) {
             return;
         }
@@ -136,12 +294,14 @@ impl servo::WebViewDelegate for State {
         } else if request.url.scheme() == "data" {
             request.allow();
         } else {
-            eprintln!("Blocked external document navigation (scheme: {})", request.url.scheme());
+            eprintln!(
+                "Blocked external document navigation (scheme: {})",
+                request.url.scheme()
+            );
             request.deny();
         }
     }
 }
-
 
 fn allow_local_probe_resource(url: &Url) -> bool {
     // This probe packages its HTML and small image into data: URLs. This is
@@ -177,6 +337,16 @@ mod offline_resource_tests {
     }
 }
 
+// Cover engine requests that are not associated with a document WebView too.
+struct OfflineEngine;
+impl servo::ServoDelegate for OfflineEngine {
+    fn load_web_resource(&self, load: servo::WebResourceLoad) {
+        let response = embedder_traits::WebResourceResponse::new(load.request().url.clone())
+            .status_code(http::StatusCode::FORBIDDEN)
+            .status_message(b"Offline-only application".to_vec());
+        load.intercept(response).finish();
+    }
+}
 enum App {
     Initial(Waker, ui::Session, bool),
     Running(Rc<State>),
@@ -184,32 +354,68 @@ enum App {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
-    Open, Refresh, Reader, Source, ZoomIn, ZoomOut,
-    SelectDocument(usize), SelectBundled, CloseDocument(usize), CloseActive,
-    HistoryBack, HistoryForward, AdjacentDocument(bool),
-    WindowMinimize, WindowMaximize, WindowClose,
+    Open,
+    OpenDropped,
+    Refresh,
+    Reader,
+    Source,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+    Fullscreen,
+    Save(bool),
+    Undo(bool),
+    CopyCode(usize),
+    FindOpen,
+    FindClose,
+    FindNext(bool),
+    SelectDocument(usize),
+    SelectBundled,
+    CloseDocument(usize),
+    CloseActive,
+    HistoryBack,
+    HistoryForward,
+    AdjacentDocument(bool),
+    WindowMinimize,
+    WindowMaximize,
+    WindowClose,
 }
 
 impl Action {
     fn from_url(url: &Url) -> Option<Self> {
-        if url.scheme() != "wolfmark" { return None; }
+        if url.scheme() != "wolfmark" {
+            return None;
+        }
         match (url.host_str()?, url.path()) {
             ("open", "/") => Some(Self::Open),
+            ("save", "/current") => Some(Self::Save(false)),
+            ("save", "/as") => Some(Self::Save(true)),
+            ("find", "/open") => Some(Self::FindOpen),
+            ("find", "/close") => Some(Self::FindClose),
+            ("find", "/next") => Some(Self::FindNext(false)),
+            ("find", "/previous") => Some(Self::FindNext(true)),
+            ("copy", path) => path
+                .strip_prefix('/')
+                .and_then(|id| id.parse().ok())
+                .map(Self::CopyCode),
             ("refresh", "/") => Some(Self::Refresh),
             ("mode", "/reader") => Some(Self::Reader),
             ("mode", "/source") => Some(Self::Source),
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
+            ("zoom", "/reset") => Some(Self::ZoomReset),
             ("document", "/bundled") => Some(Self::SelectBundled),
             ("history", "/back") => Some(Self::HistoryBack),
             ("history", "/forward") => Some(Self::HistoryForward),
             ("window", "/minimize") => Some(Self::WindowMinimize),
             ("window", "/maximize") => Some(Self::WindowMaximize),
             ("window", "/close") => Some(Self::WindowClose),
-            ("close", path) => path.strip_prefix('/')
+            ("close", path) => path
+                .strip_prefix('/')
                 .and_then(|index| index.parse::<usize>().ok())
                 .map(Self::CloseDocument),
-            ("document", path) => path.strip_prefix('/')
+            ("document", path) => path
+                .strip_prefix('/')
                 .and_then(|index| index.parse::<usize>().ok())
                 .map(Self::SelectDocument),
             _ => None,
@@ -218,11 +424,172 @@ impl Action {
 }
 
 impl State {
-    fn apply_action(&self, action: Action) {
-        if self.smoke_page { return; }
+    fn apply_action(self: &Rc<Self>, action: Action) {
+        if self.document.borrow().mode != ui::Mode::Source || self.document.borrow().path.is_none()
+        {
+            self.apply_synced_action(action);
+            return;
+        }
+        if self.syncing.replace(true) {
+            return;
+        }
+        let state = Rc::downgrade(self);
+        if let Some(view) = self.view.borrow().last() {
+            view.evaluate_javascript("(() => {const editor=document.getElementById('source-editor');if(!editor)return null;editor.readOnly=true;return JSON.stringify([editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]);})()",move |result| {
+                let Some(state)=state.upgrade() else {return;};
+                let result=match result {
+                                        Ok(embedder_traits::JSValue::String(json)) => {
+                        match serde_json::from_str::<(String,usize,usize,f64)>(&json) {
+                            Ok((value,start,end,top))=>{let mut document=state.document.borrow_mut();document.set_editor_view((start,end,top));document.apply_editor_view(&value)},
+                            Err(error)=>Err(error.to_string()),
+                        }
+                    },
+                    _=>Err("Could not synchronize source; action cancelled to preserve edits".into()),
+                };
+                state.syncing.set(false);
+                if let Err(error)=result {
+                    state.document.borrow_mut().notice=Some(error.clone());
+                    let error=serde_json::to_string(&error).unwrap();
+                    if let Some(view)=state.view.borrow().last() {
+                        state.scripts.borrow_mut().push((view.clone(),format!("document.getElementById('source-editor').readOnly=false;document.getElementById('editor-status').textContent={error};")));
+                    }
+                }
+                else {*state.synced_action.borrow_mut()=Some(action);}
+                let _=state.waker.0.send_event(Wake);
+            });
+        }
+    }
+    fn apply_synced_action(&self, action: Action) {
+        if let Some(view) = self.view.borrow().last() {
+            if self.document.borrow().path.is_some() {
+                view.evaluate_javascript("{const editor=document.getElementById('source-editor');if(editor)editor.readOnly=false;}", |_| {});
+            }
+        }
+        if self.smoke_page {
+            return;
+        }
         // Window commands do not reload the document and cannot be delegated
         // to untrusted HTML or JavaScript.
         match action {
+            Action::CopyCode(id) => {
+                if let Some(view) = self.view.borrow().last() {
+                    let clipboard = self.clipboard.clone();
+                    view.evaluate_javascript(
+                        format!("document.getElementById('wm-code-{id}')?.textContent"),
+                        move |result| {
+                            if let Ok(embedder_traits::JSValue::String(text)) = result {
+                                let mut clipboard = clipboard.borrow_mut();
+                                if clipboard.is_none() {
+                                    *clipboard = arboard::Clipboard::new().ok();
+                                }
+                                if let Some(clipboard) = clipboard.as_mut() {
+                                    if let Err(error) = clipboard.set_text(text) {
+                                        eprintln!("Clipboard copy failed: {error}");
+                                    }
+                                }
+                            }
+                        },
+                    );
+                }
+                return;
+            }
+            Action::FindOpen | Action::FindClose => {
+                if let Some(view) = self.view.borrow().last() {
+                    view.evaluate_javascript(if action == Action::FindOpen {
+                        "document.querySelector('.findbar').hidden=false;document.getElementById('find-query').focus();document.getElementById('find-query').select();"
+                    } else { "document.querySelector('.findbar').hidden=true;" }, |_| {});
+                }
+                return;
+            }
+            Action::FindNext(backwards) => {
+                if let Some(view) = self.view.borrow().last() {
+                    let search = self.search.clone();
+                    let gui_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
+                        .is_ok_and(|value| value == "reader");
+                    let target = view.clone();
+                    let scripts = self.scripts.clone();
+                    let waker = self.waker.clone();
+                    let defer = move |script: String| {
+                        scripts.borrow_mut().push((target.clone(), script));
+                        let _ = waker.0.send_event(Wake);
+                    };
+                    view.evaluate_javascript(r#"JSON.stringify([document.getElementById('source-editor')?.value ?? document.querySelector('.document-body').textContent,document.getElementById('find-query').value])"#, move |result| {
+                        let Ok(embedder_traits::JSValue::String(json)) = result else { return; };
+                        let Ok([text, query]) = serde_json::from_str::<[String;2]>(&json) else { return; };
+                        let found = search.borrow_mut().next(&text, &query, backwards);
+                        let Some((start,end,current,count)) = found else {
+                            defer("document.getElementById('find-count').textContent='No matches'".into());
+                            return;
+                        };
+                        defer(format!(r#"(() => {{
+                            const editor=document.getElementById('source-editor');
+                            if(editor) {{
+                                editor.focus();editor.setSelectionRange({start},{end});
+                                const line=editor.value.slice(0,{start}).split('\n').length-1;
+                                editor.scrollTop=Math.max(0,line*parseFloat(getComputedStyle(editor).lineHeight)-editor.clientHeight/2);
+                                document.getElementById('find-count').textContent='{current} / {count}';return;
+                            }}
+                            const root=document.querySelector('.document-body');
+                            const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+                            const range=document.createRange();let offset=0,node,started=false;
+                            while(node=walker.nextNode()) {{
+                                const limit=offset+node.length;
+                                if(!started && {start}<=limit) {{range.setStart(node,{start}-offset);started=true;}}
+                                if(started && {end}<=limit) {{range.setEnd(node,{end}-offset);break;}}
+                                offset=limit;
+                            }}
+                            const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+                            range.startContainer.parentElement.scrollIntoView({{block:'center'}});
+                            document.getElementById('find-count').textContent='{current} / {count}';
+                        }})()"#));
+                    });
+                }
+                return;
+            }
+            Action::Fullscreen => {
+                if self.window.fullscreen().is_some() {
+                    self.window.set_fullscreen(None);
+                    self.window
+                        .set_maximized(self.pre_fullscreen_maximized.get());
+                } else {
+                    self.pre_fullscreen_maximized
+                        .set(self.window.is_maximized());
+                    self.window
+                        .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                }
+                return;
+            }
+            Action::ZoomIn | Action::ZoomOut | Action::ZoomReset => {
+                let zoom = {
+                    let mut document = self.document.borrow_mut();
+                    match action {
+                        Action::ZoomIn => document.change_zoom(10),
+                        Action::ZoomOut => document.change_zoom(-10),
+                        _ => document.zoom = 100,
+                    }
+                    document.zoom
+                };
+                if let Some(view) = self.view.borrow().last() {
+                    // Host-owned numeric values only; never interpolate document source.
+                    // Updating the retained DOM avoids reparse, image reload and selection loss.
+                    view.evaluate_javascript(format!(r#"(() => {{
+                        const viewport = document.querySelector('.document-viewport');
+                        const ratio = {zoom} / Number(document.querySelector('.zoom-value').textContent.replace('%',''));
+                        const oldTop = viewport.scrollTop;
+                        document.querySelector('.document-body').style.setProperty('--doc-size', '{size}px');
+                        const inner = document.querySelector('.document-inner');
+                        inner.style.setProperty('--qt-padding', '{padding}px');
+                        inner.style.setProperty('--qt-top', '{top}px');
+                        inner.style.setProperty('--qt-bottom', '{bottom}px');
+                        document.querySelector('.zoom-value').textContent = '{zoom}%';
+                        viewport.scrollTop = oldTop * ratio;
+                    }})()"#, size = f64::from(zoom) * 0.17, padding = f64::from(zoom) * 0.48,
+                        top = f64::from(zoom) * 0.22, bottom = f64::from(zoom) * 0.34),
+                        |result| { if let Err(error) = result { eprintln!("Zoom update failed: {error:?}"); } });
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
             Action::WindowMinimize if self.frameless => {
                 self.window.set_minimized(true);
                 return;
@@ -231,16 +598,24 @@ impl State {
                 self.window.set_maximized(!self.window.is_maximized());
                 return;
             }
-            Action::WindowClose if self.frameless => {
+            Action::WindowClose => {
+                if !self.document.borrow_mut().confirm_exit() {
+                    return;
+                }
                 self.close_requested.set(true);
                 self.window.request_redraw();
                 return;
             }
-            Action::WindowMinimize | Action::WindowMaximize | Action::WindowClose => return,
+            Action::WindowMinimize | Action::WindowMaximize => return,
             _ => {}
         }
         self.smooth_wheel.borrow_mut().cancel();
         match action {
+            Action::OpenDropped => {
+                if let Some(path) = self.dropped_file.borrow_mut().take() {
+                    self.document.borrow_mut().open(&path);
+                }
+            }
             Action::Open => {
                 // Local native OS dialog, not a browser/web file chooser.
                 if let Some(path) = rfd::FileDialog::new()
@@ -252,36 +627,66 @@ impl State {
                     return;
                 }
             }
+            Action::Save(save_as) => {
+                self.document.borrow_mut().save(save_as);
+            }
+            Action::Undo(redo) => self.document.borrow_mut().undo(redo),
             Action::Refresh => self.document.borrow_mut().reload(),
             Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
             Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
-            Action::ZoomIn => self.document.borrow_mut().change_zoom(10),
-            Action::ZoomOut => self.document.borrow_mut().change_zoom(-10),
+
             Action::SelectDocument(index) => self.document.borrow_mut().select(index),
             Action::SelectBundled => self.document.borrow_mut().select_bundled(),
             Action::CloseDocument(index) => self.document.borrow_mut().close(index),
             Action::CloseActive => self.document.borrow_mut().close_active(),
             Action::HistoryBack => self.document.borrow_mut().back(),
             Action::HistoryForward => self.document.borrow_mut().forward(),
-            Action::AdjacentDocument(backward) => self.document.borrow_mut().select_adjacent(backward),
-            Action::WindowMinimize | Action::WindowMaximize | Action::WindowClose => unreachable!(),
+            Action::AdjacentDocument(backward) => {
+                self.document.borrow_mut().select_adjacent(backward)
+            }
+            Action::WindowMinimize
+            | Action::WindowMaximize
+            | Action::WindowClose
+            | Action::ZoomIn
+            | Action::ZoomOut
+            | Action::ZoomReset
+            | Action::Fullscreen
+            | Action::CopyCode(_)
+            | Action::FindOpen
+            | Action::FindClose
+            | Action::FindNext(_) => unreachable!(),
         }
         let (url, title) = {
             let session = self.document.borrow();
             (session.page_url(), session.title())
         };
-        self.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
+        self.window
+            .set_title(&format!("{title} — Wolfmark (Servo experiment)"));
         if let Some(view) = self.view.borrow().last() {
             view.load(url);
         }
         self.servo.spin_event_loop();
     }
 
-    fn take_pending_action(&self) {
+    fn take_pending_action(self: &Rc<Self>) {
+        let scripts = std::mem::take(&mut *self.scripts.borrow_mut());
+        for (view, script) in scripts {
+            view.evaluate_javascript(script, |result| {
+                if let Err(error) = result {
+                    eprintln!("DOM update failed: {error:?}");
+                }
+            });
+        }
+        let synced = self.synced_action.borrow_mut().take();
+        if let Some(action) = synced {
+            self.apply_synced_action(action);
+        }
         // Avoid invoking Servo WebView operations from inside the delegate's
         // navigation callback (reentrant callbacks can borrow the webview).
         let action = self.pending.borrow_mut().take();
-        if let Some(action) = action { self.apply_action(action); }
+        if let Some(action) = action {
+            self.apply_action(action);
+        }
     }
 }
 
@@ -294,15 +699,44 @@ mod host_actions_tests {
     fn only_known_ui_commands_dispatch() {
         let good = Url::parse("wolfmark://mode/source").unwrap();
         assert_eq!(Action::from_url(&good), Some(Action::Source));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://document/3").unwrap()), Some(Action::SelectDocument(3)));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://document/bundled").unwrap()), Some(Action::SelectBundled));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://close/2").unwrap()), Some(Action::CloseDocument(2)));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://history/back").unwrap()), Some(Action::HistoryBack));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://history/forward").unwrap()), Some(Action::HistoryForward));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/minimize").unwrap()), Some(Action::WindowMinimize));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/maximize").unwrap()), Some(Action::WindowMaximize));
-        assert_eq!(Action::from_url(&Url::parse("wolfmark://window/close").unwrap()), Some(Action::WindowClose));
-        for bad in ["https://example.com/", "wolfmark://evil/", "wolfmark://mode/remove", "file:///C:/windows"] {
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://document/3").unwrap()),
+            Some(Action::SelectDocument(3))
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://document/bundled").unwrap()),
+            Some(Action::SelectBundled)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://close/2").unwrap()),
+            Some(Action::CloseDocument(2))
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://history/back").unwrap()),
+            Some(Action::HistoryBack)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://history/forward").unwrap()),
+            Some(Action::HistoryForward)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://window/minimize").unwrap()),
+            Some(Action::WindowMinimize)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://window/maximize").unwrap()),
+            Some(Action::WindowMaximize)
+        );
+        assert_eq!(
+            Action::from_url(&Url::parse("wolfmark://window/close").unwrap()),
+            Some(Action::WindowClose)
+        );
+        for bad in [
+            "https://example.com/",
+            "wolfmark://evil/",
+            "wolfmark://mode/remove",
+            "file:///C:/windows",
+        ] {
             assert_eq!(Action::from_url(&Url::parse(bad).unwrap()), None);
         }
     }
@@ -333,8 +767,7 @@ fn resize_at(x: f64, y: f64, width: f64, height: f64) -> Option<ResizeDirection>
 fn title_drag_area(x: f64, y: f64, width: f64) -> bool {
     // Avoid brand/breadcrumb on the left and settings/caption controls on
     // the right; only the otherwise-empty header region starts system move.
-    y >= 8.0 && y < 54.0 && x > width.min(330.0) * 0.85
-        && x < width - 425.0
+    y >= 8.0 && y < 54.0 && x > width.min(330.0) * 0.85 && x < width - 425.0
 }
 
 #[cfg(test)]
@@ -342,8 +775,14 @@ mod window_hit_tests {
     use super::*;
     #[test]
     fn resize_edges_are_distinct_from_caption_drag() {
-        assert_eq!(resize_at(1.0, 1.0, 1100.0, 760.0), Some(ResizeDirection::NorthWest));
-        assert_eq!(resize_at(1098.0, 759.0, 1100.0, 760.0), Some(ResizeDirection::SouthEast));
+        assert_eq!(
+            resize_at(1.0, 1.0, 1100.0, 760.0),
+            Some(ResizeDirection::NorthWest)
+        );
+        assert_eq!(
+            resize_at(1098.0, 759.0, 1100.0, 760.0),
+            Some(ResizeDirection::SouthEast)
+        );
         assert!(resize_at(550.0, 250.0, 1100.0, 760.0).is_none());
         assert!(title_drag_area(450.0, 25.0, 1100.0));
         assert!(!title_drag_area(1070.0, 25.0, 1100.0));
@@ -358,7 +797,17 @@ impl ApplicationHandler<Wake> for App {
                 event_loop.exit();
                 return;
             }
-            let due = state.smooth_wheel.borrow().next_tick();
+            let image_pending = state
+                .document
+                .borrow()
+                .all_resources()
+                .iter()
+                .fold(false, |pending, resources| resources.poll() || pending);
+            let mut due = state.smooth_wheel.borrow().next_tick();
+            if image_pending {
+                let image_tick = Instant::now() + std::time::Duration::from_millis(16);
+                due = Some(due.map_or(image_tick, |due| due.min(image_tick)));
+            }
             match due {
                 Some(due) if due <= Instant::now() => {
                     state.window.request_redraw();
@@ -384,7 +833,24 @@ impl ApplicationHandler<Wake> for App {
                     Window::default_attributes()
                         .with_title(caption)
                         .with_decorations(!frameless)
-                        .with_inner_size(winit::dpi::LogicalSize::new(1100.0, 760.0)),
+                        .with_inner_size(
+                            if std::env::var_os("WOLFMARK_SERVO_SNAPSHOT").is_some() {
+                                winit::dpi::LogicalSize::new(
+                                    std::env::var("WOLFMARK_SNAPSHOT_WIDTH")
+                                        .ok()
+                                        .and_then(|s| s.parse::<f64>().ok())
+                                        .filter(|v| v.is_finite() && *v >= 400.0 && *v <= 4000.0)
+                                        .unwrap_or(1648.0),
+                                    std::env::var("WOLFMARK_SNAPSHOT_HEIGHT")
+                                        .ok()
+                                        .and_then(|s| s.parse::<f64>().ok())
+                                        .filter(|v| v.is_finite() && *v >= 300.0 && *v <= 2500.0)
+                                        .unwrap_or(928.0),
+                                )
+                            } else {
+                                winit::dpi::LogicalSize::new(1100.0, 760.0)
+                            },
+                        ),
                 )
                 .expect("test window");
             let handle = window.window_handle().expect("window handle");
@@ -398,14 +864,15 @@ impl ApplicationHandler<Wake> for App {
                 WindowRenderingContext::new(display, handle, window.inner_size())
                     .expect("Servo window rendering context"),
             );
-            context.make_current().expect(
-                "Servo created the OpenGL context but could not make it current"
-            );
+            context
+                .make_current()
+                .expect("Servo created the OpenGL context but could not make it current");
             eprintln!("Servo OpenGL window context is current.");
 
             let servo = ServoBuilder::default()
                 .event_loop_waker(Box::new(waker.clone()))
                 .build();
+            servo.set_delegate(Rc::new(OfflineEngine));
             servo.setup_logging();
 
             let state = Rc::new(State {
@@ -421,11 +888,26 @@ impl ApplicationHandler<Wake> for App {
                 scroll_origin: RefCell::new(DevicePoint::new(0.0, 0.0)),
                 reduced_motion: std::env::var("WOLFMARK_REDUCED_MOTION").is_ok_and(|v| v == "1"),
                 frameless,
-                close_requested: Cell::new(false),
+                close_requested: Rc::new(Cell::new(false)),
+                snapshot_requested: Cell::new(false),
+                pre_fullscreen_maximized: Cell::new(false),
+                clipboard: Rc::new(RefCell::new(None)),
+                search: Rc::new(RefCell::new(search::Search::default())),
+                synced_action: RefCell::new(None),
+                syncing: Cell::new(false),
+                waker: waker.clone(),
+                dropped_file: RefCell::new(None),
+                scripts: Rc::new(RefCell::new(Vec::new())),
+                gui_probe_started: Cell::new(false),
+                gui_probe_done: Cell::new(false),
                 smoke_page: *smoke_page,
             });
 
-            let page_url = if state.smoke_page { local_probe_url() } else { state.document.borrow().page_url() };
+            let page_url = if state.smoke_page {
+                local_probe_url()
+            } else {
+                state.document.borrow().page_url()
+            };
             let view = WebViewBuilder::new(&state.servo, state.context.clone())
                 .url(page_url)
                 .hidpi_scale_factor(Scale::new(state.window.scale_factor() as f32))
@@ -454,21 +936,17 @@ impl ApplicationHandler<Wake> for App {
         }
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                if let App::Running(state) = self {
+                    state.apply_action(Action::WindowClose);
+                } else {
+                    event_loop.exit();
+                }
+            }
             WindowEvent::DroppedFile(path) => {
                 if let App::Running(state) = self {
-                    if !state.smoke_page {
-                        state.document.borrow_mut().open(&path);
-                        let (url, title) = {
-                            let session = state.document.borrow();
-                            (session.page_url(), session.title())
-                        };
-                        state.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
-                        if let Some(view) = state.view.borrow().last() {
-                            view.load(url);
-                        }
-                        state.servo.spin_event_loop();
-                    }
+                    *state.dropped_file.borrow_mut() = Some(path);
+                    state.apply_action(Action::OpenDropped);
                 }
             }
             WindowEvent::RedrawRequested => {
@@ -479,7 +957,12 @@ impl ApplicationHandler<Wake> for App {
                             && let Some(view) = state.view.borrow().last()
                         {
                             view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                                WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
+                                WheelDelta {
+                                    x,
+                                    y,
+                                    z: 0.0,
+                                    mode: WheelMode::DeltaPixel,
+                                },
                                 (*state.scroll_origin.borrow()).into(),
                             )));
                             state.servo.spin_event_loop();
@@ -538,14 +1021,18 @@ impl ApplicationHandler<Wake> for App {
                     let point = DevicePoint::new(position.x as f32, position.y as f32);
                     *state.cursor.borrow_mut() = point;
                     if let Some(view) = state.view.borrow().last() {
-                        view.notify_input_event(InputEvent::MouseMove(
-                            MouseMoveEvent::new(point.into()),
-                        ));
+                        view.notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
+                            point.into(),
+                        )));
                         state.servo.spin_event_loop();
                     }
                 }
             }
-            WindowEvent::MouseInput { state: pressed, button, .. } => {
+            WindowEvent::MouseInput {
+                state: pressed,
+                button,
+                ..
+            } => {
                 if let App::Running(state) = self {
                     if state.frameless
                         && pressed == ElementState::Pressed
@@ -583,7 +1070,9 @@ impl ApplicationHandler<Wake> for App {
                     };
                     if let Some(view) = state.view.borrow().last() {
                         view.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
-                            action, button, (*state.cursor.borrow()).into(),
+                            action,
+                            button,
+                            (*state.cursor.borrow()).into(),
                         )));
                         state.servo.spin_event_loop();
                     }
@@ -599,19 +1088,28 @@ impl ApplicationHandler<Wake> for App {
                             *state.scroll_origin.borrow_mut() = *state.cursor.borrow();
                             // Match Qt's continuous wheel trajectory. Pixel/trackpad
                             // events stay direct and never enter the integrator.
-                            state.smooth_wheel.borrow_mut().add_lines(x, y, Instant::now());
+                            state
+                                .smooth_wheel
+                                .borrow_mut()
+                                .add_lines(x, y, Instant::now());
                             state.window.request_redraw();
                         }
                         delta => {
                             state.smooth_wheel.borrow_mut().cancel();
                             let (x, y) = match delta {
-                                MouseScrollDelta::LineDelta(x, y) =>
-                                    (f64::from(x) * 48.0, f64::from(y) * 48.0),
+                                MouseScrollDelta::LineDelta(x, y) => {
+                                    (f64::from(x) * 48.0, f64::from(y) * 48.0)
+                                }
                                 MouseScrollDelta::PixelDelta(pixel) => (pixel.x, pixel.y),
                             };
                             if let Some(view) = state.view.borrow().last() {
                                 view.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                                    WheelDelta { x, y, z: 0.0, mode: WheelMode::DeltaPixel },
+                                    WheelDelta {
+                                        x,
+                                        y,
+                                        z: 0.0,
+                                        mode: WheelMode::DeltaPixel,
+                                    },
                                     (*state.cursor.borrow()).into(),
                                 )));
                                 state.servo.spin_event_loop();
@@ -635,6 +1133,16 @@ fn application_shortcut(event: &KeyEvent, modifiers: ServoModifiers) -> Option<A
     let alt = modifiers.contains(ServoModifiers::ALT);
     let shift = modifiers.contains(ServoModifiers::SHIFT);
     match event.physical_key {
+        PhysicalKey::Code(KeyCode::KeyS) if ctrl && !alt => Some(Action::Save(shift)),
+        PhysicalKey::Code(KeyCode::KeyZ) if ctrl && !alt => Some(Action::Undo(shift)),
+        PhysicalKey::Code(KeyCode::KeyY) if ctrl && !alt => Some(Action::Undo(true)),
+        PhysicalKey::Code(KeyCode::KeyF) if ctrl && !alt => Some(Action::FindOpen),
+        PhysicalKey::Code(KeyCode::F3) if !ctrl && !alt => Some(Action::FindNext(shift)),
+        PhysicalKey::Code(KeyCode::Escape) if !ctrl && !alt => Some(Action::FindClose),
+        PhysicalKey::Code(KeyCode::F11) if !ctrl && !alt => Some(Action::Fullscreen),
+        PhysicalKey::Code(KeyCode::Equal) if ctrl && !alt => Some(Action::ZoomIn),
+        PhysicalKey::Code(KeyCode::Minus) if ctrl && !alt => Some(Action::ZoomOut),
+        PhysicalKey::Code(KeyCode::Digit0) if ctrl && !alt => Some(Action::ZoomReset),
         PhysicalKey::Code(KeyCode::KeyO) if ctrl && !alt => Some(Action::Open),
         PhysicalKey::Code(KeyCode::KeyW) if ctrl && !alt => Some(Action::CloseActive),
         PhysicalKey::Code(KeyCode::KeyR) if ctrl && !alt => Some(Action::Refresh),
@@ -653,22 +1161,26 @@ mod application_shortcut_tests {
         // Full winit event construction is platform-version-specific; parsing
         // host actions above is checked separately. This verifies the navigation
         // event transport does not permit external URLs or arbitrary commands.
-        for source in ["wolfmark://close/../../../windows", "wolfmark://history/delete", "wolfmark://close/99999999999999999999999999"] {
+        for source in [
+            "wolfmark://close/../../../windows",
+            "wolfmark://history/delete",
+            "wolfmark://close/99999999999999999999999999",
+        ] {
             assert!(Action::from_url(&Url::parse(source).unwrap()).is_none());
         }
     }
 }
 
 // This is intentionally limited to the keys needed to smoke-test selection,
- // scrolling, ordinary typing and shortcuts. IME/dead keys, clipboard and
- // comprehensive keyboard mappings still require separate acceptance tests.
+// scrolling, ordinary typing and shortcuts. IME/dead keys, clipboard and
+// comprehensive keyboard mappings still require separate acceptance tests.
 fn keyboard_input(event: &KeyEvent, modifiers: ServoModifiers) -> Option<InputEvent> {
     let key = match &event.logical_key {
         WinitKey::Character(text) => ServoKey::Character(text.to_string()),
         WinitKey::Named(named) => {
             let value = match named {
-                WinitNamedKey::Space => return Some(InputEvent::Keyboard(
-                    ServoKeyboardEvent::new_without_event(
+                WinitNamedKey::Space => {
+                    return Some(InputEvent::Keyboard(ServoKeyboardEvent::new_without_event(
                         key_state(event.state),
                         ServoKey::Character(" ".into()),
                         ServoCode::Space,
@@ -676,8 +1188,8 @@ fn keyboard_input(event: &KeyEvent, modifiers: ServoModifiers) -> Option<InputEv
                         modifiers,
                         event.repeat,
                         false,
-                    ),
-                )),
+                    )));
+                }
                 WinitNamedKey::Tab => ServoNamedKey::Tab,
                 WinitNamedKey::Enter => ServoNamedKey::Enter,
                 WinitNamedKey::Escape => ServoNamedKey::Escape,
@@ -764,7 +1276,8 @@ impl embedder_traits::EventLoopWaker for Waker {
 fn local_probe_url() -> Url {
     // Inline source: packaged into the Rust executable, not loaded from disk
     // or localhost. It intentionally does NOT imitate the locked Wolfmark UI.
-    let mut html = String::from(r###"<!doctype html>
+    let mut html = String::from(
+        r###"<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
@@ -812,7 +1325,8 @@ and PageUp/PageDown. Clipboard and IME behavior must be validated separately.</p
     println!("Servo is an optional experiment");
 }</code></pre>
 <h2>Large scrolling sample</h2>
-"###);
+"###,
+    );
     for index in 1..=160 {
         html.push_str(&format!(
             "<p>Paragraph {index}: a representative long-document scrolling sample with text, \

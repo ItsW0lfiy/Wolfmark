@@ -147,7 +147,7 @@ impl Drop for ImagePipeline {
     }
 }
 
-fn decode(request: &ImageRequest) -> ImageResult {
+pub fn decode(request: &ImageRequest) -> ImageResult {
     if Path::new(&request.path)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))

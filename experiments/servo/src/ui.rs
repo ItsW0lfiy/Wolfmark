@@ -3,21 +3,22 @@
 //! highlighting are shared with Wolfmark's existing Rust modules.
 //! This is a read-only prototype, not the production editor.
 
+use std::cell::RefCell;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 use base64::Engine;
 use url::Url;
 
-use crate::{highlight, image_paths, model, parser};
+use crate::{highlight, model, parser};
 
 const CSS: &str = include_str!("ui.css");
 const LOGO: &[u8] = include_bytes!("../../../assets/icons/wolfmark-128x128.png");
 const FOOTER: &str = include_str!("footer_mountains.svg");
 const BUNDLED_SOURCE: &str = include_str!("../../../docs/architecture/overview.md");
 const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
-const MAX_IMAGE_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -32,31 +33,58 @@ pub struct Session {
     pub zoom: u16,
     pub notice: Option<String>,
     pub frameless_test: bool,
+    pub view_revision: std::cell::Cell<u64>,
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
     active_document: Option<usize>,
     history: Vec<Option<usize>>,
     history_position: usize,
+    bundled_view: (Mode, u16),
+    reader_cache: Rc<RefCell<Option<CachedReader>>>,
+    bundled_cache: Rc<RefCell<Option<CachedReader>>>,
+    pub resources: Rc<crate::image_resources::Resources>,
+    bundled_resources: Rc<crate::image_resources::Resources>,
+}
+
+#[derive(Default)]
+struct CachedReader {
+    source: String,
+    body: String,
+    toc: Vec<(u8, String, String)>,
 }
 
 struct SavedDocument {
+    resources: Rc<crate::image_resources::Resources>,
+    editor: crate::editor::Buffer,
+    editor_view: (usize, usize, f64),
+    reader_cache: Rc<RefCell<Option<CachedReader>>>,
     path: PathBuf,
     source: String,
+    mode: Mode,
+    zoom: u16,
 }
 
 impl Default for Session {
     fn default() -> Self {
+        let reader_cache = Rc::new(RefCell::new(None));
+        let resources = Rc::new(crate::image_resources::Resources::default());
         Self {
             path: None,
             source: BUNDLED_SOURCE.to_owned(),
             mode: Mode::Reader,
             zoom: 100,
             frameless_test: false,
-            notice: Some("Bundled architecture document — drag and drop a .md/.txt file or use Open document to test your own files.".into()),
+            view_revision: std::cell::Cell::new(0),
+            notice: None,
             open_documents: Vec::new(),
             active_document: None,
             history: vec![None],
             history_position: 0,
+            bundled_view: (Mode::Reader, 100),
+            bundled_resources: resources.clone(),
+            resources,
+            bundled_cache: reader_cache.clone(),
+            reader_cache,
         }
     }
 }
@@ -64,7 +92,9 @@ impl Default for Session {
 impl Session {
     pub fn open(&mut self, path: &Path) {
         if !supported_document(path) {
-            self.notice = Some("Only .md, .markdown and .txt documents are supported in this prototype.".into());
+            self.notice = Some(
+                "Only .md, .markdown and .txt documents are supported in this prototype.".into(),
+            );
             return;
         }
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
@@ -85,7 +115,23 @@ impl Session {
         }
         match std::fs::read_to_string(&path) {
             Ok(source) => {
-                self.open_documents.push(SavedDocument { path, source });
+                let editor = match crate::editor::Buffer::new(source.clone()) {
+                    Ok(editor) => editor,
+                    Err(error) => {
+                        self.notice = Some(error);
+                        return;
+                    }
+                };
+                self.open_documents.push(SavedDocument {
+                    editor,
+                    editor_view: (0, 0, 0.0),
+                    resources: Rc::new(crate::image_resources::Resources::default()),
+                    reader_cache: Rc::new(RefCell::new(None)),
+                    path,
+                    source,
+                    mode: Mode::Reader,
+                    zoom: 100,
+                });
                 self.select(self.open_documents.len() - 1);
             }
             Err(error) => self.notice = Some(format!("Unable to open document: {error}")),
@@ -103,18 +149,29 @@ impl Session {
     // Every document navigation is Rust-owned. The view's data: URL is only
     // a representation of this state, never the source of truth.
     fn activate(&mut self, target: Option<usize>, record: bool) -> bool {
+        if target.is_some_and(|index| index >= self.open_documents.len()) {
+            return false;
+        }
+        self.retain_view();
         if let Some(index) = target {
             let Some(document) = self.open_documents.get(index) else {
                 return false;
             };
             self.path = Some(document.path.clone());
-            self.source = document.source.clone();
+            self.source = document.editor.source.clone();
+            self.resources = document.resources.clone();
+            self.reader_cache = document.reader_cache.clone();
+            self.mode = document.mode;
+            self.zoom = document.zoom;
         } else {
             self.path = None;
+            self.resources = self.bundled_resources.clone();
+            self.reader_cache = self.bundled_cache.clone();
             self.source = BUNDLED_SOURCE.to_owned();
+            (self.mode, self.zoom) = self.bundled_view;
         }
         self.active_document = target;
-        self.mode = Mode::Reader;
+
         self.notice = None;
 
         if record && self.history.get(self.history_position).copied() != Some(target) {
@@ -125,8 +182,23 @@ impl Session {
         true
     }
 
-    pub fn can_go_back(&self) -> bool { self.history_position > 0 }
-    pub fn can_go_forward(&self) -> bool { self.history_position + 1 < self.history.len() }
+    fn retain_view(&mut self) {
+        if let Some(index) = self.active_document {
+            if let Some(document) = self.open_documents.get_mut(index) {
+                document.mode = self.mode;
+                document.zoom = self.zoom;
+            }
+        } else {
+            self.bundled_view = (self.mode, self.zoom);
+        }
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        self.history_position > 0
+    }
+    pub fn can_go_forward(&self) -> bool {
+        self.history_position + 1 < self.history.len()
+    }
 
     pub fn back(&mut self) {
         if self.can_go_back() {
@@ -145,7 +217,10 @@ impl Session {
     }
 
     pub fn close(&mut self, index: usize) {
-        if index >= self.open_documents.len() { return; }
+        if index >= self.open_documents.len() || !self.confirm_discard(index) {
+            return;
+        }
+        self.retain_view();
         let closing_active = self.active_document == Some(index);
         self.open_documents.remove(index);
 
@@ -154,13 +229,17 @@ impl Session {
             match entry {
                 Some(value) if *value == index => *entry = None,
                 Some(value) if *value > index => *value -= 1,
-                _ => {},
+                _ => {}
             }
         }
         if let Some(active) = self.active_document.as_mut() {
-            if *active > index { *active -= 1; }
+            if *active > index {
+                *active -= 1;
+            }
         }
         if closing_active {
+            self.active_document = None;
+            (self.mode, self.zoom) = self.bundled_view;
             let next = if self.open_documents.is_empty() {
                 None
             } else {
@@ -171,7 +250,9 @@ impl Session {
     }
 
     pub fn close_active(&mut self) {
-        if let Some(index) = self.active_document { self.close(index); }
+        if let Some(index) = self.active_document {
+            self.close(index);
+        }
     }
 
     pub fn select_adjacent(&mut self, backward: bool) {
@@ -186,11 +267,142 @@ impl Session {
         self.activate(next.checked_sub(1), true);
     }
 
+    pub fn editor_view(&self) -> (usize, usize, f64) {
+        self.active_document
+            .map(|index| self.open_documents[index].editor_view)
+            .unwrap_or_default()
+    }
+    pub fn set_editor_view(&mut self, view: (usize, usize, f64)) {
+        if let Some(index) = self.active_document {
+            self.open_documents[index].editor_view = view;
+        }
+    }
+    pub fn apply_editor_view(&mut self, value: &str) -> Result<(), String> {
+        if let Some(index) = self.active_document {
+            let document = &mut self.open_documents[index];
+            document.editor.apply(value)?;
+            document.source.clone_from(&document.editor.source);
+            self.source.clone_from(&document.editor.source);
+        }
+        Ok(())
+    }
+    pub fn dirty(&self) -> bool {
+        self.active_document
+            .is_some_and(|index| self.open_documents[index].editor.dirty())
+    }
+    pub fn undo(&mut self, redo: bool) {
+        if let Some(index) = self.active_document {
+            let document = &mut self.open_documents[index];
+            if redo {
+                document.editor.redo();
+            } else {
+                document.editor.undo();
+            }
+            document.source.clone_from(&document.editor.source);
+            self.source.clone_from(&document.editor.source);
+        }
+    }
+    pub fn save(&mut self, save_as: bool) -> bool {
+        let Some(index) = self.active_document else {
+            return false;
+        };
+        self.save_index(index, save_as)
+    }
+    fn save_index(&mut self, index: usize, save_as: bool) -> bool {
+        let result = if save_as {
+            let Some(path) = rfd::FileDialog::new()
+                .set_file_name(
+                    self.open_documents[index]
+                        .path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                )
+                .save_file()
+            else {
+                return false;
+            };
+            let path = std::fs::canonicalize(&path).unwrap_or(path);
+            if self
+                .open_documents
+                .iter()
+                .enumerate()
+                .any(|(i, doc)| i != index && doc.path == path)
+            {
+                self.notice = Some("That file is already open in another document".into());
+                return false;
+            }
+            let expected = match std::fs::read(&path) {
+                Ok(bytes) => Some(bytes),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => {
+                    self.notice = Some(error.to_string());
+                    return false;
+                }
+            };
+            self.open_documents[index]
+                .editor
+                .save_as(&path, expected.as_deref())
+                .map(|()| {
+                    self.open_documents[index].path = path.clone();
+                    if self.active_document == Some(index) {
+                        self.path = Some(path);
+                        self.reader_cache.borrow_mut().take();
+                    }
+                })
+        } else {
+            let document = &mut self.open_documents[index];
+            document.editor.save(&document.path)
+        };
+        match result {
+            Ok(()) => {
+                self.notice = None;
+                true
+            }
+            Err(error) => {
+                rfd::MessageDialog::new()
+                    .set_title("Save failed")
+                    .set_description(&error)
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+                self.notice = Some(error);
+                false
+            }
+        }
+    }
+    fn confirm_discard(&mut self, index: usize) -> bool {
+        if !self.open_documents[index].editor.dirty() {
+            return true;
+        }
+        let name = self.open_documents[index]
+            .path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy();
+        match rfd::MessageDialog::new()
+            .set_title("Unsaved changes")
+            .set_description(format!(
+                "Save changes to {name}? Yes saves; No discards; Cancel keeps the document open."
+            ))
+            .set_buttons(rfd::MessageButtons::YesNoCancel)
+            .show()
+        {
+            rfd::MessageDialogResult::Yes => self.save_index(index, false),
+            rfd::MessageDialogResult::No => true,
+            _ => false,
+        }
+    }
+    pub fn confirm_exit(&mut self) -> bool {
+        (0..self.open_documents.len()).all(|index| self.confirm_discard(index))
+    }
     pub fn reload(&mut self) {
         let Some(index) = self.active_document else {
             self.notice = Some("The bundled demonstration is already current.".into());
             return;
         };
+        if !self.confirm_discard(index) {
+            return;
+        }
         let path = &self.open_documents[index].path;
         match std::fs::metadata(path) {
             Ok(metadata) if metadata.len() > MAX_DOCUMENT_BYTES => {
@@ -205,16 +417,34 @@ impl Session {
         }
         match std::fs::read_to_string(path) {
             Ok(source) => {
+                let editor = match crate::editor::Buffer::new(source.clone()) {
+                    Ok(editor) => editor,
+                    Err(error) => {
+                        self.notice = Some(error);
+                        return;
+                    }
+                };
+                self.open_documents[index].editor = editor;
                 self.open_documents[index].source = source.clone();
                 self.source = source;
+                self.reader_cache.borrow_mut().take();
+                self.resources = Rc::new(crate::image_resources::Resources::default());
+                self.open_documents[index].resources = self.resources.clone();
                 self.notice = None;
             }
             Err(error) => self.notice = Some(format!("Unable to reload document: {error}")),
         }
     }
 
+    pub fn all_resources(&self) -> Vec<Rc<crate::image_resources::Resources>> {
+        std::iter::once(self.bundled_resources.clone())
+            .chain(self.open_documents.iter().map(|doc| doc.resources.clone()))
+            .collect()
+    }
+
     pub fn title(&self) -> String {
-        self.path.as_ref()
+        self.path
+            .as_ref()
             .and_then(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Architecture.md".to_owned())
@@ -227,27 +457,60 @@ impl Session {
     pub fn page_url(&self) -> Url {
         // No localhost, no external CDN, no WebView2, no loose HTML resources.
         let html = self.render_html();
-        let encoded = percent_encoding::utf8_percent_encode(&html, percent_encoding::NON_ALPHANUMERIC);
+        let encoded =
+            percent_encoding::utf8_percent_encode(&html, percent_encoding::NON_ALPHANUMERIC);
         Url::parse(&format!("data:text/html;charset=utf-8,{encoded}")).expect("valid bundled page")
     }
 
     pub fn render_html(&self) -> String {
+        self.view_revision
+            .set(self.view_revision.get().wrapping_add(1));
         let title = self.title();
         let mut toc = Vec::new();
         let mut body = String::new();
-        let plain = self.path.as_ref()
-            .is_some_and(|path| path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("txt")));
+        let plain = self.path.as_ref().is_some_and(|path| {
+            path.extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+        });
         if self.mode == Mode::Source {
-            body.push_str("<pre class=\"source-text\">");
-            body.push_str(&escape(&self.source));
-            body.push_str("</pre>");
+            let read_only = if self.path.is_none() { " readonly" } else { "" };
+            let _ = write!(
+                body,
+                "<textarea id=\"source-editor\" class=\"source-editor\" aria-label=\"Markdown source\" spellcheck=\"false\" wrap=\"off\"{read_only}>\n"
+            );
+            let view = self
+                .active_document
+                .map(|index| self.open_documents[index].editor.view())
+                .unwrap_or_else(|| self.source.clone());
+            body.push_str(&escape(&view));
+            body.push_str("</textarea>");
         } else if plain {
             body.push_str("<pre class=\"plain-text\">");
             body.push_str(&escape(&self.source));
             body.push_str("</pre>");
         } else {
-            let parsed = parser::parse(&self.source);
-            render_blocks(&mut body, &parsed.blocks, self.path.as_deref(), &mut toc);
+            let mut cached = self.reader_cache.borrow_mut();
+            if cached
+                .as_ref()
+                .is_none_or(|entry| entry.source != self.source)
+            {
+                let parsed = parser::parse(&self.source);
+                let mut entry = CachedReader {
+                    source: self.source.clone(),
+                    ..Default::default()
+                };
+                render_blocks(
+                    &mut entry.body,
+                    &parsed.blocks,
+                    self.path.as_deref(),
+                    &self.resources,
+                    &mut entry.toc,
+                );
+                *cached = Some(entry);
+            }
+            let entry = cached.as_ref().expect("reader cache initialized");
+            body.clone_from(&entry.body);
+            toc.clone_from(&entry.toc);
         }
 
         // Brand assets do not change between document switches. Avoid encoding
@@ -259,36 +522,67 @@ impl Session {
         let mut html = String::with_capacity(CSS.len() + body.len() + 4000);
         html.push_str("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
         html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-        html.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">");
+        html.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https://wolfmark.invalid; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">");
         html.push_str("<title>Wolfmark — Servo prototype</title><style>");
         html.push_str(CSS);
         html.push_str("</style></head><body><div class=\"app\"><header class=\"header\">");
-        let _ = write!(html, "<span class=\"brand\"><img alt=\"\" src=\"{logo}\"><span>Wolfmark</span></span>");
-        html.push_str("<span class=\"separator\"></span><span class=\"crumb\"><span>Documents</span><span class=\"chevron\">›</span>");
-        let _ = write!(html, "<span class=\"filename\" title=\"{}\">{}</span></span>", escape_attr(&title), escape(&title));
+        let _ = write!(
+            html,
+            "<span class=\"brand\"><img alt=\"\" src=\"{logo}\"><span>Wolfmark</span></span>"
+        );
+        html.push_str("<span class=\"separator\"></span><span class=\"crumb\"><span>Documents</span><span class=\"chevron\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m9 5 7 7-7 7\"/></svg></span>");
+        let _ = write!(
+            html,
+            "<span class=\"filename\" title=\"{}\">{}</span></span>",
+            escape_attr(&title),
+            escape(&title)
+        );
         html.push_str("<span class=\"header-spacer\"></span>");
-        html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://refresh/\" title=\"Reload document from disk\"><span class=\"glyph\">↻</span></a>");
-        html.push_str("<span class=\"top-search\" title=\"Search is not wired in this first prototype\">⌕ &nbsp; Search in document… <span class=\"shortcut\">Ctrl+F</span></span>");
-        html.push_str("<span class=\"separator\"></span><span class=\"toolbar-link top-settings disabled\" title=\"Settings integration pending\"><span class=\"glyph\">⚙</span><span class=\"label\">Settings</span></span>");
+        html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://refresh/\" title=\"Reload document from disk\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 7v5h-5M20 12a8 8 0 1 0-2 6\"/></svg></span></a>");
+        html.push_str("<a class=\"top-search\" href=\"wolfmark://find/open\" title=\"Search in document\">Search in document… <span class=\"shortcut\">Ctrl+F</span></a>");
+        html.push_str("<span class=\"separator\"></span><span class=\"toolbar-link top-settings disabled\" aria-disabled=\"true\" title=\"Settings integration pending\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M9 3h6l1 4 4 1v8l-4 1-1 4H9l-1-4-4-1V8l4-1ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0\"/></svg></span><span class=\"label\">Settings</span></span>");
         if self.frameless_test {
             html.push_str("<nav class=\"caption-controls\" aria-label=\"Window controls\">");
-            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/minimize\" title=\"Minimize\" aria-label=\"Minimize\">−</a>");
-            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/maximize\" title=\"Maximize or restore\" aria-label=\"Maximize or restore\">□</a>");
-            html.push_str("<a class=\"caption-button caption-close\" href=\"wolfmark://window/close\" title=\"Close\" aria-label=\"Close\">×</a>");
+            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/minimize\" title=\"Minimize\" aria-label=\"Minimize\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a>");
+            html.push_str("<a class=\"caption-button\" href=\"wolfmark://window/maximize\" title=\"Maximize or restore\" aria-label=\"Maximize or restore\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 5h14v14H5Z\"/></svg></a>");
+            html.push_str("<a class=\"caption-button caption-close\" href=\"wolfmark://window/close\" title=\"Close\" aria-label=\"Close\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 6 12 12M18 6 6 18\"/></svg></a>");
             html.push_str("</nav>");
         }
         html.push_str("</header><aside class=\"sidebar\"><div class=\"sidebar-inner\">");
-        html.push_str("<a class=\"open-doc\" href=\"wolfmark://open/\" title=\"Select a local Markdown or text document\"><span class=\"glyph\">▱</span>Open document</a>");
+        html.push_str("<a class=\"open-doc\" href=\"wolfmark://open/\" title=\"Select a local Markdown or text document\"><span class=\"glyph\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 7V5h6l2 2h10v3M3 7h7l2 3h9l-3 10H3Z\"/></svg></span>Open document</a>");
         html.push_str("<p class=\"section-title\">Open Documents</p>");
         html.push_str("<nav class=\"document-list\" aria-label=\"Open documents\">");
-        let bundled_class = if self.active_document.is_none() { " selected" } else { "" };
-        let _ = write!(html, "<div class=\"document-row{bundled_class}\"><a class=\"document-link\" href=\"wolfmark://document/bundled\" title=\"Bundled Wolfmark architecture\"><span class=\"doc-file\">▤</span>Architecture.md</a></div>");
+        let bundled_class = if self.active_document.is_none() {
+            " selected"
+        } else {
+            ""
+        };
+        let _ = write!(
+            html,
+            "<div class=\"document-row{bundled_class}\"><a class=\"document-link\" href=\"wolfmark://document/bundled\" title=\"Bundled Wolfmark architecture\"><span class=\"doc-file\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6M9 16h6\"/></svg></span>Architecture.md</a></div>"
+        );
         for (index, document) in self.open_documents.iter().enumerate() {
-            let selected = if self.active_document == Some(index) { " selected" } else { "" };
-            let label = document.path.file_name().unwrap_or_default().to_string_lossy();
-            let _ = write!(html,
-                "<div class=\"document-row{selected}\"><a class=\"document-link\" href=\"wolfmark://document/{index}\" title=\"{}\"><span class=\"doc-file\">▤</span>{}</a><a class=\"document-close\" href=\"wolfmark://close/{index}\" title=\"Close document\" aria-label=\"Close {}\">×</a></div>",
-                escape_attr(&document.path.to_string_lossy()), escape(&label), escape_attr(&label));
+            let selected = if self.active_document == Some(index) {
+                " selected"
+            } else {
+                ""
+            };
+            let mut label = document
+                .path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            if document.editor.dirty() {
+                label.push_str(" *");
+            }
+            let _ = write!(
+                html,
+                "<div class=\"document-row{selected}\"><a class=\"document-link\" href=\"wolfmark://document/{index}\" title=\"{}\"><span class=\"doc-file\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 3h8l4 4v14H6ZM14 3v5h4M9 12h6M9 16h6\"/></svg></span>{}</a><a class=\"document-close\" href=\"wolfmark://close/{index}\" title=\"Close document\" aria-label=\"Close {}\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m6 6 12 12M18 6 6 18\"/></svg></a></div>",
+                escape_attr(&document.path.to_string_lossy()),
+                escape(&label),
+                escape_attr(&label)
+            );
         }
         html.push_str("</nav>");
         html.push_str("<p class=\"section-title\">Outline</p><nav class=\"outline-scroll\" aria-label=\"Document outline\">");
@@ -297,46 +591,95 @@ impl Session {
                 html.push_str("<span class=\"outline-item\">No headings</span>");
             } else {
                 for (level, heading, anchor) in &toc {
-                    let _ = write!(html, "<a class=\"outline-item depth-{}\" href=\"#{}\" title=\"{}\">{}</a>", level, anchor, escape_attr(heading), escape(heading));
+                    let _ = write!(
+                        html,
+                        "<a class=\"outline-item depth-{}\" href=\"#{}\" title=\"{}\">{}</a>",
+                        level,
+                        anchor,
+                        escape_attr(heading),
+                        escape(heading)
+                    );
                 }
             }
         } else {
             html.push_str("<span class=\"outline-item\">Switch to Reader for outline</span>");
         }
         html.push_str("</nav></div><footer class=\"sidebar-footer\">");
-        let _ = write!(html, "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>v0.1.0-dev.7 · Servo</small></div></div>");
+        let _ = write!(
+            html,
+            "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>v0.1.0-dev.7 · Servo</small></div></div>"
+        );
         html.push_str("</footer></aside><main class=\"main\">");
-        html.push_str("<div class=\"viewbar\"><nav class=\"nav-pair\" aria-label=\"Document history\">");
+        html.push_str(
+            "<div class=\"viewbar\"><nav class=\"nav-pair\" aria-label=\"Document history\">",
+        );
         if self.can_go_back() {
-            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/back\" title=\"Back to previous document\">←</a>");
+            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/back\" title=\"Back to previous document\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5m6-6-6 6 6 6\"/></svg></a>");
         } else {
-            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No previous document\">←</span>");
+            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No previous document\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 12H5m6-6-6 6 6 6\"/></svg></span>");
         }
         if self.can_go_forward() {
-            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/forward\" title=\"Forward to next document\">→</a>");
+            html.push_str("<a class=\"icon-button\" href=\"wolfmark://history/forward\" title=\"Forward to next document\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>");
         } else {
-            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No next document\">→</span>");
+            html.push_str("<span class=\"icon-button nav-disabled\" aria-disabled=\"true\" title=\"No next document\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></span>");
         }
         html.push_str("</nav>");
         html.push_str("<nav class=\"mode-picker\" aria-label=\"Document mode\">");
-        let reader = if self.mode == Mode::Reader {" selected"} else {""};
-        let source = if self.mode == Mode::Source {" selected"} else {""};
-        let _ = write!(html, "<a class=\"mode{reader}\" href=\"wolfmark://mode/reader\">◫ &nbsp; Reader</a>");
-        html.push_str("<span class=\"mode unavailable\" title=\"Live Preview editor integration pending\">▣ &nbsp; Live Preview</span>");
-        let _ = write!(html, "<a class=\"mode{source}\" href=\"wolfmark://mode/source\">⌘ &nbsp; Source</a>");
-        html.push_str("</nav><span class=\"viewbar-spacer\"></span><nav class=\"zoom-controls\" aria-label=\"Document zoom\">");
-        let _ = write!(html, "<a href=\"wolfmark://zoom/out\" title=\"Zoom out\">−</a><span>{}%</span><a href=\"wolfmark://zoom/in\" title=\"Zoom in\">+</a></nav>", self.zoom);
-        html.push_str("<span class=\"icon-button more\" title=\"Additional actions not yet implemented\">⋯</span></div>");
+        let reader = if self.mode == Mode::Reader {
+            " selected"
+        } else {
+            ""
+        };
+        let source = if self.mode == Mode::Source {
+            " selected"
+        } else {
+            ""
+        };
+        let _ = write!(
+            html,
+            "<a class=\"mode{reader}\" href=\"wolfmark://mode/reader\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3ZM12 6v15\"/></svg> &nbsp; Reader</a>"
+        );
+        html.push_str("<span class=\"mode unavailable\" aria-disabled=\"true\" title=\"Live Preview editor integration pending\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h18v16H3ZM12 4v16M6 8h3M6 12h3M15 8h3M15 12h3\"/></svg> &nbsp; Live Preview</span>");
+        let _ = write!(
+            html,
+            "<a class=\"mode{source}\" href=\"wolfmark://mode/source\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m8 6-6 6 6 6m8-12 6 6-6 6m-3-14-2 16\"/></svg> &nbsp; Source</a>"
+        );
+        html.push_str("</nav>");
+        if self.mode == Mode::Source && self.path.is_some() {
+            html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://save/current\">Save</a><a class=\"toolbar-link\" href=\"wolfmark://save/as\">Save As</a>");
+        }
+        let dirty = if self.dirty() { "Unsaved" } else { "" };
+        let _ = write!(
+            html,
+            "<span id=\"editor-status\" role=\"status\">{dirty}</span>"
+        );
+        html.push_str("<span class=\"viewbar-spacer\"></span><nav class=\"zoom-controls\" aria-label=\"Document zoom\">");
+        let _ = write!(
+            html,
+            "<a href=\"wolfmark://zoom/out\" title=\"Zoom out\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a><a class=\"zoom-value\" href=\"wolfmark://zoom/reset\" title=\"Reset document zoom\">{}%</a><a href=\"wolfmark://zoom/in\" title=\"Zoom in\">+</a></nav>",
+            self.zoom
+        );
+        html.push_str("</div><div class=\"findbar\" hidden><input id=\"find-query\" aria-label=\"Find in document\" placeholder=\"Find text\"><a href=\"wolfmark://find/previous\">Previous</a><a href=\"wolfmark://find/next\">Next</a><span id=\"find-count\" role=\"status\"></span><a href=\"wolfmark://find/close\" aria-label=\"Close search\">Close</a></div>");
         let document_padding = (48.0 * f64::from(self.zoom) / 100.0).round();
         let top_padding = (22.0 * f64::from(self.zoom) / 100.0).round();
         let bottom_padding = (34.0 * f64::from(self.zoom) / 100.0).round();
-        let _ = write!(html, "<div class=\"document-viewport\"><div class=\"document-inner\" style=\"--qt-padding:{document_padding}px;--qt-top:{top_padding}px;--qt-bottom:{bottom_padding}px\">");
+        let _ = write!(
+            html,
+            "<div class=\"document-viewport\"><div class=\"document-inner\" style=\"--qt-padding:{document_padding}px;--qt-top:{top_padding}px;--qt-bottom:{bottom_padding}px\">"
+        );
         if let Some(notice) = &self.notice {
-            let _ = write!(html, "<div class=\"notice\" role=\"status\">{}</div>", escape(notice));
+            let _ = write!(
+                html,
+                "<div class=\"notice\" role=\"status\">{}</div>",
+                escape(notice)
+            );
         }
         let size = self.zoom as f64 * 0.17;
-        let _ = write!(html, "<article class=\"document-body\" style=\"--doc-size:{size:.1}px\">{body}</article>");
-        html.push_str("<p class=\"status-line\">Servo UI parity prototype · Reader and Source are read-only · Powered by Wolfmark's Rust parser</p>");
+        let _ = write!(
+            html,
+            "<article class=\"document-body\" style=\"--doc-size:{size:.1}px\">{body}</article>"
+        );
+
         html.push_str("</div></div></main></div></body></html>");
         html
     }
@@ -371,7 +714,10 @@ fn escape_attr(value: &str) -> String {
 
 fn data_svg(source: &str) -> String {
     // Bundled static artwork, never untrusted Markdown content.
-    format!("data:image/svg+xml;base64,{}", base64::engine::general_purpose::STANDARD.encode(source.as_bytes()))
+    format!(
+        "data:image/svg+xml;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(source.as_bytes())
+    )
 }
 
 fn data_png(bytes: &[u8]) -> String {
@@ -379,29 +725,45 @@ fn data_png(bytes: &[u8]) -> String {
     format!("data:image/png;base64,{encoded}")
 }
 
-fn render_blocks(html: &mut String, blocks: &[model::Block], document: Option<&Path>, toc: &mut Vec<(u8, String, String)>) {
+fn render_blocks(
+    html: &mut String,
+    blocks: &[model::Block],
+    document: Option<&Path>,
+    resources: &crate::image_resources::Resources,
+    toc: &mut Vec<(u8, String, String)>,
+) {
     for block in blocks {
         match block {
             model::Block::Paragraph(inlines) => {
                 html.push_str("<p>");
-                render_inlines(html, inlines, document);
+                render_inlines(html, inlines, document, resources);
                 html.push_str("</p>");
             }
             model::Block::Heading { level, content } => {
                 let level = (*level).clamp(1, 6);
                 let heading = model::plain_text(content);
-                let anchor = format!("wm-heading-{}", toc.len() + 1);
+                let base = crate::anchors::heading_slug(&heading);
+                let mut anchor = base.clone();
+                let mut suffix = 1;
+                while toc.iter().any(|(_, _, existing)| existing == &anchor) {
+                    anchor = format!("{base}-{suffix}");
+                    suffix += 1;
+                }
                 toc.push((level, heading, anchor.clone()));
                 let _ = write!(html, "<h{level} id=\"{anchor}\">");
-                render_inlines(html, content, document);
+                render_inlines(html, content, document, resources);
                 let _ = write!(html, "</h{level}>");
             }
             model::Block::Quote(inner) => {
                 html.push_str("<blockquote>");
-                render_blocks(html, inner, document, toc);
+                render_blocks(html, inner, document, resources, toc);
                 html.push_str("</blockquote>");
             }
-            model::Block::List { ordered, start, items } => {
+            model::Block::List {
+                ordered,
+                start,
+                items,
+            } => {
                 if *ordered {
                     let _ = write!(html, "<ol start=\"{}\">", start);
                 } else {
@@ -412,14 +774,18 @@ fn render_blocks(html: &mut String, blocks: &[model::Block], document: Option<&P
                     if let Some(checked) = item.checked {
                         html.push_str(if checked { "☑ " } else { "☐ " });
                     }
-                    render_blocks(html, &item.blocks, document, toc);
+                    render_blocks(html, &item.blocks, document, resources, toc);
                     html.push_str("</li>");
                 }
                 html.push_str(if *ordered { "</ol>" } else { "</ul>" });
             }
             model::Block::CodeBlock { language, source } => {
                 let safe_language = escape(language);
-                let _ = write!(html, "<div class=\"codebox\"><div class=\"codehead\"><span>{safe_language}</span><span aria-label=\"Code block\">CODE</span></div><pre><code>");
+                let code_id = html.len();
+                let _ = write!(
+                    html,
+                    "<div class=\"codebox\"><div class=\"codehead\"><span>{safe_language}</span><a class=\"code-copy\" href=\"wolfmark://copy/{code_id}\" title=\"Copy code block\">Copy</a></div><pre><code id=\"wm-code-{code_id}\">"
+                );
                 for span in highlight::highlight_code(language, source) {
                     let decoration = match span.flags & 3 {
                         1 => "font-weight:bold;",
@@ -427,16 +793,28 @@ fn render_blocks(html: &mut String, blocks: &[model::Block], document: Option<&P
                         3 => "font-weight:bold;font-style:italic;",
                         _ => "",
                     };
-                    let _ = write!(html, "<span style=\"color:rgb({},{},{});{}\">{}</span>", span.red, span.green, span.blue, decoration, escape(&span.text));
+                    let _ = write!(
+                        html,
+                        "<span style=\"color:rgb({},{},{});{}\">{}</span>",
+                        span.red,
+                        span.green,
+                        span.blue,
+                        decoration,
+                        escape(&span.text)
+                    );
                 }
                 html.push_str("</code></pre></div>");
             }
-            model::Block::Table { header, rows, alignments } => {
+            model::Block::Table {
+                header,
+                rows,
+                alignments,
+            } => {
                 html.push_str("<table><thead>");
-                render_table_row(html, header, true, alignments, document);
+                render_table_row(html, header, true, alignments, document, resources);
                 html.push_str("</thead><tbody>");
                 for row in rows {
-                    render_table_row(html, row, false, alignments, document);
+                    render_table_row(html, row, false, alignments, document, resources);
                 }
                 html.push_str("</tbody></table>");
             }
@@ -449,7 +827,14 @@ fn render_blocks(html: &mut String, blocks: &[model::Block], document: Option<&P
     }
 }
 
-fn render_table_row(html: &mut String, row: &model::TableRow, head: bool, alignments: &[model::TableAlignment], document: Option<&Path>) {
+fn render_table_row(
+    html: &mut String,
+    row: &model::TableRow,
+    head: bool,
+    alignments: &[model::TableAlignment],
+    document: Option<&Path>,
+    resources: &crate::image_resources::Resources,
+) {
     html.push_str("<tr>");
     for (index, cell) in row.cells.iter().enumerate() {
         let tag = if head { "th" } else { "td" };
@@ -459,82 +844,101 @@ fn render_table_row(html: &mut String, row: &model::TableRow, head: bool, alignm
             model::TableAlignment::Right => "right",
         };
         let _ = write!(html, "<{tag} style=\"text-align:{align}\">");
-        render_inlines(html, cell, document);
+        render_inlines(html, cell, document, resources);
         let _ = write!(html, "</{tag}>");
     }
     html.push_str("</tr>");
 }
 
-fn render_inlines(html: &mut String, inlines: &[model::Inline], document: Option<&Path>) {
+fn render_inlines(
+    html: &mut String,
+    inlines: &[model::Inline],
+    document: Option<&Path>,
+    resources: &crate::image_resources::Resources,
+) {
     for inline in inlines {
         match inline {
             model::Inline::Text(value) => html.push_str(&escape(value)),
             model::Inline::Code(value) => {
                 let _ = write!(html, "<code>{}</code>", escape(value));
             }
-            model::Inline::Strong(children) => wrapped_inlines(html, "strong", children, document),
-            model::Inline::Emphasis(children) => wrapped_inlines(html, "em", children, document),
-            model::Inline::Strikethrough(children) => wrapped_inlines(html, "del", children, document),
-            model::Inline::Link { destination, content } => {
+            model::Inline::Strong(children) => {
+                wrapped_inlines(html, "strong", children, document, resources)
+            }
+            model::Inline::Emphasis(children) => {
+                wrapped_inlines(html, "em", children, document, resources)
+            }
+            model::Inline::Strikethrough(children) => {
+                wrapped_inlines(html, "del", children, document, resources)
+            }
+            model::Inline::Link {
+                destination,
+                content,
+            } => {
                 // Arbitrary external links are deliberately inert in this offline shell.
                 if destination.starts_with('#') && destination.len() < 200 {
                     let _ = write!(html, "<a href=\"{}\">", escape_attr(destination));
-                    render_inlines(html, content, document);
+                    render_inlines(html, content, document, resources);
                     html.push_str("</a>");
                 } else {
                     html.push_str("<span title=\"External navigation disabled in prototype\">");
-                    render_inlines(html, content, document);
+                    render_inlines(html, content, document, resources);
                     html.push_str("</span>");
                 }
             }
             model::Inline::Image { source, alt, .. } => {
-                if let Some(src) = local_image_data(source, document) {
+                if let Some(src) = resources.register(source, document) {
                     let _ = write!(html, "<img src=\"{src}\" alt=\"{}\">", escape_attr(alt));
                 } else {
-                    let _ = write!(html, "<span class=\"image-error\" role=\"img\" aria-label=\"{}\">Image unavailable in prototype: {}</span>", escape_attr(alt), escape(source));
+                    let _ = write!(
+                        html,
+                        "<span class=\"image-error\" role=\"img\" aria-label=\"{}\">Image unavailable in prototype: {}</span>",
+                        escape_attr(alt),
+                        escape(source)
+                    );
                 }
             }
             model::Inline::SoftBreak => html.push('\n'),
             model::Inline::HardBreak => html.push_str("<br>"),
             model::Inline::RawHtml(value) => html.push_str(&escape(value)),
-            model::Inline::TaskMark(checked) => html.push_str(if *checked { "☑ " } else { "☐ " }),
+            model::Inline::TaskMark(checked) => {
+                html.push_str(if *checked { "☑ " } else { "☐ " })
+            }
         }
     }
 }
 
-fn wrapped_inlines(html: &mut String, tag: &str, contents: &[model::Inline], document: Option<&Path>) {
+fn wrapped_inlines(
+    html: &mut String,
+    tag: &str,
+    contents: &[model::Inline],
+    document: Option<&Path>,
+    resources: &crate::image_resources::Resources,
+) {
     let _ = write!(html, "<{tag}>");
-    render_inlines(html, contents, document);
+    render_inlines(html, contents, document, resources);
     let _ = write!(html, "</{tag}>");
-}
-
-fn local_image_data(source: &str, document: Option<&Path>) -> Option<String> {
-    // The production Wolfmark file-policy module recognizes relative paths,
-    // percent-encoded spaces, native absolute paths and file: URIs.
-    // Reuse it instead of imposing a second incompatible Servo path policy.
-    let resolution = image_paths::resolve_local_image(document?, source);
-    if resolution.state != image_paths::AssetState::Allowed {
-        return None;
-    }
-    let file = resolution.canonical_path?;
-    let mime = match file.extension()?.to_str()?.to_ascii_lowercase().as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        // SVG still needs the bounded native rasterization pipeline.
-        // Never hand untrusted active SVG markup directly to the HTML engine.
-        _ => return None,
-    };
-    if std::fs::metadata(&file).ok()?.len() > MAX_IMAGE_BYTES { return None; }
-    let bytes = std::fs::read(file).ok()?;
-    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-    Some(format!("data:{mime};base64,{data}"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_reader_has_no_development_notice_but_errors_remain_visible() {
+        let mut session = Session::default();
+        let html = session.render_html();
+        assert!(!html.contains("Bundled architecture document —"));
+        assert!(!html.contains("class=\"notice\""));
+        assert!(html.contains("<svg class=\"ui-icon\""));
+        assert!(!html.contains('▱'));
+        session.notice = Some("Unable to open <missing>".into());
+        assert!(
+            session
+                .render_html()
+                .contains("Unable to open &lt;missing&gt;")
+        );
+    }
 
     #[test]
     fn ui_has_single_document_list_and_no_open_dropdown() {
@@ -573,7 +977,8 @@ mod tests {
 
     #[test]
     fn sidebar_selection_reuses_distinct_document_buffers() {
-        let dir = std::env::temp_dir().join(format!("wolfmark-servo-multidoc-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("wolfmark-servo-multidoc-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let one = dir.join("one.md");
         let two = dir.join("two.md");
@@ -581,10 +986,16 @@ mod tests {
         std::fs::write(&two, "# Second").unwrap();
         let mut session = Session::default();
         session.open(&one);
+        session.mode = Mode::Source;
+        session.zoom = 140;
         session.open(&two);
         assert_eq!(session.open_documents.len(), 2);
         assert!(session.source.contains("Second"));
+        assert_eq!(session.mode, Mode::Reader);
+        assert_eq!(session.zoom, 100);
         session.select(0);
+        assert_eq!(session.mode, Mode::Source);
+        assert_eq!(session.zoom, 140);
         assert!(session.source.contains("First"));
         assert!(session.render_html().contains("wolfmark://document/1"));
         session.select_bundled();
@@ -596,7 +1007,8 @@ mod tests {
 
     #[test]
     fn history_and_close_adjust_document_indexes() {
-        let dir = std::env::temp_dir().join(format!("wolfmark-servo-history-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("wolfmark-servo-history-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let one = dir.join("alpha.md");
         let two = dir.join("beta.md");
@@ -606,6 +1018,8 @@ mod tests {
         }
         let mut session = Session::default();
         session.open(&one);
+        session.mode = Mode::Source;
+        session.zoom = 140;
         session.open(&two);
         session.open(&three);
         assert!(session.can_go_back());
@@ -648,7 +1062,7 @@ mod tests {
         let mut session = Session::default();
         session.source = "# Title\n\nA **wolf**.\n\n```rust\nfn main() {}\n```\n".into();
         let html = session.render_html();
-        assert!(html.contains("<h1 id=\"wm-heading-1\">Title</h1>"));
+        assert!(html.contains("<h1 id=\"title\">Title</h1>"));
         assert!(html.contains("<strong>wolf</strong>"));
         assert!(html.contains("class=\"codebox\""));
         assert!(html.contains("color:rgb("));
@@ -656,24 +1070,80 @@ mod tests {
 
     #[test]
     fn image_resources_follow_wolfmark_path_rules() {
-        let root = std::env::temp_dir().join(format!("wolfmark-servo-images-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("wolfmark-servo-images-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let document = root.join("document.md");
         let image = root.join("wolf symbol.png");
         std::fs::write(&document, "# Image").unwrap();
-        std::fs::write(&image, include_bytes!("../../../assets/icons/wolfmark-128x128.png")).unwrap();
+        std::fs::write(
+            &image,
+            include_bytes!("../../../assets/icons/wolfmark-128x128.png"),
+        )
+        .unwrap();
+        let resources = crate::image_resources::Resources::default();
         for src in [
             "wolf symbol.png".to_string(),
             "wolf%20symbol.png".to_string(),
             image.to_string_lossy().into_owned(),
             Url::from_file_path(&image).unwrap().to_string(),
         ] {
-            let data = local_image_data(&src, Some(&document)).expect("locally allowed image");
-            assert!(data.starts_with("data:image/png;base64,"));
+            let data = resources
+                .register(&src, Some(&document))
+                .expect("locally allowed image");
+            assert!(resources.contains(&Url::parse(&data).unwrap()));
         }
-        assert!(local_image_data("https://example.com/image.png", Some(&document)).is_none());
-        assert!(local_image_data("file:///nonexistent/wolf.png", Some(&document)).is_none());
+        assert!(
+            resources
+                .register("https://example.com/image.png", Some(&document))
+                .is_none()
+        );
+        assert!(
+            resources
+                .register("file:///nonexistent/wolf.png", Some(&document))
+                .is_none()
+        );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reader_cache_survives_zoom_and_invalidates_on_source_change() {
+        let mut session = Session::default();
+        session.source = "# Original".into();
+        session.render_html();
+        let pointer = session
+            .reader_cache
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .body
+            .as_ptr();
+        session.change_zoom(10);
+        session.render_html();
+        assert_eq!(
+            pointer,
+            session
+                .reader_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .body
+                .as_ptr()
+        );
+        session.source = "# Changed".into();
+        assert!(session.render_html().contains("id=\"changed\""));
+    }
+
+    #[test]
+    fn natural_heading_links_and_duplicate_ids() {
+        let mut session = Session::default();
+        session.source =
+            "# Hello World\n\n[Jump](#hello-world)\n\n# Hello World\n\n# Hello World-1".into();
+        let html = session.render_html();
+        assert!(html.contains("id=\"hello-world\""));
+        assert!(html.contains("href=\"#hello-world\""));
+        assert!(html.contains("id=\"hello-world-1\""));
+        assert!(html.contains("id=\"hello-world-1-1\""));
     }
 
     #[test]

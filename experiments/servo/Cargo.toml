@@ -12,6 +12,13 @@ description = "Isolated, optional Servo embedding experiment for Wolfmark"
 resolver = "3"
 
 [dependencies]
+tempfile = "3.27"
+arboard = "3.7.0"
+serde_json = "1.0"
+image = { version = "0.25.8", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts"] }
+rayon = "1.11.0"
+crossbeam-channel = "0.5.15"
 servo = { version = "=0.7.0", default-features = false, features = ["bundled", "clipboard", "js_jit"] }
 embedder_traits = { package = "servo-embedder-traits", version = "=0.7.0" }
 euclid = "0.22"
@@ -34,3 +41,6 @@ rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", 
 # Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
 [patch.crates-io]
 servo-paint-api = { path = "vendor/servo-paint-api" }
+
+
+
