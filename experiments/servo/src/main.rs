@@ -41,6 +41,8 @@ mod search;
 mod smooth_scroll;
 mod ui;
 mod user_settings;
+#[cfg(target_os = "windows")]
+mod windows_chrome;
 
 use euclid::Scale;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -685,6 +687,8 @@ impl State {
             }
             Action::WindowMaximize if self.frameless => {
                 self.window.set_maximized(!self.window.is_maximized());
+                #[cfg(target_os = "windows")]
+                windows_chrome::refresh_corners(&self.window);
                 return;
             }
             Action::WindowClose => {
@@ -957,6 +961,10 @@ impl ApplicationHandler<Wake> for App {
                         ),
                 )
                 .expect("test window");
+            #[cfg(target_os = "windows")]
+            if frameless {
+                windows_chrome::install(&window);
+            }
             let handle = window.window_handle().expect("window handle");
             eprintln!(
                 "Initializing Servo OpenGL window context ({}x{}, scale={:.2})",
