@@ -6,7 +6,7 @@ use std::time::Duration;
 
 pub const CURRENT_VERSION: &str = "0.1.0-dev.7";
 const GITHUB_RELEASES: &str =
-    "https://api.github.com/repos/ItsW0lfiy/Moonmark/releases?per_page=30";
+    "https://api.github.com/repos/ItsW0lfiy/Wolfmark/releases?per_page=30";
 const MAX_RESPONSE: u64 = 3 * 1024 * 1024;
 
 #[derive(Debug)]
