@@ -528,29 +528,53 @@ impl State {
         match action {
             Action::SettingsOpen => {
                 self.document.borrow_mut().begin_settings();
-                let url = self.document.borrow().page_url();
+                let html = self.document.borrow().settings_html();
+                let serialized = serde_json::to_string(&html).expect("settings HTML serializable");
                 if let Some(view) = self.view.borrow().last() {
-                    view.load(url);
+                    // Do not navigate/reparse/reload images just to show a dialog.
+                    view.evaluate_javascript(format!(
+                        "document.querySelector('.settings-overlay')?.remove();document.querySelector('.app')?.insertAdjacentHTML('beforeend',{serialized});"
+                    ), |_| {});
                     self.servo.spin_event_loop();
                 }
                 return;
             }
             Action::SettingsClose => {
                 self.document.borrow_mut().cancel_settings();
-                let url = self.document.borrow().page_url();
                 if let Some(view) = self.view.borrow().last() {
-                    view.load(url);
+                    view.evaluate_javascript("document.querySelector('.settings-overlay')?.remove();", |_| {});
                     self.servo.spin_event_loop();
                 }
                 return;
             }
             Action::SettingsSave => {
-                if let Err(error) = self.document.borrow_mut().save_settings() {
-                    eprintln!("Settings save failed: {error}");
-                }
-                let url = self.document.borrow().page_url();
+                let result = self.document.borrow_mut().save_settings();
                 if let Some(view) = self.view.borrow().last() {
-                    view.load(url);
+                    match result {
+                        Ok(()) => {
+                            let wrapping = self.document.borrow().preferences.editor_word_wrap;
+                            view.evaluate_javascript(format!(r#"(() => {{
+                                document.querySelector('.settings-overlay')?.remove();
+                                const editor=document.getElementById('source-editor');
+                                if(editor) {{
+                                    editor.wrap='{wrap}';
+                                    editor.style.whiteSpace='{white_space}';
+                                    editor.style.overflowWrap='{overflow_wrap}';
+                                }}
+                                const live=document.querySelector('.live-stage');
+                                if(live)live.classList.toggle('live-wrap',{wrapping});
+                            }})()"#,
+                            wrap=if wrapping{"soft"}else{"off"},
+                            white_space=if wrapping{"pre-wrap"}else{"pre"},
+                            overflow_wrap=if wrapping{"anywhere"}else{"normal"}), |_| {});
+                        }
+                        Err(error) => {
+                            let serialized = serde_json::to_string(&error).unwrap_or_default();
+                            view.evaluate_javascript(format!(
+                                "document.querySelector('.settings-footer span').textContent={serialized};"
+                            ), |_| {});
+                        }
+                    }
                     self.servo.spin_event_loop();
                 }
                 return;
@@ -558,9 +582,12 @@ impl State {
             Action::SettingsPage(page) => {
                 if self.document.borrow().settings_open {
                     self.document.borrow_mut().settings_page(page);
-                    let url = self.document.borrow().page_url();
+                    let html = self.document.borrow().settings_html();
+                    let serialized = serde_json::to_string(&html).expect("settings HTML serializable");
                     if let Some(view) = self.view.borrow().last() {
-                        view.load(url);
+                        view.evaluate_javascript(format!(
+                            "document.querySelector('.settings-overlay').outerHTML={serialized};"
+                        ), |_| {});
                         self.servo.spin_event_loop();
                     }
                 }
@@ -571,9 +598,12 @@ impl State {
                     if let Err(error) = self.document.borrow_mut().toggle_setting(field) {
                         eprintln!("Settings update failed: {error}");
                     }
-                    let url = self.document.borrow().page_url();
+                    let html = self.document.borrow().settings_html();
+                    let serialized = serde_json::to_string(&html).expect("settings HTML serializable");
                     if let Some(view) = self.view.borrow().last() {
-                        view.load(url);
+                        view.evaluate_javascript(format!(
+                            "document.querySelector('.settings-overlay').outerHTML={serialized};"
+                        ), |_| {});
                         self.servo.spin_event_loop();
                     }
                 }
