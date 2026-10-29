@@ -23,6 +23,7 @@ const MAX_DOCUMENT_BYTES: u64 = 2 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Reader,
+    Live,
     Source,
 }
 
@@ -571,7 +572,7 @@ impl Session {
             path.extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
         });
-        if self.mode == Mode::Source {
+        if matches!(self.mode, Mode::Source | Mode::Live) {
             let read_only = if self.path.is_none() { " readonly" } else { "" };
             let wrap = if self.preferences.editor_word_wrap { "soft" } else { "off" };
             let wrapping_style = if self.preferences.editor_word_wrap {
@@ -589,6 +590,16 @@ impl Session {
                 .unwrap_or_else(|| self.source.clone());
             body.push_str(&escape(&view));
             body.push_str("</textarea>");
+            if self.mode == Mode::Live {
+                let preview = decorated_source(&view);
+                let lines = view.lines().count().max(1);
+                let line_numbers = (1..=lines).map(|n| n.to_string()).collect::<Vec<_>>().join("\n");
+                let number_html = escape(&line_numbers);
+                // The editable textarea is the real input; the preview layer
+                // uses the same raw text and only changes visual token colors.
+                // Markdown source is NEVER rewritten by the decoration layer.
+                body = format!("<div class=\"live-stage\"><pre class=\"live-line-numbers\" aria-hidden=\"true\" id=\"live-line-numbers\">{number_html}</pre><div class=\"live-edit-surface\"><pre class=\"live-highlights\" aria-hidden=\"true\" id=\"live-highlights\">{preview}</pre>{body}</div></div>");
+            }
         } else if plain {
             body.push_str("<pre class=\"plain-text\">");
             body.push_str(&escape(&self.source));
@@ -740,17 +751,18 @@ impl Session {
         } else {
             ""
         };
+        let live = if self.mode == Mode::Live { " selected" } else { "" };
         let _ = write!(
             html,
             "<a class=\"mode{reader}\" href=\"wolfmark://mode/reader\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3ZM12 6v15\"/></svg> &nbsp; Reader</a>"
         );
-        html.push_str("<span class=\"mode unavailable\" aria-disabled=\"true\" title=\"Live Preview editor integration pending\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h18v16H3ZM12 4v16M6 8h3M6 12h3M15 8h3M15 12h3\"/></svg> &nbsp; Live Preview</span>");
+        let _ = write!(html, "<a class=\"mode{live}\" href=\"wolfmark://mode/live\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 4h18v16H3ZM12 4v16M6 8h3M6 12h3M15 8h3M15 12h3\"/></svg> &nbsp; Live Preview</a>");
         let _ = write!(
             html,
             "<a class=\"mode{source}\" href=\"wolfmark://mode/source\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m8 6-6 6 6 6m8-12 6 6-6 6m-3-14-2 16\"/></svg> &nbsp; Source</a>"
         );
         html.push_str("</nav>");
-        if self.mode == Mode::Source && self.path.is_some() {
+        if matches!(self.mode, Mode::Source | Mode::Live) && self.path.is_some() {
             html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://save/current\">Save</a><a class=\"toolbar-link\" href=\"wolfmark://save/as\">Save As</a>");
         }
         let dirty = if self.dirty() { "Unsaved" } else { "" };
@@ -792,6 +804,55 @@ impl Session {
         html.push_str("</div></body></html>");
         html
     }
+}
+
+/// Contextual, source-preserving edit decorations. Span colors do not alter
+/// font metrics; the editable textarea and mirror stay aligned at every caret.
+pub fn decorated_source(source: &str) -> String {
+    if source.len() > 256 * 1024 {
+        return escape(source);
+    }
+    let total = source.encode_utf16().count();
+    let mut color = vec![0u8; total];
+    for decoration in crate::markdown_decorations::decorations(source) {
+        let shade = match decoration.kind {
+            "heading" => 1, "strong" => 2, "emphasis" => 3,
+            "code" => 4, "fence" => 5, "link" => 6,
+            "quote" => 7, "list" => 8, "strike" => 9,
+            _ => 0,
+        };
+        if shade == 0 { continue; }
+        for unit in decoration.start.min(total)..decoration.end.min(total) {
+            color[unit] = shade;
+        }
+        for [start, end] in decoration.markers {
+            for unit in start.min(total)..end.min(total) { color[unit] = 10; }
+        }
+    }
+    let mut result = String::with_capacity(source.len() + 512);
+    let mut active = 0;
+    let mut offset = 0;
+    for ch in source.chars() {
+        let next = color.get(offset).copied().unwrap_or(0);
+        if next != active {
+            if active != 0 { result.push_str("</span>"); }
+            if next != 0 {
+                let _ = write!(result,"<span class=\"live-token-{}\">", next);
+            }
+            active = next;
+        }
+        match ch {
+            '&' => result.push_str("&amp;"),
+            '<' => result.push_str("&lt;"),
+            '>' => result.push_str("&gt;"),
+            '"' => result.push_str("&quot;"),
+            '\'' => result.push_str("&#39;"),
+            _ => result.push(ch),
+        }
+        offset += ch.len_utf16();
+    }
+    if active != 0 { result.push_str("</span>"); }
+    result
 }
 
 pub fn supported_document(path: &Path) -> bool {
@@ -1032,6 +1093,21 @@ fn wrapped_inlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_preview_retains_raw_source_and_has_contextual_decoration() {
+        let source = "# Heading\n\n**bold** and <script>invalid</script>";
+        let decorated = decorated_source(source);
+        assert!(decorated.contains("live-token-1"));
+        assert!(decorated.contains("live-token-2"));
+        assert!(!decorated.contains("<script>"));
+        let mut session = Session::default();
+        session.mode = Mode::Live;
+        let html = session.render_html();
+        assert!(html.contains("live-highlights"));
+        assert!(html.contains("source-editor"));
+        assert!(html.contains("wolfmark://mode/live"));
+    }
 
     #[test]
     fn settings_screen_is_actionable_and_matches_qt_schema() {
