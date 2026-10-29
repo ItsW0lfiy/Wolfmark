@@ -1,38 +1,39 @@
-# Servo migration parity checklist
+# Wolfmark Servo migration — implementation and acceptance ledger
 
-Baseline: Qt main c6c6d63; Servo c966081. Migration branch:
-`migration/servo-parity-20261029`. Qt remains the default. No production switch
-or removal is authorized until acceptance. Existing untracked Servo Cargo.lock
-is retained. Origin currently uses the legacy Moonmark SSH URL; fetch succeeds.
+**Target branch:** `codex/servo-migration-20261029`. **Production:** Qt remains default on `main`; migration is not yet accepted. A successful Cargo compile is only the first gate. Always inspect the actual implementation and current CI before marking features complete.
 
-| Area / evidence | Shared Rust | Servo baseline / acceptance test |
+## UI and functional comparison
+
+| Feature | Servo migration implementation | Outstanding Qt parity / verification |
 | --- | --- | --- |
-| Reader: wolfmark_qt.cpp, document_zoom.cpp | markdown/{parser,model,highlight}, presentation | Semantic rendering exists; full-width and txt no-wrap already implemented. Verify fixtures, all font sizes at 65–170%, table and image sizing. |
-| Images: architecture/images.md, app/state.rs | images/{paths,loader,cache} | Only paths reused; raw raster data URLs, 2 MiB limit; no bounded decode/cache or SVG. Test formats, unsafe payloads, paths, worker cancellation and animation. |
-| Sessions: wolfmark_qt.cpp, document_sidebar.cpp | app/state.rs renders buffers, not session registry | Open/close/history/reload exist; mode resets, zoom shared, no retained scroll/selection/render cache. Test independent session state and duplicate canonical paths. |
-| Editing: document_editor.cpp, architecture/document-editing.md | markdown/editor.rs provides UTF-16 source decorations | Source read-only, Live Preview disabled. Port buffer/undo/save/conflict ownership to Rust; retain exact BOM and mixed newline bytes. Test dirty mode transitions, atomic saves and external writers before enabling editing. |
-| Search and clipboard: wolfmark_qt.cpp showFind/findNext | No shared search controller | Search placeholder; no code copy. Test forward/backward/wrap and clipboard in actual Servo. |
-| Scroll: smooth_scroll_controller.cpp | experimental smooth_scroll.rs | Damped wheel trajectory exists; lacks layout bounds/rebase and middle autoscroll parity. Compare rapid/reversal/direct inputs, reduced motion, image reflow and idle CPU. |
-| Frame: windows_window_frame.cpp, wolf_title_bar.cpp | window/{state,win32} | Opt-in winit frame; native default retained. Verify every edge, DPI, Snap, system menu, fullscreen restoration. Linux X11/Wayland separately. |
-| Settings: wolfmark_settings.cpp | settings/mod.rs only backend defaults | Native settings persistence/migrations still Qt-owned; port schema/recovery and connect real controls. |
-| Updates: wolfmark_updates.cpp | updates.rs release/checksum logic | No Servo adapter. Explicit GitHub-only transport, progress/error/actions need integration. |
-| Security: image paths and resource delegates | images/paths.rs | Escaped raw HTML, inert external links, CSP, webview request deny; background requests still need audit and traffic verification. |
-| Packaging: Cargo.toml, .cargo/config.toml, installer | maintenance crate and scripts | Separate Servo aliases preserved. Windows installer/portable and Debian runtime packaging unvalidated. |
-| Android | Platform-independent semantic core | Not supported. Requires Android Servo embedding, lifecycle/surface/input/IME, SAF URI access and packaging; desktop dialogs/path assumptions must be abstracted. |
+| Approved shell | Dark graphite/crimson title bar, compact toolbar, footer mountain art, sole sidebar document selector, no rejected dropdown or horizontal tabs | Screenshot comparison at 1648×928 and varied DPI, hover/focus details |
+| Native custom window | Windows frameless by default; Rust winit minimize/maximize/close, movement/resizing; Win32 subclass for native Snap maximize hit and rounded DWM corners. `--native-frame` fallback. X11/Wayland still use native frame by default | Physical Windows Snap Layout hover, DPI, taskbar and system menu; Linux custom frame |
+| Reader | Shared Comrak parser and syntax-highlighted code, full-width Reader, tables, images and outline, zoom | Qt typography details, rich document fixtures, layout/reflow anchors, copy-selection tests |
+| Local images | Shared Rust path policy and decode pipeline, SVG rasterization, bounded worker pool/cache, intercepted in-memory resources; no external image requests | Animated GIF/WebP playback and more image lifecycle tests |
+| Open documents | Native picker, remembered directory, drop, retained sessions, individual zoom/mode/scroll, close, history, file conflict checks | OS association startup matrix, external file watch and exact scroll anchor reflow |
+| Source | Shared Rust editor buffer, BOM/line endings, dirty/save/save-as/conflict/undo/redo, syntax mirror, line gutter, line/column state | Clipboard, IME and complex selection/indent semantics in GUI |
+| Live Preview | Shared edit buffer plus Comrak contextual decorations, inline syntax mirror, editable textarea, gutter and mode switch | **Still substantial:** full Qt cursor-sensitive marker minimization, rich paragraph heading sizing, grapheme/IME editing and layout without caret drift |
+| Outline | Reader anchors; editable Source/Live headings route to source line/caret | Smooth caret positioning and source editor viewport tests |
+| Search | Rust search state plus Servo in-document selection and navigation | Full find-highlighting/per-document search state and actual GUI keyboard tests |
+| Scrolling | Qt-like Rust damped wheel, precision trackpad bypass, middle autoscroll and fixed indicator, reduced-motion bypass, fullscreen document | Physical responsiveness, rapid reversal, image reflow bounds, idle CPU |
+| Settings | Qt-compatible JSON preferences with portable and recovery support; Rust-owned Save/Cancel, Updates/Editor/About, word wrap, last-used folder, focus trap; overlays without reloading Reader | Verify config paths on both platforms, focus/accessible state/snapshot |
+| Updates | Bound-only GitHub Releases check on background thread, fixed canonical HTTPS endpoint, no redirects, bounded metadata, manual check, startup preference | Qt ETag/6h cache, verified release asset downloads and installer handoff |
+| Security | Resource delegate blocks remote document resources/background traffic, document Markdown escaped and external navigation denied | Full network traffic audit, navigation and protocol exploit tests |
+| Distribution | Nested Cargo workspace preserves Qt default and opt-in `cargo servo-test` | Windows packaging/installer, Linux packages and deployment, Android embedding |
 
-## Verification gates (not inferred from compilation)
+## Current verification policy
 
-- [ ] Qt/Servo actual screenshots at 1648 x 928, small/large and multiple DPI.
-- [ ] Reader, Source and contextual Live Preview GUI scenarios.
-- [ ] Safe save/close/reload/conflict byte-preservation scenarios.
-- [ ] Windows physical scrolling/window/clipboard/IME testing.
-- [ ] Linux X11 and Wayland builds and GUI testing.
-- [ ] Offline traffic capture including engine background requests.
-- [ ] Comparable release startup, idle CPU/RAM, document/image/edit/switch/resize/zoom timings and installed size.
-- [ ] Packaging/install/uninstall/update and rollback rehearsal.
+- CI: `.github/workflows/servo-experiment.yml` typechecks Servo on Windows, checks that the default Cargo workspace remains Qt, runs standalone motion-controller tests, and caches the dependency graph.
+- CI does **not** prove a rendered GUI, Qt parity, safe drag/resize behavior or release-ready installation.
+- User acceptance testing begins only **after** the UI integration is sufficiently complete. Development should continue with automation and source-level comparison without repeatedly requesting manual tests.
+- Windows, Debian Linux, and Android support must be distinguished. Android is **not yet implemented**.
+- No project-authored C++, WebView2, Electron, JavaScript application framework, localhost server, or remote frontend is permitted.
+- `main` remains untouched. Never merge or delete Qt before explicit acceptance.
 
-## Rollback and acceptance
+## Next uncompleted gates
 
-Bare Cargo commands continue to build Qt. Servo is only selected by the existing
-explicit aliases. Keep Qt packaging and CI intact. A future default-switch PR
-must supply evidence for the gates above; do not treat this checklist as approval.
+1. Finish Qt rich/contextual Live Preview parity and reliable editor behavior across Source/Live.
+2. Fix all Windows compile/test failures and add actual graphical smoke tests/screenshot comparisons.
+3. Verify native Windows Snap/Layout/window resize/restore semantics and Linux frame/input behavior.
+4. Finish GitHub update/download verification and portable/installer packaging.
+5. Validate visual parity, performance, resource constraints and offline security before merging.
