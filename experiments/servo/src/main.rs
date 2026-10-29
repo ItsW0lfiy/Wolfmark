@@ -166,6 +166,14 @@ impl servo::WebViewDelegate for State {
         if status != embedder_traits::LoadStatus::Complete || self.smoke_page {
             return;
         }
+        if std::env::var_os("WOLFMARK_SERVO_GUI_TEST").is_some() {
+            // Verify that privileged host JavaScript evaluation is functional
+            // before diagnosing console-message delivery and editor actions.
+            webview.evaluate_javascript(
+                "JSON.stringify({loaded:document.readyState,editor:!!document.getElementById('source-editor'),find:!!document.getElementById('find-query')})",
+                |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
+            );
+        }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save") {
             if !self.gui_probe_started.replace(true) {
                 webview.evaluate_javascript("{const e=document.getElementById('source-editor');if(e){e.value+='\\nServo GUI edit ✓\\n';console.error('WOLFMARK_GUI_SAVE');}}", |_| {});
