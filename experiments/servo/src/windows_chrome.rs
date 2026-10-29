@@ -8,17 +8,24 @@ use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
 use windows_sys::Win32::Graphics::Dwm::{DwmDefWindowProc, DwmSetWindowAttribute};
-use windows_sys::Win32::UI::Controls::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_STYLE, GetClientRect, GetWindowLongPtrW, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT,
     HTCAPTION, HTCLIENT, HTLEFT, HTMAXBUTTON, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT,
     IsZoomed, SW_MAXIMIZE, SW_RESTORE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, ScreenToClient,
+    SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, WM_NCHITTEST, WM_NCLBUTTONDOWN,
     WM_NCLBUTTONUP, WM_NCDESTROY, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
     WS_THICKFRAME,
 };
+
+// Windows-sys 0.61 exposes ScreenToClient inconsistently across features;
+// import the documented Win32 ABI directly, without a C++ wrapper.
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn ScreenToClient(hwnd: HWND, point: *mut POINT) -> i32;
+}
 
 const FRAME_ID: usize = 0x574f_4c46;
 
