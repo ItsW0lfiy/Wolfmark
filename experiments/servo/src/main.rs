@@ -168,7 +168,7 @@ impl servo::WebViewDelegate for State {
         }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save") {
             if !self.gui_probe_started.replace(true) {
-                webview.evaluate_javascript("{const e=document.getElementById('source-editor');if(e){e.value+='\\nServo GUI edit ✓\\n';console.debug('WOLFMARK_GUI_SAVE');}}", |_| {});
+                webview.evaluate_javascript("{const e=document.getElementById('source-editor');if(e){e.value+='\\nServo GUI edit ✓\\n';console.error('WOLFMARK_GUI_SAVE');}}", |_| {});
             } else if !self.document.borrow().dirty()
                 && self.document.borrow().source.contains("Servo GUI edit ✓")
             {
@@ -180,7 +180,7 @@ impl servo::WebViewDelegate for State {
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader")
             && !self.gui_probe_started.replace(true)
         {
-            self.scripts.borrow_mut().push((webview.clone(),"document.querySelector('.findbar').hidden=false;document.getElementById('find-query').value='Wolfmark';console.debug('WOLFMARK_GUI_FIND');".into()));
+            self.scripts.borrow_mut().push((webview.clone(),"document.querySelector('.findbar').hidden=false;document.getElementById('find-query').value='Wolfmark';console.error('WOLFMARK_GUI_FIND');".into()));
             let _ = self.waker.0.send_event(Wake);
         }
         if self.document.borrow().mode == ui::Mode::Reader {
@@ -213,7 +213,7 @@ impl servo::WebViewDelegate for State {
                 // Large files must not be re-serialized/reparsed on every
                 // physical key stroke. Save/switch still forces a fresh sync.
                 pendingUpdate=setTimeout(()=>{{
-                    console.debug('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
+                    console.error('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
                     pendingUpdate=null;
                 }},75);
             }};
