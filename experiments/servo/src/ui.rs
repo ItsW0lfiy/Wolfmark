@@ -34,6 +34,8 @@ pub struct Session {
     pub notice: Option<String>,
     pub frameless_test: bool,
     pub settings_open: bool,
+    pub settings_page: &'static str,
+    pub settings_draft: Option<crate::user_settings::Preferences>,
     pub preferences: crate::user_settings::Preferences,
     pub view_revision: std::cell::Cell<u64>,
     // Sidebar document history belongs to Rust, never to browser storage.
@@ -79,6 +81,8 @@ impl Default for Session {
             zoom: 100,
             frameless_test: false,
             settings_open: false,
+            settings_page: "updates",
+            settings_draft: None,
             preferences,
             view_revision: std::cell::Cell::new(0),
             notice,
@@ -279,41 +283,86 @@ impl Session {
         self.activate(next.checked_sub(1), true);
     }
 
-    pub fn toggle_setting(&mut self, field: &str) -> Result<(), String> {
-        match field {
-            "word-wrap" => self.preferences.editor_word_wrap = !self.preferences.editor_word_wrap,
-            "check-updates" => self.preferences.check_on_startup = !self.preferences.check_on_startup,
-            "prereleases" => self.preferences.include_prereleases = !self.preferences.include_prereleases,
-            _ => return Err("Unknown settings field".into()),
-        }
-        self.preferences.save().map_err(|error| {
+    pub fn begin_settings(&mut self) {
+        self.settings_open = true;
+        self.settings_page = "updates";
+        self.settings_draft = Some(self.preferences.clone());
+    }
+
+    pub fn cancel_settings(&mut self) {
+        self.settings_open = false;
+        self.settings_draft = None;
+    }
+
+    pub fn save_settings(&mut self) -> Result<(), String> {
+        let draft = self.settings_draft.as_ref().ok_or("Settings dialog is not open")?;
+        draft.save().map_err(|error| {
             self.notice = Some(format!("Could not save settings: {error}"));
             error
         })?;
+        self.preferences = draft.clone();
+        self.cancel_settings();
         self.notice = None;
         Ok(())
     }
 
+    pub fn settings_page(&mut self, page: &'static str) {
+        if matches!(page, "updates" | "editor" | "about") {
+            self.settings_page = page;
+        }
+    }
+
+    pub fn toggle_setting(&mut self, field: &str) -> Result<(), String> {
+        let draft = self.settings_draft.as_mut().ok_or("Settings dialog is not open")?;
+        match field {
+            "word-wrap" => draft.editor_word_wrap = !draft.editor_word_wrap,
+            "check-updates" => draft.check_on_startup = !draft.check_on_startup,
+            "prereleases" => draft.include_prereleases = !draft.include_prereleases,
+            _ => return Err("Unknown settings field".into()),
+        }
+        Ok(())
+    }
+
     pub fn settings_html(&self) -> String {
-        let mut html = String::new();
+        let draft = self.settings_draft.as_ref().unwrap_or(&self.preferences);
         let checked = |enabled: bool| if enabled { "checked" } else { "" };
+        let mut html = String::new();
         html.push_str("<section class=\"settings-overlay\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"settings-title\">");
         html.push_str("<div class=\"settings-window\"><header class=\"settings-header\">");
         html.push_str("<span class=\"settings-brand\">Wolfmark <span>/ Settings</span></span>");
-        html.push_str("<a href=\"wolfmark://settings/close\" class=\"settings-close\" aria-label=\"Close Settings\" title=\"Close Settings\">");
+        html.push_str("<a href=\"wolfmark://settings/close\" class=\"settings-close\" aria-label=\"Cancel and close Settings\" title=\"Cancel\">");
         html.push_str("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><path d=\"m6 6 12 12 M18 6 6 18\"/></svg></a></header>");
         html.push_str("<div class=\"settings-columns\"><nav class=\"settings-navigation\" aria-label=\"Settings categories\">");
-        html.push_str("<span class=\"settings-nav-current\">General</span><span>Editor</span><span>Updates</span><span>About</span></nav>");
-        html.push_str("<div class=\"settings-content\"><h1 id=\"settings-title\">Settings</h1>");
-        html.push_str("<p class=\"settings-description\">Personalize Wolfmark without changing the underlying Markdown files.</p>");
-        html.push_str("<h2>Editor</h2><p class=\"settings-note\">Changes apply to Source mode.</p>");
-        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/word-wrap\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Word wrap</strong><small>Wrap long lines within the editor viewport</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.editor_word_wrap,checked(self.preferences.editor_word_wrap));
-        html.push_str("<h2>Updates</h2><p class=\"settings-note\">Preferences are saved immediately. Automatic GitHub update transport is not yet connected in the Servo frontend.</p>");
-        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check on startup</strong><small>Allow Wolfmark to check for GitHub updates when the updater is integrated</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.check_on_startup,checked(self.preferences.check_on_startup));
-        let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/prereleases\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Include prereleases</strong><small>Allow development-channel releases in future update checks</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",self.preferences.include_prereleases,checked(self.preferences.include_prereleases));
-        html.push_str("<h2>About</h2><div class=\"settings-about\"><strong>Wolfmark</strong><span>0.1.0-dev.7 — Servo migration prototype</span>");
-        let _ = write!(html,"<span>Settings storage: {}</span><span>{}</span></div>",escape(&self.preferences.path().to_string_lossy()),if self.preferences.portable{"Portable mode"}else{"Installed/user mode"});
-        html.push_str("</div></div><footer class=\"settings-footer\"><span>Changes are saved automatically</span><a href=\"wolfmark://settings/close\">Done</a></footer></div></section>");
+        html.push_str("<div class=\"settings-identity\">Wolfmark</div>");
+        for (page, label) in [("updates", "Updates"), ("editor", "Reader &amp; Editor"), ("about", "About")] {
+            let active = if self.settings_page == page { " settings-nav-current" } else { "" };
+            let _ = write!(html, "<a class=\"settings-nav-item{active}\" href=\"wolfmark://settings/page-{page}\">{label}</a>");
+        }
+        html.push_str("<span class=\"settings-nav-version\">0.1.0-dev.7<br>Free and open source</span></nav>");
+        html.push_str("<div class=\"settings-content\">");
+        match self.settings_page {
+            "editor" => {
+                html.push_str("<span class=\"settings-eyebrow\">WOLFMARK / DOCUMENTS</span><h1 id=\"settings-title\">Reader &amp; Editor</h1>");
+                html.push_str("<p class=\"settings-description\">Newly opened documents begin in Reader. Saving is explicit; autosave is disabled.</p>");
+                html.push_str("<h2>Source editing</h2>");
+                let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/word-wrap\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Wrap long source lines</strong><small>Wrap text to fit the editor window. The original source is preserved.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>", draft.editor_word_wrap, checked(draft.editor_word_wrap));
+            }
+            "about" => {
+                html.push_str("<span class=\"settings-eyebrow\">WOLFMARK / INFORMATION</span><h1 id=\"settings-title\">About Wolfmark</h1>");
+                html.push_str("<p class=\"settings-description\">A viewer-first Markdown and text reader for ordinary local files.</p>");
+                html.push_str("<h2>Wolfmark 0.1.0-dev.7</h2><div class=\"settings-about\"><span>Free and open-source software · GPL-3.0-only</span><span>Rust · Servo · Comrak</span>");
+                let _ = write!(html, "<span>Settings location: {}</span><span>{}</span></div>", escape(&draft.path().to_string_lossy()), if draft.portable { "Portable mode" } else { "User configuration" });
+            }
+            _ => {
+                html.push_str("<span class=\"settings-eyebrow\">WOLFMARK / PREFERENCES</span><h1 id=\"settings-title\">Updates</h1>");
+                html.push_str("<p class=\"settings-description\">Wolfmark's update source is public GitHub Releases, without an account or telemetry.</p>");
+                html.push_str("<h2>Update preferences</h2>");
+                let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/check-updates\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Check for updates automatically</strong><small>Check quietly after Wolfmark opens when the GitHub updater is connected.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.check_on_startup,checked(draft.check_on_startup));
+                let _ = write!(html, "<a class=\"setting-row\" href=\"wolfmark://settings/prereleases\" role=\"checkbox\" aria-checked=\"{}\"><span><strong>Include pre-release versions</strong><small>Development builds may be less stable than regular releases.</small></span><span class=\"setting-checkbox {}\"><svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m3 8 3 3 7-7\"/></svg></span></a>",draft.include_prereleases,checked(draft.include_prereleases));
+                html.push_str("<h2>Current version</h2><div class=\"settings-about\"><strong>Wolfmark 0.1.0-dev.7</strong><span>The GitHub update-check and download transport has not been connected to Servo yet.</span></div>");
+            }
+        }
+        html.push_str("</div></div><footer class=\"settings-footer\"><span>Changes are saved only when you select Save</span><div class=\"settings-actions\"><a class=\"settings-cancel\" href=\"wolfmark://settings/close\">Cancel</a><a class=\"settings-save\" href=\"wolfmark://settings/save\">Save</a></div></footer></div></section>");
         html
     }
 
@@ -983,17 +1032,25 @@ mod tests {
     fn settings_screen_is_actionable_and_matches_qt_schema() {
         let mut session = Session::default();
         assert!(session.render_html().contains("wolfmark://settings/open"));
-        session.settings_open = true;
+        session.begin_settings();
         let html = session.render_html();
         for url in [
             "wolfmark://settings/close",
-            "wolfmark://settings/word-wrap",
+            "wolfmark://settings/save",
+            "wolfmark://settings/page-editor",
             "wolfmark://settings/check-updates",
             "wolfmark://settings/prereleases",
         ] {
             assert!(html.contains(url), "missing {url}");
         }
-        assert!(html.contains("Changes are saved automatically"));
+        session.settings_page("editor");
+        assert!(session.render_html().contains("wolfmark://settings/word-wrap"));
+        assert!(html.contains("Changes are saved only when you select Save"));
+        let previous = session.preferences.editor_word_wrap;
+        session.toggle_setting("word-wrap").unwrap();
+        assert_eq!(session.preferences.editor_word_wrap, previous);
+        session.cancel_settings();
+        assert_eq!(session.preferences.editor_word_wrap, previous);
     }
 
     #[test]
