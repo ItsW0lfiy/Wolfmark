@@ -178,12 +178,12 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 /* Contextual Live Preview editor: source text remains in a real editable
    textarea, while a separate inert Comrak-colored mirror provides visual
    decorations without corrupting source, selection, or undo history. */
-.live-stage{display:grid;grid-template-columns:37px minmax(0,1fr);gap:0;width:100%;min-height:calc(100vh - 140px);background:#101114;border:1px solid #393840;border-radius:8px;overflow:hidden}
-.live-line-numbers{font:13px/1.65 Consolas,"Cascadia Code",monospace;color:#85828d;background:#15151a;border-right:1px solid #34333a;text-align:right;padding:16px 7px 16px 0;margin:0;white-space:pre;overflow:hidden;user-select:none}
-.live-edit-surface{position:relative;min-width:0;min-height:100%;font:13px/1.65 Consolas,"Cascadia Code",monospace;overflow:hidden}
-.live-highlights,.live-edit-surface .source-editor{font:inherit!important;tab-size:4;letter-spacing:0;white-space:pre;overflow-wrap:normal;padding:16px 13px;margin:0;border:0;border-radius:0;box-sizing:border-box;line-height:1.65;min-height:100%;width:100%}
+.live-stage{display:grid;grid-template-columns:37px minmax(0,1fr);gap:0;width:100%;height:calc(100vh - 190px);min-height:310px;background:#101114;border:1px solid #393840;border-radius:8px;overflow:hidden}
+.live-line-numbers{height:100%;min-height:0;max-height:100%;font:13px/1.65 Consolas,"Cascadia Code",monospace;color:#85828d;background:#15151a;border-right:1px solid #34333a;text-align:right;padding:16px 7px 16px 0;margin:0;white-space:pre;overflow:hidden;user-select:none}
+.live-edit-surface{position:relative;min-width:0;min-height:0;height:100%;font:13px/1.65 Consolas,"Cascadia Code",monospace;overflow:hidden}
+.live-highlights,.live-edit-surface .source-editor{font:inherit!important;tab-size:4;letter-spacing:0;white-space:pre;overflow-wrap:normal;padding:16px 13px;margin:0;border:0;border-radius:0;box-sizing:border-box;line-height:1.65;height:100%;min-height:0;width:100%}
 .live-highlights{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:#e8e6e9;z-index:1}
-.live-edit-surface .source-editor{position:relative;z-index:2;background:transparent!important;color:transparent!important;caret-color:#fff;resize:none;outline:none;overflow:auto;min-height:calc(100vh - 140px)}
+.live-edit-surface .source-editor{position:relative;z-index:2;background:transparent!important;color:transparent!important;caret-color:#fff;resize:none;outline:none;overflow:auto;height:100%;min-height:0}
 .live-edit-surface .source-editor:focus{outline:none}
 .live-edit-surface .source-editor::selection{background:rgba(197,54,99,.38);color:transparent}
 .live-token-1{color:#f2d8e3}
@@ -248,3 +248,7 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 
 /* Non-modal file-change feedback: no permanent Reader-wide banner. */
 .wm-file-warning{position:fixed;z-index:54;top:106px;right:20px;max-width:min(460px,calc(100vw - 36px));padding:13px 17px;background:rgba(42,30,40,.97);color:#f1e3e9;border:1px solid #99506c;border-left:3px solid #d83c68;border-radius:8px;box-shadow:0 8px 32px #0008;font:12px/1.5 "Segoe UI",system-ui,sans-serif;pointer-events:none;overflow-wrap:anywhere}
+
+/* Keep all three source layers in the same scrollable viewport. */
+.wm-fullscreen .live-stage{height:calc(100vh - 80px)}
+@media(max-height:580px){.live-stage{min-height:210px;height:calc(100vh - 165px)}}
