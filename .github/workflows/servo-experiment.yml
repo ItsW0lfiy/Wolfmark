@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - experiment/servo-embedding-poc-20261026
+      - codex/servo-migration-20261029
     paths:
       - ".github/workflows/servo-experiment.yml"
       - ".cargo/config.toml"
       - "experiments/servo/**"
+      - "src/**"
       - "Cargo.toml"
   workflow_dispatch:
 
