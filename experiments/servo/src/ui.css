@@ -174,3 +174,25 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .settings-actions .settings-cancel:hover{background:#3b323d}
 .settings-actions .settings-save{background:#922747;color:#fff;border:1px solid #b6385d;font-weight:600}
 .settings-actions .settings-save:hover{background:#b32b54}
+
+/* Contextual Live Preview editor: source text remains in a real editable
+   textarea, while a separate inert Comrak-colored mirror provides visual
+   decorations without corrupting source, selection, or undo history. */
+.live-stage{display:grid;grid-template-columns:37px minmax(0,1fr);gap:0;width:100%;min-height:calc(100vh - 190px);background:#101114;border:1px solid #393840;border-radius:8px;overflow:hidden}
+.live-line-numbers{font:13px/1.65 Consolas,"Cascadia Code",monospace;color:#85828d;background:#15151a;border-right:1px solid #34333a;text-align:right;padding:16px 7px 16px 0;margin:0;white-space:pre;overflow:hidden;user-select:none}
+.live-edit-surface{position:relative;min-width:0;min-height:100%;font:13px/1.65 Consolas,"Cascadia Code",monospace;overflow:hidden}
+.live-highlights,.live-edit-surface .source-editor{font:inherit!important;tab-size:4;letter-spacing:0;white-space:pre;overflow-wrap:normal;padding:16px 13px;margin:0;border:0;border-radius:0;box-sizing:border-box;line-height:1.65;min-height:100%;width:100%}
+.live-highlights{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:#e8e6e9;z-index:1}
+.live-edit-surface .source-editor{position:relative;z-index:2;background:transparent!important;color:transparent!important;caret-color:#fff;resize:none;outline:none;overflow:auto;min-height:calc(100vh - 190px)}
+.live-edit-surface .source-editor:focus{outline:none}
+.live-edit-surface .source-editor::selection{background:rgba(197,54,99,.38);color:transparent}
+.live-token-1{color:#f2d8e3}
+.live-token-2{color:#ebd9c6}
+.live-token-3{color:#c6c9ef}
+.live-token-4{color:#c9dcf2}
+.live-token-5{color:#d8b8a3}
+.live-token-6{color:#d8a1b6}
+.live-token-7{color:#c5aab7}
+.live-token-8{color:#dac0ac}
+.live-token-9{color:#a4a1a8}
+.live-token-10{color:#a96a80}
