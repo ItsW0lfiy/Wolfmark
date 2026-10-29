@@ -55,6 +55,8 @@ jobs:
             servo-linux-ubuntu24-v1-
       - name: Build actual Servo executable
         run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target
+      - name: Typecheck Rust integration and unit-test targets
+        run: cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests
       - name: Verify software OpenGL and capture four UI modes
         shell: bash
         run: |
