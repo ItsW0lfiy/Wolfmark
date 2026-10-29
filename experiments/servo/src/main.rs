@@ -33,6 +33,8 @@ mod presentation;
 
 #[path = "../../../src/markdown/anchors.rs"]
 mod anchors;
+#[path = "../../../src/markdown/editor.rs"]
+mod markdown_decorations;
 mod editor;
 mod image_resources;
 mod search;
@@ -167,6 +169,12 @@ impl servo::WebViewDelegate for State {
                 document.getElementById('editor-status').textContent='Unsaved';
             }};
             editor.addEventListener('input',changed);
+            const mirror=document.getElementById('live-highlights');
+            if(mirror){{
+                const syncScroll=()=>{{mirror.scrollTop=editor.scrollTop;mirror.scrollLeft=editor.scrollLeft;}};
+                editor.addEventListener('scroll',syncScroll);
+                syncScroll();
+            }}
             editor.addEventListener('keydown',event=>{{
                 if(event.key==='Tab'){{
                     event.preventDefault();
@@ -178,7 +186,7 @@ impl servo::WebViewDelegate for State {
     }
     fn show_console_message(
         &self,
-        _webview: WebView,
+        webview: WebView,
         _level: embedder_traits::ConsoleLogLevel,
         message: String,
     ) {
@@ -218,12 +226,19 @@ impl servo::WebViewDelegate for State {
             return;
         };
         let mut document = self.document.borrow_mut();
-        if revision != document.view_revision.get() || document.mode != ui::Mode::Source {
+        if revision != document.view_revision.get()
+            || !matches!(document.mode, ui::Mode::Source | ui::Mode::Live) {
             return;
         }
         document.set_editor_view((start, end, top));
         if let Err(error) = document.apply_editor_view(&value) {
             document.notice = Some(error);
+        } else if document.mode == ui::Mode::Live {
+            let markup = ui::decorated_source(&document.source.replace("\r\n", "\n"));
+            let escaped = serde_json::to_string(&markup).unwrap_or_else(|_| "\"\"".into());
+            self.scripts.borrow_mut().push((webview.clone(),
+                format!("if(document.getElementById('live-highlights')) document.getElementById('live-highlights').innerHTML={escaped};")));
+            let _ = self.waker.0.send_event(Wake);
         }
         self.window.set_title(&format!(
             "{}{} — Wolfmark (Servo experiment)",
@@ -365,6 +380,7 @@ enum Action {
     OpenDropped,
     Refresh,
     Reader,
+    Live,
     Source,
     ZoomIn,
     ZoomOut,
@@ -417,6 +433,7 @@ impl Action {
                 .map(Self::CopyCode),
             ("refresh", "/") => Some(Self::Refresh),
             ("mode", "/reader") => Some(Self::Reader),
+            ("mode", "/live") => Some(Self::Live),
             ("mode", "/source") => Some(Self::Source),
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
@@ -442,7 +459,7 @@ impl Action {
 
 impl State {
     fn apply_action(self: &Rc<Self>, action: Action) {
-        if self.document.borrow().mode != ui::Mode::Source || self.document.borrow().path.is_none()
+        if !matches!(self.document.borrow().mode, ui::Mode::Source | ui::Mode::Live) || self.document.borrow().path.is_none()
         {
             self.apply_synced_action(action);
             return;
@@ -703,6 +720,7 @@ impl State {
             Action::Undo(redo) => self.document.borrow_mut().undo(redo),
             Action::Refresh => self.document.borrow_mut().reload(),
             Action::Reader => self.document.borrow_mut().mode = ui::Mode::Reader,
+            Action::Live => self.document.borrow_mut().mode = ui::Mode::Live,
             Action::Source => self.document.borrow_mut().mode = ui::Mode::Source,
 
             Action::SelectDocument(index) => self.document.borrow_mut().select(index),
@@ -773,6 +791,7 @@ mod host_actions_tests {
     #[test]
     fn only_known_ui_commands_dispatch() {
         let good = Url::parse("wolfmark://mode/source").unwrap();
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://mode/live").unwrap()), Some(Action::Live));
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(
             Action::from_url(&Url::parse("wolfmark://document/3").unwrap()),
