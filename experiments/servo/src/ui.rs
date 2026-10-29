@@ -574,9 +574,14 @@ impl Session {
         if self.mode == Mode::Source {
             let read_only = if self.path.is_none() { " readonly" } else { "" };
             let wrap = if self.preferences.editor_word_wrap { "soft" } else { "off" };
+            let wrapping_style = if self.preferences.editor_word_wrap {
+                "white-space:pre-wrap;overflow-wrap:anywhere"
+            } else {
+                "white-space:pre;overflow-wrap:normal"
+            };
             let _ = write!(
                 body,
-                "<textarea id=\"source-editor\" class=\"source-editor\" aria-label=\"Markdown source\" spellcheck=\"false\" wrap=\"{wrap}\"{read_only}>\n"
+                "<textarea id=\"source-editor\" class=\"source-editor\" aria-label=\"Markdown source\" spellcheck=\"false\" wrap=\"{wrap}\" style=\"{wrapping_style}\"{read_only}>\n"
             );
             let view = self
                 .active_document
