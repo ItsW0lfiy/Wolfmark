@@ -39,7 +39,7 @@ base64 = "0.22"
 rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", "async-std"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_Controls", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
 
 # Servo 0.7.0 GL context fix from upstream #48636; isolated nested workspace only.
 [patch.crates-io]
