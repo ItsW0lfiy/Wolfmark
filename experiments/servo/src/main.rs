@@ -1501,6 +1501,17 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::RedrawRequested => {
                 if let App::Running(state) = self {
+                    // The automated GUI probes must terminate deterministically
+                    // once the application reports success. Actual interactive
+                    // launches are completely unaffected.
+                    if state.gui_probe_done.get()
+                        && std::env::var_os("WOLFMARK_SERVO_GUI_TEST").is_some()
+                        && std::env::var_os("WOLFMARK_SERVO_SNAPSHOT").is_none()
+                    {
+                        eprintln!("SERVO_GUI_TEST completed successfully");
+                        event_loop.exit();
+                        return;
+                    }
                     state.take_pending_action();
                     if let Some((x, y)) = state.smooth_wheel.borrow_mut().tick(Instant::now()) {
                         if (x.abs() > f64::EPSILON || y.abs() > f64::EPSILON)
