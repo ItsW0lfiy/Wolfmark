@@ -584,6 +584,10 @@ impl Session {
     /// to overwrite external changes.
     ///
     /// Returns true only if the active document requires a visual refresh.
+    pub fn has_open_files(&self) -> bool {
+        !self.open_documents.is_empty()
+    }
+
     pub fn poll_external_files(&mut self) -> bool {
         let mut active_reloaded = false;
         for index in 0..self.open_documents.len() {
@@ -591,10 +595,18 @@ impl Session {
             let latest = DiskStamp::at(&path);
             if self.open_documents[index].disk_stamp == latest { continue; }
             let dirty = self.open_documents[index].editor.dirty();
-            if dirty {
+            // A focused editor can have unsent input (the DOM bridge debounces
+            // updates). Never replace the active Source/Live buffer from disk.
+            let active_editing = self.active_document == Some(index)
+                && matches!(self.mode, Mode::Source | Mode::Live);
+            if dirty || active_editing {
                 self.open_documents[index].disk_stamp = latest;
                 if self.active_document == Some(index) {
-                    self.notice = Some("This file changed outside Wolfmark. Unsaved edits were preserved; Save As is recommended.".into());
+                    self.notice = Some(if dirty {
+                        "This file changed outside Wolfmark. Unsaved edits were preserved; Save As is recommended."
+                    } else {
+                        "This file changed outside Wolfmark while editing. Its in-memory editor was preserved; reload manually when ready."
+                    }.into());
                 }
                 continue;
             }
