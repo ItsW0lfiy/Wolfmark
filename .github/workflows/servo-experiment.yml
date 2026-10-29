@@ -31,6 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Servo Cargo build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-windows-msvc-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-windows-msvc-v1-
       - name: Show toolchain details
         shell: pwsh
         run: |
@@ -63,6 +72,16 @@ jobs:
           cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests
           if ($LASTEXITCODE -ne 0) {
             throw 'Servo prototype test targets failed to compile.'
+          }
+      - name: Execute isolated Rust scrolling regression tests
+        shell: pwsh
+        run: |
+          foreach ($source in @("experiments/servo/src/smooth_scroll.rs", "experiments/servo/src/middle_scroll.rs")) {
+            $exe = Join-Path $env:RUNNER_TEMP ((Split-Path $source -LeafBase) + "-tests.exe")
+            rustc --edition=2024 --test $source -o $exe
+            if ($LASTEXITCODE -ne 0) { throw "Could not compile $source tests" }
+            & $exe
+            if ($LASTEXITCODE -ne 0) { throw "$source motion tests failed" }
           }
       - name: Upload resolved experiment lockfile when generated
         if: always()
