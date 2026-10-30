@@ -252,3 +252,21 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 /* Keep all three source layers in the same scrollable viewport. */
 .wm-fullscreen .live-stage{height:calc(100vh - 80px)}
 @media(max-height:580px){.live-stage{min-height:210px;height:calc(100vh - 165px)}}
+
+/* Qt's compact document-actions overflow menu. The only open-documents list
+   remains in the sidebar; this is an action menu, never another tab strip. */
+.viewbar{position:relative;z-index:9}
+.document-actions{position:relative;flex:none;align-self:center}
+.document-actions summary{display:flex;align-items:center;justify-content:center;width:32px;height:34px;color:#c7c5cc;cursor:pointer;list-style:none;border:1px solid transparent;border-radius:6px;user-select:none}
+.document-actions summary::-webkit-details-marker{display:none}
+.document-actions summary:hover,.document-actions[open] summary{background:#2e2c33;border-color:#49424b;color:#fff}
+.document-actions summary:focus-visible{outline:2px solid #ce416b;outline-offset:2px}
+.document-menu{position:absolute;top:calc(100% + 9px);right:0;width:254px;min-width:254px;padding:7px;border-radius:9px;border:1px solid #49434e;background:#232127;box-shadow:0 13px 36px #000b;display:flex;flex-direction:column;z-index:18}
+.document-menu a,.document-menu span{display:flex;justify-content:space-between;align-items:center;gap:11px;padding:9px 11px;min-height:35px;border-radius:5px;color:#e7e2e9;font:12px "Segoe UI",system-ui,sans-serif;text-decoration:none}
+.document-menu a:hover,.document-menu a:focus-visible{background:#682b42;color:#fff}
+.document-menu a[aria-current="true"]{color:#f5d7e0}
+.document-menu span[aria-disabled="true"]{color:#88828c}
+.document-menu kbd{font:10px "Segoe UI",system-ui,sans-serif;color:#aaa2ac;white-space:nowrap}
+.document-menu hr{height:1px;border:none;background:#45404a;margin:5px 8px}
+.wm-diagnostics{position:fixed;z-index:8;right:22px;bottom:16px;max-width:min(450px,calc(100vw - 44px));padding:8px 12px;background:#242229ec;border:1px solid #564250;border-radius:7px;box-shadow:0 4px 15px #0009;color:#e1ced7;font:11px "Segoe UI",system-ui,sans-serif;pointer-events:none}
+.wm-diagnostics[hidden]{display:none!important}
