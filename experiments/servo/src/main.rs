@@ -137,7 +137,7 @@ struct State {
     cursor: RefCell<DevicePoint>,
     modifiers: RefCell<ServoModifiers>,
     document: RefCell<ui::Session>,
-    pending: RefCell<Option<Action>>,
+    pending: Rc<RefCell<Option<Action>>>,
     smooth_wheel: RefCell<smooth_scroll::SmoothWheel>,
     middle_scroll: RefCell<middle_scroll::MiddleScroll>,
     scroll_origin: RefCell<DevicePoint>,
@@ -157,7 +157,7 @@ struct State {
     dropped_file: RefCell<Option<PathBuf>>,
     scripts: Rc<RefCell<Vec<(WebView, String)>>>,
     gui_probe_started: Cell<bool>,
-    gui_probe_done: Cell<bool>,
+    gui_probe_done: Rc<Cell<bool>>,
     smoke_page: bool,
 }
 
@@ -174,22 +174,51 @@ impl servo::WebViewDelegate for State {
                 |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
             );
         }
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save") {
-            if !self.gui_probe_started.replace(true) {
-                webview.evaluate_javascript("{const e=document.getElementById('source-editor');if(e){e.value+='\\nServo GUI edit ✓\\n';console.error('WOLFMARK_GUI_SAVE');}}", |_| {});
-            } else if !self.document.borrow().dirty()
-                && self.document.borrow().source.contains("Servo GUI edit ✓")
-            {
-                eprintln!("SERVO_GUI source edit synchronized and saved");
-                self.gui_probe_done.set(true);
-                self.window.request_redraw();
-            }
+        // UI probes use the same callback-based host command path as the
+        // application. Console logs are diagnostics, not an IPC transport.
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
+            && !self.gui_probe_started.replace(true)
+        {
+            let pending = self.pending.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(
+                r#"(() => {
+                    const editor=document.getElementById('source-editor');
+                    if(!editor)throw Error('Source editor was not rendered');
+                    editor.value+='\nServo GUI edit ✓\n';
+                    editor.dispatchEvent(new Event('input',{bubbles:true}));
+                    return editor.value.includes('Servo GUI edit ✓');
+                })()"#,
+                move |result| {
+                    eprintln!("SERVO_GUI source input: {result:?}");
+                    if result.is_ok() {
+                        *pending.borrow_mut() = Some(Action::Save(false));
+                        let _ = waker.0.send_event(Wake);
+                    }
+                },
+            );
         }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader")
             && !self.gui_probe_started.replace(true)
         {
-            self.scripts.borrow_mut().push((webview.clone(),"document.querySelector('.findbar').hidden=false;document.getElementById('find-query').value='Wolfmark';console.error('WOLFMARK_GUI_FIND');".into()));
-            let _ = self.waker.0.send_event(Wake);
+            let pending = self.pending.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(
+                r#"(() => {
+                    const find=document.getElementById('find-query');
+                    if(!find)throw Error('Find control was not rendered');
+                    document.querySelector('.findbar').hidden=false;
+                    find.value='Wolfmark';
+                    return find.value;
+                })()"#,
+                move |result| {
+                    eprintln!("SERVO_GUI reader query: {result:?}");
+                    if matches!(result,Ok(embedder_traits::JSValue::String(ref value)) if value == "Wolfmark") {
+                        *pending.borrow_mut() = Some(Action::FindNext(false));
+                        let _ = waker.0.send_event(Wake);
+                    }
+                },
+            );
         }
         if self.document.borrow().mode == ui::Mode::Reader {
             let top = self.document.borrow().reader_scroll.max(0.0);
@@ -273,33 +302,6 @@ impl servo::WebViewDelegate for State {
         _level: embedder_traits::ConsoleLogLevel,
         message: String,
     ) {
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader") {
-            if message == "WOLFMARK_GUI_FIND" {
-                *self.synced_action.borrow_mut() = Some(Action::ZoomIn);
-                *self.pending.borrow_mut() = Some(Action::FindNext(false));
-                self.window.request_redraw();
-                return;
-            }
-            if let Some(json) = message.strip_prefix("WOLFMARK_GUI_READER:") {
-                if let Ok([selection, zoom, count]) = serde_json::from_str::<[String; 3]>(json) {
-                    if selection == "Wolfmark" && zoom == "110%" && count.starts_with("1 /") {
-                        eprintln!("SERVO_GUI reader search selection and retained-DOM zoom passed");
-                        self.gui_probe_done.set(true);
-                        self.window.request_redraw();
-                    } else {
-                        eprintln!("SERVO_GUI reader failed: {selection:?} {zoom:?} {count:?}");
-                    }
-                }
-                return;
-            }
-        }
-        if message == "WOLFMARK_GUI_SAVE"
-            && std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
-        {
-            *self.pending.borrow_mut() = Some(Action::Save(false));
-            self.window.request_redraw();
-            return;
-        }
         let Some(payload) = message.strip_prefix("WOLFMARK_EDITOR:") else {
             return;
         };
@@ -859,6 +861,7 @@ impl State {
                     let search = self.search.clone();
                     let gui_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
                         .is_ok_and(|value| value == "reader");
+                    let probe_pending = self.pending.clone();
                     let target = view.clone();
                     let scripts = self.scripts.clone();
                     let waker = self.waker.clone();
@@ -874,6 +877,9 @@ impl State {
                             defer("document.getElementById('find-count').textContent='No matches'".into());
                             return;
                         };
+                        if gui_test {
+                            *probe_pending.borrow_mut() = Some(Action::ZoomIn);
+                        }
                         defer(format!(r#"(() => {{
                             const editor=document.getElementById('source-editor');
                             if(editor) {{
@@ -948,6 +954,23 @@ impl State {
                     }})()"#, size = f64::from(zoom) * 0.17, padding = f64::from(zoom) * 0.48,
                         top = f64::from(zoom) * 0.32, bottom = f64::from(zoom) * 0.34),
                         |result| { if let Err(error) = result { eprintln!("Zoom update failed: {error:?}"); } });
+                    if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader") {
+                        let done = self.gui_probe_done.clone();
+                        let waker = self.waker.clone();
+                        view.evaluate_javascript(r#"JSON.stringify([window.getSelection().toString(),document.querySelector('.zoom-value')?.textContent,document.getElementById('find-count')?.textContent])"#,
+                            move |result| {
+                                eprintln!("SERVO_GUI reader verification: {result:?}");
+                                if let Ok(embedder_traits::JSValue::String(payload)) = result {
+                                    if let Ok([selection, zoom, count]) = serde_json::from_str::<[String;3]>(&payload) {
+                                        if selection == "Wolfmark" && zoom == "110%" && count.starts_with("1 /") {
+                                            eprintln!("SERVO_GUI reader search selection and retained-DOM zoom passed");
+                                            done.set(true);
+                                            let _ = waker.0.send_event(Wake);
+                                        }
+                                    }
+                                }
+                            });
+                    }
                     self.servo.spin_event_loop();
                 }
                 return;
@@ -1001,7 +1024,15 @@ impl State {
                 }
             }
             Action::Save(save_as) => {
-                self.document.borrow_mut().save(save_as);
+                let saved = self.document.borrow_mut().save(save_as);
+                if saved && std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
+                    && !self.document.borrow().dirty()
+                    && self.document.borrow().source.contains("Servo GUI edit ✓")
+                {
+                    eprintln!("SERVO_GUI source edit synchronized and saved");
+                    self.gui_probe_done.set(true);
+                    self.window.request_redraw();
+                }
             }
             Action::Undo(redo) => {
                 let (value, markup, dirty) = {
@@ -1441,7 +1472,7 @@ impl ApplicationHandler<Wake> for App {
                 cursor: RefCell::new(DevicePoint::new(0.0, 0.0)),
                 modifiers: RefCell::new(ServoModifiers::empty()),
                 document: RefCell::new(std::mem::take(session)),
-                pending: RefCell::new(None),
+                pending: Rc::new(RefCell::new(None)),
                 smooth_wheel: RefCell::new(smooth_scroll::SmoothWheel::default()),
                 middle_scroll: RefCell::new(middle_scroll::MiddleScroll::default()),
                 scroll_origin: RefCell::new(DevicePoint::new(0.0, 0.0)),
@@ -1461,7 +1492,7 @@ impl ApplicationHandler<Wake> for App {
                 dropped_file: RefCell::new(None),
                 scripts: Rc::new(RefCell::new(Vec::new())),
                 gui_probe_started: Cell::new(false),
-                gui_probe_done: Cell::new(false),
+                gui_probe_done: Rc::new(Cell::new(false)),
                 smoke_page: *smoke_page,
             });
 
