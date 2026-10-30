@@ -73,6 +73,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Servo prototype test targets failed to compile.'
           }
+      - name: Assert that the exact Cargo lockfile was sufficient
+        shell: pwsh
+        run: |
+          git diff --exit-code -- experiments/servo/Cargo.lock
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo Cargo.lock changed despite locked compile; commit the resolved lockfile.'
+          }
       - name: Execute isolated Rust scrolling regression tests
         shell: pwsh
         run: |
