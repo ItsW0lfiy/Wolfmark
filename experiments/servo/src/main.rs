@@ -257,6 +257,38 @@ impl servo::WebViewDelegate for State {
             editor.addEventListener('keyup',updateStatus);
             editor.addEventListener('select',updateStatus);
             updateStatus();
+            const rich=document.getElementById('live-rich');
+            if(rich){{
+                const context=rich.closest('.live-context');
+                rich.addEventListener('click',event=>{{
+                    // Do not let a Markdown link navigate when clicking to
+                    // enter editing. Navigation stays under Rust policy.
+                    event.preventDefault();
+                    const fraction=rich.scrollTop/Math.max(1,rich.scrollHeight-rich.clientHeight);
+                    context.classList.add('editing');
+                    editor.scrollTop=fraction*Math.max(0,editor.scrollHeight-editor.clientHeight);
+                    editor.focus();
+                }});
+                rich.addEventListener('keydown',event=>{{
+                    if(event.key==='Enter'||event.key===' '){{
+                        event.preventDefault();
+                        context.classList.add('editing');
+                        editor.focus();
+                    }}
+                }});
+                editor.addEventListener('keydown',event=>{{
+                    if(event.key==='Escape'){{
+                        event.preventDefault();
+                        context.classList.remove('editing');
+                        rich.focus();
+                    }}
+                }});
+                editor.addEventListener('blur',()=>{{
+                    // The Rust dirty poll refreshes the rendered surface
+                    // after the most recent input; do not export DOM HTML.
+                    context.classList.remove('editing');
+                }});
+            }}
             const mirror=document.getElementById('live-highlights');
             if(mirror){{
                 const gutter=document.getElementById('live-line-numbers');
@@ -1390,6 +1422,10 @@ impl State {
                     .map(|line| line.to_string()).collect::<Vec<_>>().join("\n");
                 let line_json = serde_json::to_string(&lines).unwrap_or_else(|_| "\"\"".into());
                 let dirty = document.dirty();
+                let rendered = if document.mode == ui::Mode::Live && value.len() <= 512 * 1024 {
+                    Some(serde_json::to_string(&document.live_rendered_html(&value))
+                        .unwrap_or_else(|_| "\"\"".into()))
+                } else { None };
                 let title = document.title();
                 let live_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
                     .is_ok_and(|value| value == "live-save")
@@ -1403,7 +1439,8 @@ impl State {
                 ));
                 state.scripts.borrow_mut().push((
                     source_view,
-                    format!("if(document.getElementById('live-highlights'))document.getElementById('live-highlights').innerHTML={encoded};if(document.getElementById('live-line-numbers'))document.getElementById('live-line-numbers').textContent={line_json};document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});"),
+                    format!("if(document.getElementById('live-highlights'))document.getElementById('live-highlights').innerHTML={encoded};if(document.getElementById('live-line-numbers'))document.getElementById('live-line-numbers').textContent={line_json};document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});{}",
+                        rendered.map(|html| format!("if(document.getElementById('live-rich'))document.getElementById('live-rich').innerHTML={html};")).unwrap_or_default()),
                 ));
                 let _ = state.waker.0.send_event(Wake);
             },
