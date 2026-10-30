@@ -109,6 +109,12 @@ jobs:
             grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-live.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live.log
             grep -F "Servo GUI edit" /tmp/wm-servo-live-fixture.md
+            export WOLFMARK_SERVO_GUI_TEST=rich
+            export WOLFMARK_SNAPSHOT_MODE=live
+            printf "# Contextual Heading\\n\\nA **strong** paragraph.\\n" > /tmp/wm-servo-rich-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-rich-fixture.md > /tmp/wm-rich.log 2>&1 || { cat /tmp/wm-rich.log; exit 1; }
+            grep -F "SERVO_GUI rich Live Preview contextual toggle passed" /tmp/wm-rich.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-rich.log
             export WOLFMARK_SERVO_GUI_TEST=image
             export WOLFMARK_SNAPSHOT_MODE=reader
             mkdir -p /tmp/wm-servo-image-fixture
