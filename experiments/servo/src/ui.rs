@@ -46,6 +46,7 @@ pub struct Session {
     pub settings_draft: Option<crate::user_settings::Preferences>,
     pub preferences: crate::user_settings::Preferences,
     pub update_status: String,
+    pub update_release_url: Option<String>,
     pub view_revision: std::cell::Cell<u64>,
     // Sidebar document history belongs to Rust, never to browser storage.
     open_documents: Vec<SavedDocument>,
@@ -113,6 +114,7 @@ impl Default for Session {
             settings_draft: None,
             preferences,
             update_status: "Not checked".to_owned(),
+            update_release_url: None,
             view_revision: std::cell::Cell::new(0),
             notice,
             open_documents: Vec::new(),
@@ -399,6 +401,9 @@ impl Session {
                 html.push_str("<h2>Current version</h2><div class=\"settings-about\"><strong>Wolfmark 0.1.0-dev.7</strong>");
                 let _ = write!(html,"<span id=\"update-status\" role=\"status\">{}</span></div>",escape(&self.update_status));
                 html.push_str("<a href=\"wolfmark://updates/check\" class=\"settings-check-now\" title=\"Check GitHub Releases now\">Check now</a>");
+                if self.update_release_url.is_some() {
+                    html.push_str("<a href=\"wolfmark://updates/open\" class=\"settings-view-release\" title=\"Open the verified Wolfmark release page in your default browser\">View release on GitHub</a>");
+                }
             }
         }
         html.push_str("</div></div><footer class=\"settings-footer\"><span>Changes are saved only when you select Save</span><div class=\"settings-actions\"><a class=\"settings-cancel\" href=\"wolfmark://settings/close\">Cancel</a><a class=\"settings-save\" href=\"wolfmark://settings/save\">Save</a></div></footer></div></section>");
@@ -1369,6 +1374,8 @@ mod tests {
         ui.begin_settings();
         let html = ui.render_html();
         assert!(html.contains("wolfmark://updates/check"));
+        ui.update_release_url = Some("https://github.com/ItsW0lfiy/Wolfmark/releases/tag/0.1.0".to_owned());
+        assert!(ui.render_html().contains("wolfmark://updates/open"));
         assert!(html.contains("id=\"update-status\""));
     }
 
