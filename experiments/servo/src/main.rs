@@ -333,6 +333,31 @@ impl servo::WebViewDelegate for State {
                 |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
             );
         }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "rich")
+            && !self.gui_probe_started.replace(true)
+        {
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"(() => {
+                const rich=document.getElementById('live-rich');
+                const editor=document.getElementById('source-editor');
+                if(!rich||!editor)return false;
+                const heading=rich.querySelector('h1');
+                if(!heading)return false;
+                rich.click();
+                const entered=rich.closest('.live-context').classList.contains('editing');
+                editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+                const exited=!rich.closest('.live-context').classList.contains('editing');
+                return entered&&exited&&heading.textContent.length>0;
+            })()"#, move |result| {
+                eprintln!("SERVO_GUI rich contextual editing: {result:?}");
+                if matches!(result, Ok(embedder_traits::JSValue::Boolean(true))) {
+                    eprintln!("SERVO_GUI rich Live Preview contextual toggle passed");
+                    done.set(true);
+                    let _ = waker.0.send_event(Wake);
+                }
+            });
+        }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "menu")
             && !self.gui_probe_started.replace(true)
         {
