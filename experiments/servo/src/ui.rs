@@ -41,6 +41,7 @@ pub struct Session {
     pub frameless_test: bool,
     pub settings_open: bool,
     pub sidebar_collapsed: bool,
+    pub diagnostics: bool,
     pub settings_page: &'static str,
     pub settings_draft: Option<crate::user_settings::Preferences>,
     pub preferences: crate::user_settings::Preferences,
@@ -107,6 +108,7 @@ impl Default for Session {
             frameless_test: false,
             settings_open: false,
             sidebar_collapsed: false,
+            diagnostics: false,
             settings_page: "updates",
             settings_draft: None,
             preferences,
@@ -918,9 +920,6 @@ impl Session {
             "<a class=\"mode{source}\" href=\"wolfmark://mode/source\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m8 6-6 6 6 6m8-12 6 6-6 6m-3-14-2 16\"/></svg> &nbsp; Source</a>"
         );
         html.push_str("</nav>");
-        if matches!(self.mode, Mode::Source | Mode::Live) && self.path.is_some() {
-            html.push_str("<a class=\"toolbar-link\" href=\"wolfmark://save/current\">Save</a><a class=\"toolbar-link\" href=\"wolfmark://save/as\">Save As</a>");
-        }
         let dirty = if self.dirty() { "Unsaved" } else { "" };
         let _ = write!(
             html,
@@ -932,6 +931,19 @@ impl Session {
             "<a href=\"wolfmark://zoom/out\" title=\"Zoom out\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a><a class=\"zoom-value\" href=\"wolfmark://zoom/reset\" title=\"Reset document zoom\">{}%</a><a href=\"wolfmark://zoom/in\" title=\"Zoom in\">+</a></nav>",
             self.zoom
         );
+        // Qt's document-actions menu lives beside zoom rather than adding
+        // another document tab or toolbar row. Use native HTML disclosure so
+        // it works entirely offline and remains keyboard-accessible.
+        html.push_str("<details class=\"document-actions\"><summary title=\"Document actions\" aria-label=\"Document actions\"><svg viewBox=\"0 0 24 24\" width=\"19\" height=\"19\" aria-hidden=\"true\" fill=\"currentColor\"><circle cx=\"5\" cy=\"12\" r=\"1.6\"/><circle cx=\"12\" cy=\"12\" r=\"1.6\"/><circle cx=\"19\" cy=\"12\" r=\"1.6\"/></svg></summary><nav class=\"document-menu\" aria-label=\"Document actions\">");
+        if self.path.is_some() {
+            html.push_str("<a href=\"wolfmark://save/current\">Save <kbd>Ctrl+S</kbd></a><a href=\"wolfmark://save/as\">Save As… <kbd>Ctrl+Shift+S</kbd></a>");
+        } else {
+            html.push_str("<span aria-disabled=\"true\">Save <kbd>Ctrl+S</kbd></span><span aria-disabled=\"true\">Save As… <kbd>Ctrl+Shift+S</kbd></span>");
+        }
+        html.push_str("<a href=\"wolfmark://find/open\">Find… <kbd>Ctrl+F</kbd></a><hr><a href=\"wolfmark://zoom/reset\">Reset zoom</a><hr><a href=\"wolfmark://fullscreen/toggle\">Fullscreen <kbd>F11</kbd></a><a href=\"wolfmark://settings/open\">Settings… <kbd>Ctrl+,</kbd></a>");
+        let checked = if self.diagnostics { " aria-current=\"true\"" } else { "" };
+        let _ = write!(html, "<a href=\"wolfmark://diagnostics/toggle\"{checked}>Diagnostics <kbd>F12</kbd></a>");
+        html.push_str("</nav></details>");
         html.push_str("</div><div class=\"findbar\" hidden><input id=\"find-query\" aria-label=\"Find in document\" placeholder=\"Find text\"><a href=\"wolfmark://find/previous\">Previous</a><a href=\"wolfmark://find/next\">Next</a><span id=\"find-count\" role=\"status\"></span><a href=\"wolfmark://find/close\" aria-label=\"Close search\">Close</a></div>");
         let document_padding = (48.0 * f64::from(self.zoom) / 100.0).round();
         let top_padding = (32.0 * f64::from(self.zoom) / 100.0).round();
@@ -954,6 +966,13 @@ impl Session {
         );
 
         html.push_str("</div></div></main>");
+        let hidden = if self.diagnostics { "" } else { " hidden" };
+        let _ = write!(html,
+            "<aside class=\"wm-diagnostics\" id=\"wm-diagnostics\"{hidden} role=\"status\">Wolfmark Servo · {} · {}% · {} open documents · {} · offline reader</aside>",
+            match self.mode { Mode::Reader => "Reader", Mode::Live => "Live Preview", Mode::Source => "Source" },
+            self.zoom, self.open_documents.len(),
+            if self.dirty() { "unsaved changes" } else { "saved" }
+        );
         if self.settings_open {
             html.push_str(&self.settings_html());
         }
@@ -1289,6 +1308,23 @@ mod tests {
         assert!(html.contains("live-highlights"));
         assert!(html.contains("source-editor"));
         assert!(html.contains("wolfmark://mode/live"));
+    }
+
+    #[test]
+    fn document_actions_match_qt_without_extra_tab_rows() {
+        let mut ui = Session::default();
+        let html = ui.render_html();
+        for action in [
+            "wolfmark://find/open",
+            "wolfmark://zoom/reset",
+            "wolfmark://fullscreen/toggle",
+            "wolfmark://settings/open",
+            "wolfmark://diagnostics/toggle",
+        ] {
+            assert!(html.contains(action), "missing {action}");
+        }
+        ui.diagnostics = true;
+        assert!(ui.render_html().contains("wm-diagnostics"));
     }
 
     #[test]
