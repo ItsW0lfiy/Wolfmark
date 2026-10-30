@@ -270,3 +270,8 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .document-menu hr{height:1px;border:none;background:#45404a;margin:5px 8px}
 .wm-diagnostics{position:fixed;z-index:8;right:22px;bottom:16px;max-width:min(450px,calc(100vw - 44px));padding:8px 12px;background:#242229ec;border:1px solid #564250;border-radius:7px;box-shadow:0 4px 15px #0009;color:#e1ced7;font:11px "Segoe UI",system-ui,sans-serif;pointer-events:none}
 .wm-diagnostics[hidden]{display:none!important}
+
+/* Verified GitHub Releases are opened externally, never inside the Markdown
+   document or through a remote frontend. */
+.settings-view-release{display:inline-flex;align-items:center;justify-content:center;margin:14px 0 0 11px;padding:9px 17px;border:1px solid #665462;border-radius:7px;color:#ead8e2;background:#2d252d;text-decoration:none;font:600 12px "Segoe UI",system-ui,sans-serif}
+.settings-view-release:hover{color:#fff;background:#46303c;border-color:#b34468}
