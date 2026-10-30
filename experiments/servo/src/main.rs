@@ -146,6 +146,8 @@ struct State {
     close_requested: Rc<Cell<bool>>,
     snapshot_requested: Cell<bool>,
     next_file_scan: Cell<Instant>,
+    next_editor_poll: Cell<Instant>,
+    editor_poll_inflight: Cell<bool>,
     pre_fullscreen_maximized: Cell<bool>,
     last_caption_click: Cell<Option<(Instant, f64, f64)>>,
     clipboard: Rc<RefCell<Option<arboard::Clipboard>>>,
@@ -234,7 +236,7 @@ impl servo::WebViewDelegate for State {
             if(!editor || editor.readOnly)return;
             editor.setSelectionRange({selection_start},{selection_end});editor.scrollTop={scroll_top};
             let dirty=document.getElementById('editor-status')?.textContent.includes('Unsaved')||false;
-            let pendingUpdate=null;
+            editor.dataset.unsynced='0';
             const updateStatus=()=>{{
                 const before=editor.value.slice(0,editor.selectionStart);
                 const line=before.split('\n').length;
@@ -245,14 +247,10 @@ impl servo::WebViewDelegate for State {
             }};
             const changed=()=>{{
                 dirty=true;
+                editor.dataset.unsynced='1';
                 updateStatus();
-                if(pendingUpdate!==null)clearTimeout(pendingUpdate);
-                // Large files must not be re-serialized/reparsed on every
-                // physical key stroke. Save/switch still forces a fresh sync.
-                pendingUpdate=setTimeout(()=>{{
-                    console.error('WOLFMARK_EDITOR:'+JSON.stringify([{revision},editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]));
-                    pendingUpdate=null;
-                }},75);
+                // Rust polls only a dirty editor. Do not copy the entire
+                // Markdown document through console logging on every key.
             }};
             editor.addEventListener('input',changed);
             editor.addEventListener('click',updateStatus);
@@ -1178,6 +1176,69 @@ impl State {
         }
     }
 
+    /// Servo 0.7's console forwarding is not a reliable editor IPC channel.
+    /// Poll only when an input event set the dirty marker, so an idle 16 MiB
+    /// document is not serialized every animation frame. The save/navigation
+    /// path still synchronizes the DOM immediately before writing any bytes.
+    fn poll_editor_dirty(self: &Rc<Self>) {
+        if self.editor_poll_inflight.replace(true) {
+            return;
+        }
+        let revision = self.document.borrow().view_revision.get();
+        let weak = Rc::downgrade(self);
+        let Some(view) = self.view.borrow().last().cloned() else {
+            self.editor_poll_inflight.set(false);
+            return;
+        };
+        let source_view = view.clone();
+        view.evaluate_javascript(
+            r#"(() => {
+                const editor=document.getElementById('source-editor');
+                if(!editor || editor.readOnly || editor.dataset.unsynced!=='1')return null;
+                editor.dataset.unsynced='0';
+                return JSON.stringify([editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]);
+            })()"#,
+            move |result| {
+                let Some(state) = weak.upgrade() else { return };
+                state.editor_poll_inflight.set(false);
+                let Ok(embedder_traits::JSValue::String(json)) = result else { return };
+                let Ok((value, start, end, top)) =
+                    serde_json::from_str::<(String, usize, usize, f64)>(&json)
+                else { return };
+                let mut document = state.document.borrow_mut();
+                if document.view_revision.get() != revision
+                    || !matches!(document.mode, ui::Mode::Source | ui::Mode::Live)
+                    || document.path.is_none()
+                {
+                    return;
+                }
+                document.set_editor_view((start, end, top));
+                let unchanged = document.editor_visible_source() == value;
+                if unchanged { return; }
+                if let Err(error) = document.apply_editor_view(&value) {
+                    document.notice = Some(error);
+                    return;
+                }
+                let markup = ui::decorated_source(&value);
+                let encoded = serde_json::to_string(&markup).unwrap_or_else(|_| "\"\"".into());
+                let lines = (1..=value.split('\n').count())
+                    .map(|line| line.to_string()).collect::<Vec<_>>().join("\n");
+                let line_json = serde_json::to_string(&lines).unwrap_or_else(|_| "\"\"".into());
+                let dirty = document.dirty();
+                let title = document.title();
+                drop(document);
+                state.window.set_title(&format!(
+                    "{title}{} — Wolfmark", if dirty { " *" } else { "" }
+                ));
+                state.scripts.borrow_mut().push((
+                    source_view,
+                    format!("if(document.getElementById('live-highlights'))document.getElementById('live-highlights').innerHTML={encoded};if(document.getElementById('live-line-numbers'))document.getElementById('live-line-numbers').textContent={line_json};document.querySelector('.document-row.selected')?.classList.toggle('dirty',{dirty});"),
+                ));
+                let _ = state.waker.0.send_event(Wake);
+            },
+        );
+    }
+
     fn take_pending_action(self: &Rc<Self>) {
         self.collect_update_check();
         let scripts = std::mem::take(&mut *self.scripts.borrow_mut());
@@ -1373,6 +1434,21 @@ impl ApplicationHandler<Wake> for App {
                     }
                 }
             }
+            // Update contextual edit decorations even when Servo does not
+            // surface console messages from page scripts.
+            let editor_active = {
+                let document = state.document.borrow();
+                matches!(document.mode, ui::Mode::Source | ui::Mode::Live)
+                    && document.path.is_some()
+                    && !document.settings_open
+                    && !state.syncing.get()
+            };
+            if editor_active && Instant::now() >= state.next_editor_poll.get() {
+                state.next_editor_poll.set(
+                    Instant::now() + std::time::Duration::from_millis(140)
+                );
+                state.poll_editor_dirty();
+            }
             let image_pending = state
                 .document
                 .borrow()
@@ -1380,6 +1456,10 @@ impl ApplicationHandler<Wake> for App {
                 .iter()
                 .fold(false, |pending, resources| resources.poll() || pending);
             let mut due = state.smooth_wheel.borrow().next_tick();
+            if editor_active {
+                let edit_due = state.next_editor_poll.get();
+                due = Some(due.map_or(edit_due, |existing| existing.min(edit_due)));
+            }
             if files_open {
                 let file_due = state.next_file_scan.get();
                 due = Some(due.map_or(file_due, |due| due.min(file_due)));
@@ -1481,6 +1561,8 @@ impl ApplicationHandler<Wake> for App {
                 close_requested: Rc::new(Cell::new(false)),
                 snapshot_requested: Cell::new(false),
                 next_file_scan: Cell::new(Instant::now() + std::time::Duration::from_millis(900)),
+                next_editor_poll: Cell::new(Instant::now() + std::time::Duration::from_millis(140)),
+                editor_poll_inflight: Cell::new(false),
                 pre_fullscreen_maximized: Cell::new(false),
                 last_caption_click: Cell::new(None),
                 clipboard: Rc::new(RefCell::new(None)),
