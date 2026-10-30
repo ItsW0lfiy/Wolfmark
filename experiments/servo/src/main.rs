@@ -365,6 +365,27 @@ impl servo::WebViewDelegate for State {
         ));
     }
     fn notify_new_frame_ready(&self, webview: WebView) {
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "image")
+            && !self.gui_probe_done.get()
+        {
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"JSON.stringify({complete:document.querySelector('.document-body img')?.complete===true,width:document.querySelector('.document-body img')?.naturalWidth??0})"#, move |result| {
+                if let Ok(embedder_traits::JSValue::String(json)) = result {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+                        if value.get("complete").and_then(|v| v.as_bool()) == Some(true)
+                            && value.get("width").and_then(|v| v.as_u64()).is_some_and(|width| width > 0)
+                        {
+                            eprintln!("SERVO_GUI local image displayed with nonzero natural size");
+                            done.set(true);
+                            let _ = waker.0.send_event(Wake);
+                        }
+                    }
+                }
+            });
+            self.window.request_redraw();
+            return;
+        }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST")
             .is_ok_and(|value| matches!(value.as_str(), "reader" | "source-save"))
             && !self.gui_probe_done.get()
