@@ -275,3 +275,18 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
    document or through a remote frontend. */
 .settings-view-release{display:inline-flex;align-items:center;justify-content:center;margin:14px 0 0 11px;padding:9px 17px;border:1px solid #665462;border-radius:7px;color:#ead8e2;background:#2d252d;text-decoration:none;font:600 12px "Segoe UI",system-ui,sans-serif}
 .settings-view-release:hover{color:#fff;background:#46303c;border-color:#b34468}
+
+/* Live Preview is a contextual editor rather than a second Source tab. The
+   blurred surface uses the exact Rust Reader rendering; clicking it exposes
+   the source-preserving editor at that position. Each source edit updates the
+   rich view from the same Rust buffer, not from editable HTML serialization. */
+.live-context{height:calc(100vh - 190px);min-height:310px;position:relative;overflow:hidden}
+.live-context>.live-rich{height:100%;overflow:auto;padding:4px 9px 16px;outline:none;cursor:text;overflow-wrap:break-word}
+.live-context>.live-rich:focus-visible{outline:1px solid #84354d;outline-offset:-1px}
+.live-context>.live-stage{display:none;height:100%;min-height:0}
+.live-context.editing>.live-rich{display:none}
+.live-context.editing>.live-stage{display:grid}
+.live-context>.live-rich h1,.live-context>.live-rich h2,.live-context>.live-rich h3{margin-top:.5em}
+.live-context>.live-rich pre{overflow:auto}
+.wm-fullscreen .live-context{height:calc(100vh - 80px)}
+@media(max-height:580px){.live-context{min-height:210px;height:calc(100vh - 165px)}}
