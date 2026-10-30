@@ -176,7 +176,7 @@ impl servo::WebViewDelegate for State {
         }
         // UI probes use the same callback-based host command path as the
         // application. Console logs are diagnostics, not an IPC transport.
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save" || value == "live-save")
             && !self.gui_probe_started.replace(true)
         {
             let pending = self.pending.clone();
@@ -1025,7 +1025,7 @@ impl State {
             }
             Action::Save(save_as) => {
                 let saved = self.document.borrow_mut().save(save_as);
-                if saved && std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save")
+                if saved && std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save" || value == "live-save")
                     && !self.document.borrow().dirty()
                     && self.document.borrow().source.contains("Servo GUI edit ✓")
                 {
