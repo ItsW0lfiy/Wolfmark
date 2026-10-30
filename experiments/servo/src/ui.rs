@@ -881,7 +881,7 @@ impl Session {
         html.push_str("</nav></div><footer class=\"sidebar-footer\">");
         let _ = write!(
             html,
-            "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>v0.1.0-dev.7 · Servo</small></div></div>"
+            "<img class=\"footer-art\" alt=\"\" src=\"{footer}\"><div class=\"footer-brand\"><img src=\"{logo}\" alt=\"\"><div><strong>Wolfmark</strong><small>v0.1.0-dev.7</small></div></div>"
         );
         html.push_str("</footer></aside><main class=\"main\">");
         html.push_str(
