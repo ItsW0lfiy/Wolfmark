@@ -37,3 +37,64 @@
 3. Verify native Windows Snap/Layout/window resize/restore semantics and Linux frame/input behavior.
 4. Finish GitHub update/download verification and portable/installer packaging.
 5. Validate visual parity, performance, resource constraints and offline security before merging.
+
+## Continued migration verification — 31 October 2026
+
+The Servo migration is still a **candidate**, not an approved replacement.
+The Qt build and `main` remain protected.
+
+Additional source integration completed on the migration branch:
+
+- Restored Qt's exact Document Actions menu (Save, Save As, Find, Reset
+  zoom, Fullscreen, Settings, Diagnostics), its compact overflow button,
+  keyboard shortcuts, and normal menu dismissal. No second document tab row
+  and no Open Document dropdown.
+- Source and Live Preview use a bounded Rust DOM dirty-input poll instead of
+  relying on console.log/error for editor synchronization. The existing
+  immediate DOM synchronization before Save/navigation remains mandatory.
+- Restored the normal WebView/Servo shutdown path for GUI interaction probes.
+  The former direct event-loop exit caused a SpiderMonkey mutex-destruction
+  failure even after a successful test.
+- Added a strictly validated official GitHub Releases page action to the
+  Settings updater. Only an explicit user action opens the system browser;
+  user Markdown cannot change the destination. Downloading and verifying
+  release artifacts remains a separate uncompleted integration.
+- Implemented pure-Rust X11 EWMH resize fallback for the frameless test.
+  Mixed-DPI, Wayland, Windows Snap flyouts and physical resize behavior still
+  require genuine acceptance testing.
+- Added graphical test coverage for local Markdown image display, the open
+  document-actions menu, and the experimental frameless appearance.
+- Resolved and committed the migration Cargo.lock through a dedicated GitHub
+  Actions job. Windows locked compilation and full Linux GUI coverage now
+  run against that committed resolution.
+
+### Actual verified GUI results
+
+The Linux Mesa/Xvfb run `41145595118` independently confirmed:
+
+- The Document Actions menu contains the required Qt actions.
+- Reader search selects the expected text and zoom updates to 110% without
+  replacing the document.
+- Source mode edits are synchronized and saved to a real local Markdown file.
+- Reader, Source, Live Preview and Settings screenshots render successfully.
+
+The same run **did not pass** the Live Preview save test: the injected input
+was dispatched before the host editor-input listener had initialized.
+Initialization order was corrected in subsequent source code; the next GUI
+run must pass before calling this fixed. Do not equate a visually rendered
+Live Preview with full Qt rich-text editing parity.
+
+### Current acceptance blockers
+
+1. Pass Source, Live Preview, local image and frameless GUI regression checks
+   together without shutdown faults or source loss.
+2. Reproduce Qt's context-sensitive rich Live Preview behavior, including
+   typographic headings and caret/IME semantics without source corruption.
+3. Validate Windows custom frame, Snap Layouts, resizing, system menu and
+   mixed-DPI behavior on real Windows hardware.
+4. Complete update asset checksum verification and installation handoff.
+5. Validate installer size, offline policy, large Markdown performance,
+   Linux desktop installation, and Android embedding roadmap.
+
+Do not delete Qt, switch default Cargo commands, or merge into `main`
+while these remain unverified.
