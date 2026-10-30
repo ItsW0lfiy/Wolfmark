@@ -93,6 +93,13 @@ jobs:
             grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-source.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-source.log
             grep -F "Servo GUI edit" /tmp/wm-servo-gui-fixture.md
+            export WOLFMARK_SERVO_GUI_TEST=live-save
+            export WOLFMARK_SNAPSHOT_MODE=live
+            echo "# Integration Live Preview document" > /tmp/wm-servo-live-fixture.md
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-live-fixture.md > /tmp/wm-live.log 2>&1 || { cat /tmp/wm-live.log; exit 1; }
+            grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-live.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live.log
+            grep -F "Servo GUI edit" /tmp/wm-servo-live-fixture.md
           '
 
       - name: Save graphical evidence even if the renderer fails
