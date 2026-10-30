@@ -65,7 +65,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
             set -euo pipefail
             glxinfo -B
-            for mode in reader source live settings; do
+            for mode in reader source live settings menu; do
               echo "Capturing Wolfmark Servo ${mode} using Mesa software GL"
               export WOLFMARK_SNAPSHOT_MODE="$mode"
               export WOLFMARK_SERVO_SNAPSHOT="out/servo-linux-screenshots/servo-${mode}.png"
@@ -73,8 +73,12 @@ jobs:
               test -s "$WOLFMARK_SERVO_SNAPSHOT"
               test "$(stat -c%s "$WOLFMARK_SERVO_SNAPSHOT")" -ge 10000
             done
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            export WOLFMARK_SERVO_SNAPSHOT="out/servo-linux-screenshots/servo-frameless.png"
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --frameless-test
+            test -s "$WOLFMARK_SERVO_SNAPSHOT"
           '
-      - name: Test document menu, Reader, Source and Live Preview through actual GUI
+      - name: Test menu, Reader, Source, Live, and locally decoded image in real Servo GUI
         shell: bash
         run: |
           set -euo pipefail
@@ -105,6 +109,14 @@ jobs:
             grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-live.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live.log
             grep -F "Servo GUI edit" /tmp/wm-servo-live-fixture.md
+            export WOLFMARK_SERVO_GUI_TEST=image
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            mkdir -p /tmp/wm-servo-image-fixture
+            cp assets/icons/wolfmark-128x128.png /tmp/wm-servo-image-fixture/local-image.png
+            printf "# Image fixture\n\n![Wolfmark](local-image.png)\n" > /tmp/wm-servo-image-fixture/image.md
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-image-fixture/image.md > /tmp/wm-image.log 2>&1 || { cat /tmp/wm-image.log; exit 1; }
+            grep -F "SERVO_GUI local image displayed with nonzero natural size" /tmp/wm-image.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-image.log
           '
 
       - name: Save graphical evidence even if the renderer fails
