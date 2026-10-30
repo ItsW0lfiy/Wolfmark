@@ -183,6 +183,8 @@ impl servo::WebViewDelegate for State {
         {
             let pending = self.pending.clone();
             let waker = self.waker.clone();
+            let live_poll_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
+                .is_ok_and(|value| value == "live-save");
             webview.evaluate_javascript(
                 r#"(() => {
                     const editor=document.getElementById('source-editor');
@@ -193,10 +195,13 @@ impl servo::WebViewDelegate for State {
                 })()"#,
                 move |result| {
                     eprintln!("SERVO_GUI source input: {result:?}");
-                    if result.is_ok() {
+                    if result.is_ok() && !live_poll_test {
+                        // Source verifies the explicit save-sync path.
                         *pending.borrow_mut() = Some(Action::Save(false));
                         let _ = waker.0.send_event(Wake);
                     }
+                    // Live tests the periodic dirty DOM bridge instead:
+                    // it will enqueue Save after Rust receives the changed text.
                 },
             );
         }
@@ -1226,7 +1231,13 @@ impl State {
                 let line_json = serde_json::to_string(&lines).unwrap_or_else(|_| "\"\"".into());
                 let dirty = document.dirty();
                 let title = document.title();
+                let live_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
+                    .is_ok_and(|value| value == "live-save")
+                    && value.contains("Servo GUI edit ✓");
                 drop(document);
+                if live_test {
+                    *state.pending.borrow_mut() = Some(Action::Save(false));
+                }
                 state.window.set_title(&format!(
                     "{title}{} — Wolfmark", if dirty { " *" } else { "" }
                 ));
