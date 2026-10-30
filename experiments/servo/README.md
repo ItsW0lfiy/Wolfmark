@@ -375,3 +375,29 @@ native taskbar/window icon and persisted Open Document folder, and six-hour
 ETag-cached automatic/manual GitHub Releases checks. These changes are not
 accepted until the new Windows CI compile/test gates and graphical reference
 comparisons are complete.
+
+### Reader/Live Preview integration verification (31 October 2026)
+
+The Qt-style Document Actions overflow menu is restored without reopening the
+rejected file-button dropdown or redundant document-tab strip.
+
+Current Source and Live Preview edit state is owned by Rust. Input events mark
+only the source textarea dirty; a bounded 140ms Rust DOM poll synchronizes
+the actual source, caret/scroll state, Comrak syntax decorations and line gutter.
+Save and navigation explicitly synchronize the full source before writing, so
+the polling interval is not treated as a durable save boundary.
+
+Live Preview now has an additional contextual rich rendering of the **same**
+Markdown source through the shared Rust Reader pipeline. Click the rendered
+document to enter the source-preserving editor; Esc returns to the rich
+rendered view. After source changes, the rich rendering is regenerated from
+the Rust document model, never from a lossy HTML-to-Markdown conversion.
+This is meaningful Qt parity progress, **not** a claim that Qt's full
+cursor-sensitive QTextDocument editing semantics have been replicated.
+
+Automated Linux/Mesa GUI tests cover screenshot rendering of Reader, Source,
+Live Preview, Settings, open Document Actions and the frameless trial, plus
+real DOM interaction tests for document actions, Reader search/zoom,
+Source/Live editing and save, rich view transitions, and local images.
+The Windows locked Cargo build is a separate compile/test target. Check
+the latest individual workflow result before declaring either platform passed.
