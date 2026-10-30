@@ -176,6 +176,31 @@ impl servo::WebViewDelegate for State {
                 |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
             );
         }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "menu")
+            && !self.gui_probe_started.replace(true)
+        {
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"JSON.stringify([...document.querySelectorAll('.document-menu a[href]')].map(a=>a.getAttribute('href')))"#, move |result| {
+                eprintln!("SERVO_GUI document action menu: {result:?}");
+                if let Ok(embedder_traits::JSValue::String(json)) = result {
+                    if let Ok(actions) = serde_json::from_str::<Vec<String>>(&json) {
+                        let expected = [
+                            "wolfmark://find/open",
+                            "wolfmark://zoom/reset",
+                            "wolfmark://fullscreen/toggle",
+                            "wolfmark://settings/open",
+                            "wolfmark://diagnostics/toggle",
+                        ];
+                        if expected.iter().all(|action| actions.iter().any(|found| found == action)) {
+                            eprintln!("SERVO_GUI Qt document actions menu passed");
+                            done.set(true);
+                            let _ = waker.0.send_event(Wake);
+                        }
+                    }
+                }
+            });
+        }
         // UI probes use the same callback-based host command path as the
         // application. Console logs are diagnostics, not an IPC transport.
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save" || value == "live-save")
