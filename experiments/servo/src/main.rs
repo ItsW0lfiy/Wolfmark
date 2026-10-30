@@ -1706,7 +1706,11 @@ impl ApplicationHandler<Wake> for App {
                         && std::env::var_os("WOLFMARK_SERVO_SNAPSHOT").is_none()
                     {
                         eprintln!("SERVO_GUI_TEST completed successfully");
-                        event_loop.exit();
+                        // Do not bypass the normal Servo/WebView shutdown path.
+                        // Immediate event-loop exit while JS callbacks are still
+                        // alive can destroy SpiderMonkey mutexes too early.
+                        state.close_requested.set(true);
+                        state.window.request_redraw();
                         return;
                     }
                     state.take_pending_action();
