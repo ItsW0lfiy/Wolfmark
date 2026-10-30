@@ -429,6 +429,18 @@ impl Session {
         }
         Ok(())
     }
+    /// Render a contextual preview directly from the shared Rust Markdown
+    /// parser. The editor remains the only owner of the source bytes.
+    pub fn live_rendered_html(&self, source: &str) -> String {
+        let parsed = parser::parse(source);
+        let mut body = String::new();
+        let mut toc = Vec::new();
+        render_blocks(
+            &mut body, &parsed.blocks, self.path.as_deref(), &self.resources, &mut toc
+        );
+        body
+    }
+
     pub fn editor_visible_source(&self) -> String {
         self.active_document
             .map(|index| self.open_documents[index].editor.view())
@@ -753,6 +765,14 @@ impl Session {
                 // Source and Live Preview. The separate inert mirror displays
                 // Comrak decorations and never serializes rich HTML to disk.
                 body = format!("<div class=\"live-stage{live_wrap}{source_stage}\"><pre class=\"live-line-numbers\" aria-hidden=\"true\" id=\"live-line-numbers\">{number_html}</pre><div class=\"live-edit-surface\"><pre class=\"live-highlights\" aria-hidden=\"true\" id=\"live-highlights\">{preview}</pre>{body}</div></div>");
+                if self.mode == Mode::Live && !plain {
+                    // Contextual Live Preview paints the same Markdown through
+                    // Wolfmark's Rust Reader renderer when not actively edited.
+                    // The editable source remains authoritative and is
+                    // re-rendered in place after an actual source change.
+                    let rendered = self.live_rendered_html(&view);
+                    body = format!("<div class=\"live-context\"><div class=\"live-rich document-body\" id=\"live-rich\" tabindex=\"0\" aria-label=\"Rendered Markdown preview. Click to edit the source.\">{rendered}</div>{body}</div>");
+                }
             }
         } else if plain {
             body.push_str("<pre class=\"plain-text\">");
@@ -1301,6 +1321,19 @@ mod tests {
         assert!(html.contains("live-line-numbers"));
         assert!(html.contains("source-editor"));
         assert!(html.contains("live-token-1"));
+    }
+
+    #[test]
+    fn live_rich_view_uses_shared_markdown_parser_and_preserves_edit_source() {
+        let mut ui = Session::default();
+        ui.source = "# Heading\n\nA **strong** paragraph.\n".into();
+        ui.mode = Mode::Live;
+        let html = ui.render_html();
+        assert!(html.contains("id=\"live-rich\""));
+        assert!(html.contains("id=\"source-editor\""));
+        assert!(html.contains("<h1"));
+        assert!(html.contains("<strong>strong</strong>"));
+        assert!(html.contains("# Heading"));
     }
 
     #[test]
