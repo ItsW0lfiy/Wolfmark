@@ -74,13 +74,18 @@ jobs:
               test "$(stat -c%s "$WOLFMARK_SERVO_SNAPSHOT")" -ge 10000
             done
           '
-      - name: Test Reader search/zoom and Source editing through actual GUI
+      - name: Test document menu, Reader, Source and Live Preview through actual GUI
         shell: bash
         run: |
           set -euo pipefail
           xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
             set -euo pipefail
             unset WOLFMARK_SERVO_SNAPSHOT
+            export WOLFMARK_SERVO_GUI_TEST=menu
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-menu.log 2>&1 || { cat /tmp/wm-menu.log; exit 1; }
+            grep -F "SERVO_GUI Qt document actions menu passed" /tmp/wm-menu.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-menu.log
             export WOLFMARK_SERVO_GUI_TEST=reader
             export WOLFMARK_SNAPSHOT_MODE=reader
             timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-reader.log 2>&1 || { cat /tmp/wm-reader.log; exit 1; }
