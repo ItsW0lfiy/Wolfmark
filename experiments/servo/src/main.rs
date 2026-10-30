@@ -222,90 +222,6 @@ impl servo::WebViewDelegate for State {
         if status != embedder_traits::LoadStatus::Complete || self.smoke_page {
             return;
         }
-        if std::env::var_os("WOLFMARK_SERVO_GUI_TEST").is_some() {
-            // Verify that privileged host JavaScript evaluation is functional
-            // before diagnosing console-message delivery and editor actions.
-            webview.evaluate_javascript(
-                "JSON.stringify({loaded:document.readyState,editor:!!document.getElementById('source-editor'),find:!!document.getElementById('find-query')})",
-                |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
-            );
-        }
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "menu")
-            && !self.gui_probe_started.replace(true)
-        {
-            let done = self.gui_probe_done.clone();
-            let waker = self.waker.clone();
-            webview.evaluate_javascript(r#"JSON.stringify([...document.querySelectorAll('.document-menu a[href]')].map(a=>a.getAttribute('href')))"#, move |result| {
-                eprintln!("SERVO_GUI document action menu: {result:?}");
-                if let Ok(embedder_traits::JSValue::String(json)) = result {
-                    if let Ok(actions) = serde_json::from_str::<Vec<String>>(&json) {
-                        let expected = [
-                            "wolfmark://find/open",
-                            "wolfmark://zoom/reset",
-                            "wolfmark://fullscreen/toggle",
-                            "wolfmark://settings/open",
-                            "wolfmark://diagnostics/toggle",
-                        ];
-                        if expected.iter().all(|action| actions.iter().any(|found| found == action)) {
-                            eprintln!("SERVO_GUI Qt document actions menu passed");
-                            done.set(true);
-                            let _ = waker.0.send_event(Wake);
-                        }
-                    }
-                }
-            });
-        }
-        // UI probes use the same callback-based host command path as the
-        // application. Console logs are diagnostics, not an IPC transport.
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save" || value == "live-save")
-            && !self.gui_probe_started.replace(true)
-        {
-            let pending = self.pending.clone();
-            let waker = self.waker.clone();
-            let live_poll_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
-                .is_ok_and(|value| value == "live-save");
-            webview.evaluate_javascript(
-                r#"(() => {
-                    const editor=document.getElementById('source-editor');
-                    if(!editor)throw Error('Source editor was not rendered');
-                    editor.value+='\nServo GUI edit ✓\n';
-                    editor.dispatchEvent(new Event('input',{bubbles:true}));
-                    return editor.value.includes('Servo GUI edit ✓');
-                })()"#,
-                move |result| {
-                    eprintln!("SERVO_GUI source input: {result:?}");
-                    if result.is_ok() && !live_poll_test {
-                        // Source verifies the explicit save-sync path.
-                        *pending.borrow_mut() = Some(Action::Save(false));
-                        let _ = waker.0.send_event(Wake);
-                    }
-                    // Live tests the periodic dirty DOM bridge instead:
-                    // it will enqueue Save after Rust receives the changed text.
-                },
-            );
-        }
-        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader")
-            && !self.gui_probe_started.replace(true)
-        {
-            let pending = self.pending.clone();
-            let waker = self.waker.clone();
-            webview.evaluate_javascript(
-                r#"(() => {
-                    const find=document.getElementById('find-query');
-                    if(!find)throw Error('Find control was not rendered');
-                    document.querySelector('.findbar').hidden=false;
-                    find.value='Wolfmark';
-                    return find.value;
-                })()"#,
-                move |result| {
-                    eprintln!("SERVO_GUI reader query: {result:?}");
-                    if matches!(result,Ok(embedder_traits::JSValue::String(ref value)) if value == "Wolfmark") {
-                        *pending.borrow_mut() = Some(Action::FindNext(false));
-                        let _ = waker.0.send_event(Wake);
-                    }
-                },
-            );
-        }
         if self.document.borrow().mode == ui::Mode::Reader {
             let top = self.document.borrow().reader_scroll.max(0.0);
             webview.evaluate_javascript(format!(
@@ -377,6 +293,90 @@ impl servo::WebViewDelegate for State {
                 }}
             }});
         }})()"#), |_| {});
+        if std::env::var_os("WOLFMARK_SERVO_GUI_TEST").is_some() {
+            // Verify that privileged host JavaScript evaluation is functional
+            // before diagnosing console-message delivery and editor actions.
+            webview.evaluate_javascript(
+                "JSON.stringify({loaded:document.readyState,editor:!!document.getElementById('source-editor'),find:!!document.getElementById('find-query')})",
+                |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
+            );
+        }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "menu")
+            && !self.gui_probe_started.replace(true)
+        {
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"JSON.stringify([...document.querySelectorAll('.document-menu a[href]')].map(a=>a.getAttribute('href')))"#, move |result| {
+                eprintln!("SERVO_GUI document action menu: {result:?}");
+                if let Ok(embedder_traits::JSValue::String(json)) = result {
+                    if let Ok(actions) = serde_json::from_str::<Vec<String>>(&json) {
+                        let expected = [
+                            "wolfmark://find/open",
+                            "wolfmark://zoom/reset",
+                            "wolfmark://fullscreen/toggle",
+                            "wolfmark://settings/open",
+                            "wolfmark://diagnostics/toggle",
+                        ];
+                        if expected.iter().all(|action| actions.iter().any(|found| found == action)) {
+                            eprintln!("SERVO_GUI Qt document actions menu passed");
+                            done.set(true);
+                            let _ = waker.0.send_event(Wake);
+                        }
+                    }
+                }
+            });
+        }
+        // UI probes use the same callback-based host command path as the
+        // application. Console logs are diagnostics, not an IPC transport.
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "source-save" || value == "live-save")
+            && !self.gui_probe_started.replace(true)
+        {
+            let pending = self.pending.clone();
+            let waker = self.waker.clone();
+            let live_poll_test = std::env::var("WOLFMARK_SERVO_GUI_TEST")
+                .is_ok_and(|value| value == "live-save");
+            webview.evaluate_javascript(
+                r#"(() => {
+                    const editor=document.getElementById('source-editor');
+                    if(!editor)throw Error('Source editor was not rendered');
+                    editor.value+='\nServo GUI edit ✓\n';
+                    editor.dispatchEvent(new Event('input',{bubbles:true}));
+                    return editor.dataset.unsynced==='1' && editor.value.includes('Servo GUI edit ✓');
+                })()"#,
+                move |result| {
+                    eprintln!("SERVO_GUI source input: {result:?}");
+                    if matches!(result, Ok(embedder_traits::JSValue::Boolean(true))) && !live_poll_test {
+                        // Source verifies the explicit save-sync path.
+                        *pending.borrow_mut() = Some(Action::Save(false));
+                        let _ = waker.0.send_event(Wake);
+                    }
+                    // Live tests the periodic dirty DOM bridge instead:
+                    // it will enqueue Save after Rust receives the changed text.
+                },
+            );
+        }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader")
+            && !self.gui_probe_started.replace(true)
+        {
+            let pending = self.pending.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(
+                r#"(() => {
+                    const find=document.getElementById('find-query');
+                    if(!find)throw Error('Find control was not rendered');
+                    document.querySelector('.findbar').hidden=false;
+                    find.value='Wolfmark';
+                    return find.value;
+                })()"#,
+                move |result| {
+                    eprintln!("SERVO_GUI reader query: {result:?}");
+                    if matches!(result,Ok(embedder_traits::JSValue::String(ref value)) if value == "Wolfmark") {
+                        *pending.borrow_mut() = Some(Action::FindNext(false));
+                        let _ = waker.0.send_event(Wake);
+                    }
+                },
+            );
+        }
     }
     fn show_console_message(
         &self,
