@@ -1254,7 +1254,7 @@ fn render_inlines(
                     render_inlines(html, content, document, resources);
                     html.push_str("</a>");
                 } else {
-                    html.push_str("<span title=\"External navigation disabled in prototype\">");
+                    html.push_str("<span title=\"External navigation is disabled for offline documents\">");
                     render_inlines(html, content, document, resources);
                     html.push_str("</span>");
                 }
