@@ -359,7 +359,7 @@ impl servo::WebViewDelegate for State {
             let _ = self.waker.0.send_event(Wake);
         }
         self.window.set_title(&format!(
-            "{}{} — Wolfmark (Servo experiment)",
+            "{}{} — Wolfmark",
             document.title(),
             if document.dirty() { " *" } else { "" }
         ));
@@ -1169,7 +1169,7 @@ impl State {
             (session.page_url(), session.title())
         };
         self.window
-            .set_title(&format!("{title} — Wolfmark (Servo experiment)"));
+            .set_title(&format!("{title} — Wolfmark"));
         if let Some(view) = self.view.borrow().last() {
             view.load(url);
         }
@@ -1486,7 +1486,7 @@ impl ApplicationHandler<Wake> for App {
                             let document = state.document.borrow();
                             (document.page_url(), document.title())
                         };
-                        state.window.set_title(&format!("{title} — Wolfmark (Servo experiment)"));
+                        state.window.set_title(&format!("{title} — Wolfmark"));
                         if let Some(view) = state.view.borrow().last() {
                             view.load(url);
                         }
@@ -1550,7 +1550,7 @@ impl ApplicationHandler<Wake> for App {
             let caption = if *smoke_page {
                 "Wolfmark — Servo graphics diagnostic".to_owned()
             } else {
-                format!("{} — Wolfmark (Servo experiment)", session.title())
+                format!("{} — Wolfmark", session.title())
             };
             let window = event_loop
                 .create_window(
