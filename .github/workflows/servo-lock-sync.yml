@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Update only lockfile resolution
         run: |
-          cargo metadata --manifest-path experiments/servo/Cargo.toml --format-version 1 --no-deps > /dev/null
+          cargo metadata --manifest-path experiments/servo/Cargo.toml --format-version 1 > /dev/null
           git diff --stat -- experiments/servo/Cargo.lock
       - name: Commit updated lockfile to migration branch only
         shell: bash
