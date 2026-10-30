@@ -934,7 +934,10 @@ impl Session {
         // Qt's document-actions menu lives beside zoom rather than adding
         // another document tab or toolbar row. Use native HTML disclosure so
         // it works entirely offline and remains keyboard-accessible.
-        html.push_str("<details class=\"document-actions\"><summary title=\"Document actions\" aria-label=\"Document actions\"><svg viewBox=\"0 0 24 24\" width=\"19\" height=\"19\" aria-hidden=\"true\" fill=\"currentColor\"><circle cx=\"5\" cy=\"12\" r=\"1.6\"/><circle cx=\"12\" cy=\"12\" r=\"1.6\"/><circle cx=\"19\" cy=\"12\" r=\"1.6\"/></svg></summary><nav class=\"document-menu\" aria-label=\"Document actions\">");
+        let snapshot_menu_open = std::env::var("WOLFMARK_SNAPSHOT_MODE")
+            .is_ok_and(|value| value == "menu");
+        let open_attribute = if snapshot_menu_open { " open" } else { "" };
+        let _ = write!(html, "<details class=\"document-actions\"{open_attribute}><summary title=\"Document actions\" aria-label=\"Document actions\"><svg viewBox=\"0 0 24 24\" width=\"19\" height=\"19\" aria-hidden=\"true\" fill=\"currentColor\"><circle cx=\"5\" cy=\"12\" r=\"1.6\"/><circle cx=\"12\" cy=\"12\" r=\"1.6\"/><circle cx=\"19\" cy=\"12\" r=\"1.6\"/></svg></summary><nav class=\"document-menu\" aria-label=\"Document actions\">");
         if self.path.is_some() {
             html.push_str("<a href=\"wolfmark://save/current\">Save <kbd>Ctrl+S</kbd></a><a href=\"wolfmark://save/as\">Save As… <kbd>Ctrl+Shift+S</kbd></a>");
         } else {
