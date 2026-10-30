@@ -486,6 +486,7 @@ enum Action {
     FindOpen,
     FindClose,
     FindNext(bool),
+    Diagnostics,
     CheckUpdates,
     SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
     SidebarToggle,
@@ -541,6 +542,8 @@ impl Action {
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
             ("zoom", "/reset") => Some(Self::ZoomReset),
+            ("fullscreen", "/toggle") => Some(Self::Fullscreen),
+            ("diagnostics", "/toggle") => Some(Self::Diagnostics),
             ("document", "/bundled") => Some(Self::SelectBundled),
             ("history", "/back") => Some(Self::HistoryBack),
             ("history", "/forward") => Some(Self::HistoryForward),
@@ -674,6 +677,21 @@ impl State {
         // Window commands do not reload the document and cannot be delegated
         // to untrusted HTML or JavaScript.
         match action {
+            Action::Diagnostics => {
+                let enabled = {
+                    let mut doc = self.document.borrow_mut();
+                    doc.diagnostics = !doc.diagnostics;
+                    doc.diagnostics
+                };
+                if let Some(view) = self.view.borrow().last() {
+                    view.evaluate_javascript(format!(
+                        "if(document.getElementById('wm-diagnostics'))document.getElementById('wm-diagnostics').hidden={};",
+                        !enabled
+                    ), |_| {});
+                    self.servo.spin_event_loop();
+                }
+                return;
+            }
             Action::CheckUpdates => {
                 self.request_update_check(true);
                 return;
@@ -1113,6 +1131,7 @@ impl State {
             | Action::SettingsPage(_)
             | Action::SettingsToggle(_)
             | Action::CheckUpdates
+            | Action::Diagnostics
             | Action::OutlineLine(_)
             | Action::SidebarToggle => unreachable!(),
         }
@@ -1284,6 +1303,8 @@ mod host_actions_tests {
         assert_eq!(Action::from_url(&Url::parse("wolfmark://mode/live").unwrap()), Some(Action::Live));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://outline/line/13").unwrap()),Some(Action::OutlineLine(13)));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://updates/check").unwrap()),Some(Action::CheckUpdates));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://fullscreen/toggle").unwrap()),Some(Action::Fullscreen));
+        assert_eq!(Action::from_url(&Url::parse("wolfmark://diagnostics/toggle").unwrap()),Some(Action::Diagnostics));
         assert_eq!(Action::from_url(&Url::parse("wolfmark://sidebar/toggle").unwrap()), Some(Action::SidebarToggle));
         assert_eq!(Action::from_url(&good), Some(Action::Source));
         assert_eq!(
@@ -1955,6 +1976,8 @@ fn application_shortcut(event: &KeyEvent, modifiers: ServoModifiers) -> Option<A
         PhysicalKey::Code(KeyCode::F3) if !ctrl && !alt => Some(Action::FindNext(shift)),
         PhysicalKey::Code(KeyCode::Escape) if !ctrl && !alt => Some(Action::FindClose),
         PhysicalKey::Code(KeyCode::F11) if !ctrl && !alt => Some(Action::Fullscreen),
+        PhysicalKey::Code(KeyCode::F12) if !ctrl && !alt => Some(Action::Diagnostics),
+        PhysicalKey::Code(KeyCode::Comma) if ctrl && !alt => Some(Action::SettingsOpen),
         PhysicalKey::Code(KeyCode::Equal) if ctrl && !alt => Some(Action::ZoomIn),
         PhysicalKey::Code(KeyCode::Minus) if ctrl && !alt => Some(Action::ZoomOut),
         PhysicalKey::Code(KeyCode::Digit0) if ctrl && !alt => Some(Action::ZoomReset),
