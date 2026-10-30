@@ -397,12 +397,16 @@ impl servo::WebViewDelegate for State {
         request.deny();
     }
 
-    fn request_navigation(&self, _webview: WebView, request: NavigationRequest) {
+    fn request_navigation(&self, webview: WebView, request: NavigationRequest) {
         // Rust remains authoritative: UI links enqueue a command for the host,
         // rather than giving the document script or filesystem privileges.
         if request.url.scheme() == "wolfmark" {
             *self.pending.borrow_mut() = Action::from_url(&request.url);
             if self.pending.borrow().is_some() {
+                // Qt closes its document action popup after an action. Defer
+                // the DOM update until we leave Servo's navigation callback.
+                self.scripts.borrow_mut().push((webview,
+                    "document.querySelector('.document-actions')?.removeAttribute('open');".into()));
                 self.window.request_redraw();
             }
             request.deny();
