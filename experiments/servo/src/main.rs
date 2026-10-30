@@ -74,6 +74,60 @@ use winit::keyboard::{
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::{ResizeDirection, Window};
 
+/// The release page must be part of this project's official GitHub repository.
+/// Metadata from the GitHub API is never trusted as an arbitrary shell URL.
+fn trusted_release_page(address: &str) -> bool {
+    let Ok(url) = url::Url::parse(address) else { return false };
+    url.scheme() == "https"
+        && url.host_str() == Some("github.com")
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url.path().starts_with("/ItsW0lfiy/Wolfmark/releases/")
+}
+
+fn open_release_in_browser(address: &str) -> Result<(), String> {
+    if !trusted_release_page(address) { return Err("Untrusted release URL".into()); }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", address])
+            .spawn().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(address)
+            .spawn().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        Err("External browser integration has not been implemented on this platform".into())
+    }
+}
+
+#[cfg(test)]
+mod trusted_updates_tests {
+    use super::*;
+    #[test]
+    fn release_urls_cannot_escape_official_github_releases() {
+        assert!(trusted_release_page("https://github.com/ItsW0lfiy/Wolfmark/releases/tag/0.1.0"));
+        for bad in [
+            "https://evil.example/ItsW0lfiy/Wolfmark/releases/tag/0.1.0",
+            "http://github.com/ItsW0lfiy/Wolfmark/releases/tag/0.1.0",
+            "https://github.com.evil.example/ItsW0lfiy/Wolfmark/releases/tag/0.1.0",
+            "https://github.com/Other/Wolfmark/releases/tag/0.1.0",
+            "https://github.com/ItsW0lfiy/Wolfmark/releases/tag/0.1.0?redirect=evil",
+        ] {
+            assert!(!trusted_release_page(bad), "unexpectedly trusted {bad}");
+        }
+    }
+}
+
 fn native_wolfmark_icon() -> Option<winit::window::Icon> {
     let artwork = image::load_from_memory(
         include_bytes!("../../../assets/icons/wolfmark-128x128.png"),
@@ -538,6 +592,7 @@ enum Action {
     FindNext(bool),
     Diagnostics,
     CheckUpdates,
+    OpenRelease,
     SettingsOpen, SettingsClose, SettingsSave, SettingsPage(&'static str), SettingsToggle(&'static str),
     SidebarToggle,
     OutlineLine(usize),
@@ -567,6 +622,7 @@ impl Action {
             ("find", "/next") => Some(Self::FindNext(false)),
             ("find", "/previous") => Some(Self::FindNext(true)),
             ("updates", "/check") => Some(Self::CheckUpdates),
+            ("updates", "/open") => Some(Self::OpenRelease),
             ("settings", "/open") => Some(Self::SettingsOpen),
             ("sidebar", "/toggle") => Some(Self::SidebarToggle),
             ("outline", path) => path.strip_prefix("/line/")
@@ -712,7 +768,7 @@ impl State {
         if self.document.borrow().settings_open
             && !matches!(action, Action::SettingsOpen | Action::SettingsClose
                 | Action::SettingsSave | Action::SettingsPage(_) | Action::SettingsToggle(_)
-                | Action::CheckUpdates)
+                | Action::CheckUpdates | Action::OpenRelease)
         {
             return;
         }
@@ -744,6 +800,21 @@ impl State {
             }
             Action::CheckUpdates => {
                 self.request_update_check(true);
+                return;
+            }
+            Action::OpenRelease => {
+                let candidate = self.document.borrow().update_release_url.clone();
+                if let Some(address) = candidate {
+                    if trusted_release_page(&address) {
+                        if let Err(error) = open_release_in_browser(&address) {
+                            self.document.borrow_mut().notice =
+                                Some(format!("Unable to open the GitHub release page: {error}"));
+                            eprintln!("GitHub release browser action failed: {error}");
+                        }
+                    } else {
+                        eprintln!("Blocked untrusted GitHub release URL");
+                    }
+                }
                 return;
             }
             Action::SettingsOpen => {
@@ -1181,6 +1252,7 @@ impl State {
             | Action::SettingsPage(_)
             | Action::SettingsToggle(_)
             | Action::CheckUpdates
+            | Action::OpenRelease
             | Action::Diagnostics
             | Action::OutlineLine(_)
             | Action::SidebarToggle => unreachable!(),
@@ -1206,7 +1278,11 @@ impl State {
             (document.preferences.include_prereleases,
              document.preferences.path().with_file_name("update-state.json"))
         };
-        self.document.borrow_mut().update_status = "Checking GitHub Releases…".into();
+        {
+            let mut document = self.document.borrow_mut();
+            document.update_status = "Checking GitHub Releases…".into();
+            document.update_release_url = None;
+        }
         if let Some(view) = self.view.borrow().last() {
             view.evaluate_javascript(
                 "if(document.getElementById('update-status'))document.getElementById('update-status').textContent='Checking GitHub Releases…';",
@@ -1236,16 +1312,31 @@ impl State {
         };
         if let Some(result) = finished {
             self.update_receiver.borrow_mut().take();
-            let message = match result {
-                Ok(report) => report.message,
-                Err(error) => error,
+            let (message, release_page) = match result {
+                Ok(report) => (report.message, report.release_page),
+                Err(error) => (error, None),
             };
-            self.document.borrow_mut().update_status = message.clone();
+            let show_release = release_page.as_deref().is_some_and(trusted_release_page);
+            {
+                let mut document = self.document.borrow_mut();
+                document.update_status = message.clone();
+                document.update_release_url = if show_release { release_page } else { None };
+            }
             if let Some(view) = self.view.borrow().last() {
                 let payload = serde_json::to_string(&message).unwrap_or_default();
-                view.evaluate_javascript(format!(
-                    "if(document.getElementById('update-status'))document.getElementById('update-status').textContent={payload};"
-                ), |_| {});
+                view.evaluate_javascript(format!(r#"(() => {{
+                    const status=document.getElementById('update-status');
+                    if(status)status.textContent={payload};
+                    const check=document.querySelector('.settings-check-now');
+                    document.querySelector('.settings-view-release')?.remove();
+                    if(check && {show_release}) {{
+                        const anchor=document.createElement('a');
+                        anchor.className='settings-view-release';
+                        anchor.href='wolfmark://updates/open';
+                        anchor.textContent='View release on GitHub';
+                        check.after(anchor);
+                    }}
+                }})()"#), |_| {});
             }
         }
     }
