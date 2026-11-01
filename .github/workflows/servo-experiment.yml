@@ -40,6 +40,8 @@ jobs:
           key: servo-windows-msvc-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
           restore-keys: |
             servo-windows-msvc-v1-
+      - name: Verify editor bridge input and Live transition behavior
+        run: node experiments/servo/tests/editor_bridge.cjs
       - name: Show toolchain details
         shell: pwsh
         run: |

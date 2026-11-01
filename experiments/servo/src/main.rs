@@ -237,6 +237,12 @@ impl servo::WebViewDelegate for State {
             editor.setSelectionRange({selection_start},{selection_end});editor.scrollTop={scroll_top};
             let dirty=document.getElementById('editor-status')?.textContent.includes('Unsaved')||false;
             editor.dataset.unsynced='0';
+            editor.dataset.composing='0';
+            editor.addEventListener('compositionstart',()=>{{editor.dataset.composing='1';}});
+            editor.addEventListener('compositionend',()=>{{
+                editor.dataset.composing='0';
+                changed();
+            }});
             const updateStatus=()=>{{
                 const before=editor.value.slice(0,editor.selectionStart);
                 const line=before.split('\n').length;
@@ -260,6 +266,12 @@ impl servo::WebViewDelegate for State {
             const rich=document.getElementById('live-rich');
             if(rich){{
                 const context=rich.closest('.live-context');
+                const leaveEditing=()=>{{
+                    if(!context.classList.contains('editing')||editor.dataset.composing==='1')return;
+                    const fraction=editor.scrollTop/Math.max(1,editor.scrollHeight-editor.clientHeight);
+                    context.classList.remove('editing');
+                    rich.scrollTop=fraction*Math.max(0,rich.scrollHeight-rich.clientHeight);
+                }};
                 rich.addEventListener('click',event=>{{
                     // Do not let a Markdown link navigate when clicking to
                     // enter editing. Navigation stays under Rust policy.
@@ -277,16 +289,17 @@ impl servo::WebViewDelegate for State {
                     }}
                 }});
                 editor.addEventListener('keydown',event=>{{
+                    if(event.isComposing||editor.dataset.composing==='1'||event.keyCode===229)return;
                     if(event.key==='Escape'){{
                         event.preventDefault();
-                        context.classList.remove('editing');
+                        leaveEditing();
                         rich.focus();
                     }}
                 }});
                 editor.addEventListener('blur',()=>{{
                     // The Rust dirty poll refreshes the rendered surface
                     // after the most recent input; do not export DOM HTML.
-                    context.classList.remove('editing');
+                    leaveEditing();
                 }});
             }}
             const mirror=document.getElementById('live-highlights');
@@ -301,6 +314,8 @@ impl servo::WebViewDelegate for State {
                 syncScroll();
             }}
             editor.addEventListener('keydown',event=>{{
+                // Composition keys belong to the platform IME, including Escape and Tab.
+                if(event.isComposing||editor.dataset.composing==='1'||event.keyCode===229)return;
                 if(event.key==='Tab' && !event.ctrlKey && !event.altKey){{
                     event.preventDefault();
                     if(!event.shiftKey){{editor.setRangeText('    ',editor.selectionStart,editor.selectionEnd,'end');changed();}}
@@ -1416,7 +1431,7 @@ impl State {
         view.evaluate_javascript(
             r#"(() => {
                 const editor=document.getElementById('source-editor');
-                if(!editor || editor.readOnly || editor.dataset.unsynced!=='1')return null;
+                if(!editor || editor.readOnly || editor.dataset.composing==='1' || editor.dataset.unsynced!=='1')return null;
                 editor.dataset.unsynced='0';
                 return JSON.stringify([editor.value,editor.selectionStart,editor.selectionEnd,editor.scrollTop]);
             })()"#,

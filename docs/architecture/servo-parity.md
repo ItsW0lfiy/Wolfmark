@@ -98,3 +98,16 @@ Live Preview with full Qt rich-text editing parity.
 
 Do not delete Qt, switch default Cargo commands, or merge into `main`
 while these remain unverified.
+
+### Editor transition follow-up — 31 October 2026
+
+- Compared the Library Qt Reader/Live Preview captures with the current shell.
+- Live Preview now transfers proportional scroll position back to the rich view
+  on Escape/blur, matching the existing transfer into the source surface.
+- Composition owns Escape, Tab and formatting keys; dirty polling waits until
+  composition ends before sending intermediate text through Markdown rendering.
+- Added a Node behavioral test against the actual injected host bridge for IME
+  key ownership, composition commit, mirror scrolling and round-trip viewport
+  transfer. Windows CI runs it before compilation.
+- Local Node checks passed; no local Rust toolchain or Servo GUI was available.
+  Physical IME handling and exact rich-text caret/typography parity remain open.
