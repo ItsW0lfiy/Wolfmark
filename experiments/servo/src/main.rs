@@ -654,6 +654,7 @@ enum Action {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    ZoomPreset(u16),
     Fullscreen,
     Save(bool),
     Undo(bool),
@@ -720,6 +721,10 @@ impl Action {
             ("zoom", "/in") => Some(Self::ZoomIn),
             ("zoom", "/out") => Some(Self::ZoomOut),
             ("zoom", "/reset") => Some(Self::ZoomReset),
+            ("zoom", path) => path.strip_prefix("/preset/")
+                .and_then(|value| value.parse::<u16>().ok())
+                .filter(|value| matches!(value, 80 | 100 | 125 | 150 | 200))
+                .map(Self::ZoomPreset),
             ("fullscreen", "/toggle") => Some(Self::Fullscreen),
             ("diagnostics", "/toggle") => Some(Self::Diagnostics),
             ("document", "/bundled") => Some(Self::SelectBundled),
@@ -1141,13 +1146,15 @@ impl State {
                 }
                 return;
             }
-            Action::ZoomIn | Action::ZoomOut | Action::ZoomReset => {
+            Action::ZoomIn | Action::ZoomOut | Action::ZoomReset | Action::ZoomPreset(_) => {
                 let zoom = {
                     let mut document = self.document.borrow_mut();
                     match action {
                         Action::ZoomIn => document.change_zoom(10),
                         Action::ZoomOut => document.change_zoom(-10),
-                        _ => document.zoom = 100,
+                        Action::ZoomReset => document.set_zoom(100),
+                        Action::ZoomPreset(value) => document.set_zoom(value),
+                        _ => unreachable!(),
                     }
                     document.zoom
                 };
@@ -1164,6 +1171,12 @@ impl State {
                         inner.style.setProperty('--qt-top', '{top}px');
                         inner.style.setProperty('--qt-bottom', '{bottom}px');
                         document.querySelector('.zoom-value').textContent = '{zoom}%';
+                        document.querySelector('.zoom-presets')?.removeAttribute('open');
+                        document.querySelector('.document-actions')?.removeAttribute('open');
+                        document.querySelectorAll('.zoom-menu a').forEach(link => {{
+                            if(link.textContent.trim()==='{zoom}%')link.setAttribute('aria-current','true');
+                            else link.removeAttribute('aria-current');
+                        }});
                         viewport.scrollTop = oldTop * ratio;
                     }})()"#, size = f64::from(zoom) * 0.17, padding = f64::from(zoom) * 0.48,
                         top = f64::from(zoom) * 0.32, bottom = f64::from(zoom) * 0.34),
@@ -1312,6 +1325,7 @@ impl State {
             | Action::ZoomIn
             | Action::ZoomOut
             | Action::ZoomReset
+            | Action::ZoomPreset(_)
             | Action::Fullscreen
             | Action::CopyCode(_)
             | Action::CopySelection
@@ -2216,6 +2230,17 @@ fn application_shortcut(event: &KeyEvent, modifiers: ServoModifiers) -> Option<A
 #[cfg(test)]
 mod application_shortcut_tests {
     use super::*;
+    #[test]
+    fn only_qt_zoom_presets_can_be_dispatched() {
+        for value in [80, 100, 125, 150, 200] {
+            let url = Url::parse(&format!("wolfmark://zoom/preset/{value}")).unwrap();
+            assert_eq!(Action::from_url(&url), Some(Action::ZoomPreset(value)));
+        }
+        for invalid in ["0", "65", "170", "201", "99999", "word", "100/../../save"] {
+            let url = Url::parse(&format!("wolfmark://zoom/preset/{invalid}")).unwrap();
+            assert_eq!(Action::from_url(&url), None);
+        }
+    }
     #[test]
     fn expected_shortcuts_are_local_and_nonrepeating() {
         // Full winit event construction is platform-version-specific; parsing

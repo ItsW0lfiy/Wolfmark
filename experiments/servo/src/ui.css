@@ -271,6 +271,19 @@ a:focus-visible,input:focus-visible{outline:2px solid #d24970;outline-offset:2px
 .wm-diagnostics{position:fixed;z-index:8;right:22px;bottom:16px;max-width:min(450px,calc(100vw - 44px));padding:8px 12px;background:#242229ec;border:1px solid #564250;border-radius:7px;box-shadow:0 4px 15px #0009;color:#e1ced7;font:11px "Segoe UI",system-ui,sans-serif;pointer-events:none}
 .wm-diagnostics[hidden]{display:none!important}
 
+/* Qt numeric zoom presets: this is not an Open Document dropdown. */
+.zoom-controls{overflow:visible}
+.zoom-presets{position:relative;align-self:stretch;display:flex;align-items:center;min-width:62px}
+.zoom-controls .zoom-presets summary{display:flex;align-items:center;justify-content:center;min-width:62px;padding:5px 8px;font-size:12px;cursor:pointer;list-style:none;border-radius:5px;user-select:none}
+.zoom-controls .zoom-presets summary::-webkit-details-marker{display:none}
+.zoom-controls .zoom-presets summary:hover,.zoom-presets[open] summary{background:#303139;color:#fff}
+.zoom-controls .zoom-presets summary:focus-visible{outline:2px solid #ce416b;outline-offset:2px}
+.zoom-controls .zoom-menu{position:absolute;z-index:20;top:calc(100% + 9px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;min-width:110px;padding:5px;border:1px solid #49434e;border-radius:8px;background:#232127;box-shadow:0 13px 34px #000b}
+.zoom-controls .zoom-menu a{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;min-width:0;min-height:31px;border-radius:5px;font:12px "Segoe UI",system-ui,sans-serif;color:#e6e0e7}
+.zoom-controls .zoom-menu a:hover,.zoom-controls .zoom-menu a:focus-visible{background:#682b42;color:#fff}
+.zoom-controls .zoom-menu a[aria-current="true"]{color:#fff;background:#512334}
+.zoom-controls .zoom-menu a[aria-current="true"]::after{content:"✓";color:#e89ab0;font-weight:bold;margin-left:12px}
+
 /* Verified GitHub Releases are opened externally, never inside the Markdown
    document or through a remote frontend. */
 .settings-view-release{display:inline-flex;align-items:center;justify-content:center;margin:14px 0 0 11px;padding:9px 17px;border:1px solid #665462;border-radius:7px;color:#ead8e2;background:#2d252d;text-decoration:none;font:600 12px "Segoe UI",system-ui,sans-serif}

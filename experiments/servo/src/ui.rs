@@ -704,7 +704,12 @@ impl Session {
     }
 
     pub fn change_zoom(&mut self, delta: i16) {
-        self.zoom = ((self.zoom as i16 + delta).clamp(65, 170)) as u16;
+        self.zoom = (i32::from(self.zoom) + i32::from(delta)).clamp(65, 200) as u16;
+    }
+
+    /// Qt-compatible presets; the command layer checks the allowed choices.
+    pub fn set_zoom(&mut self, percent: u16) {
+        self.zoom = percent.clamp(65, 200);
     }
 
     pub fn page_url(&self) -> Url {
@@ -951,11 +956,15 @@ impl Session {
             "<span id=\"editor-status\" role=\"status\">{dirty}</span>"
         );
         html.push_str("<span class=\"viewbar-spacer\"></span><nav class=\"zoom-controls\" aria-label=\"Document zoom\">");
-        let _ = write!(
-            html,
-            "<a href=\"wolfmark://zoom/out\" title=\"Zoom out\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a><a class=\"zoom-value\" href=\"wolfmark://zoom/reset\" title=\"Reset document zoom\">{}%</a><a href=\"wolfmark://zoom/in\" title=\"Zoom in\">+</a></nav>",
-            self.zoom
-        );
+        // A Qt-style zoom popup, not another document strip or Open dropdown.
+        // Rust owns the action; Servo retains its document and selection.
+        html.push_str("<a href=\"wolfmark://zoom/out\" title=\"Zoom out\" aria-label=\"Zoom out\"><svg class=\"ui-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#d7d7de\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14\"/></svg></a>");
+        let _ = write!(html, "<details class=\"zoom-presets\"><summary class=\"zoom-value\" title=\"Choose document zoom\" aria-label=\"Choose document zoom\">{}%</summary><nav class=\"zoom-menu\" aria-label=\"Zoom presets\">", self.zoom);
+        for preset in [80, 100, 125, 150, 200] {
+            let current = if preset == self.zoom { " aria-current=\"true\"" } else { "" };
+            let _ = write!(html, "<a href=\"wolfmark://zoom/preset/{preset}\"{current}>{preset}%</a>");
+        }
+        html.push_str("</nav></details><a href=\"wolfmark://zoom/in\" title=\"Zoom in\" aria-label=\"Zoom in\">+</a></nav>");
         // Qt's document-actions menu lives beside zoom rather than adding
         // another document tab or toolbar row. Use native HTML disclosure so
         // it works entirely offline and remains keyboard-accessible.
@@ -1451,6 +1460,25 @@ mod tests {
                 .render_html()
                 .contains("Unable to open &lt;missing&gt;")
         );
+    }
+
+    #[test]
+    fn zoom_percentage_menu_has_qt_presets_without_duplicate_tabs() {
+        let mut ui = Session::default();
+        let html = ui.render_html();
+        for value in [80, 100, 125, 150, 200] {
+            assert!(html.contains(&format!("wolfmark://zoom/preset/{value}")));
+        }
+        assert!(html.contains("class=\"zoom-presets\""));
+        assert!(html.contains("aria-label=\"Choose document zoom\""));
+        assert!(!html.contains("document-tabs"));
+        ui.set_zoom(200);
+        ui.change_zoom(10);
+        assert_eq!(ui.zoom, 200);
+        assert!(ui.render_html().contains("aria-current=\"true\">200%</a>"));
+        ui.set_zoom(65);
+        ui.change_zoom(-10);
+        assert_eq!(ui.zoom, 65);
     }
 
     #[test]
