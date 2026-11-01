@@ -782,7 +782,7 @@ impl Action {
             ("zoom", "/reset") => Some(Self::ZoomReset),
             ("zoom", path) => path.strip_prefix("/preset/")
                 .and_then(|value| value.parse::<u16>().ok())
-                .filter(|value| matches!(value, 80 | 100 | 125 | 150 | 200))
+                .filter(|value| matches!(*value, 80 | 100 | 125 | 150 | 200))
                 .map(Self::ZoomPreset),
             ("fullscreen", "/toggle") => Some(Self::Fullscreen),
             ("diagnostics", "/toggle") => Some(Self::Diagnostics),
