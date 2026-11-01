@@ -376,6 +376,25 @@ impl servo::WebViewDelegate for State {
                 |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
             );
         }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "zoom-presets")
+            && !self.gui_probe_started.replace(true)
+        {
+            let pending = self.pending.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"(() => {
+                const menu=document.querySelector('details.zoom-presets');
+                const option=document.querySelector('.zoom-menu a[href="wolfmark://zoom/preset/125"]');
+                if(!menu || !option || document.querySelector('.zoom-value')?.textContent!=='100%')return false;
+                menu.open=true;
+                return menu.open && option.textContent.trim()==='125%';
+            })()"#, move |result| {
+                eprintln!("SERVO_GUI zoom popup: {result:?}");
+                if matches!(result, Ok(embedder_traits::JSValue::Boolean(true))) {
+                    *pending.borrow_mut() = Some(Action::ZoomPreset(125));
+                    let _ = waker.0.send_event(Wake);
+                }
+            });
+        }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST")
             .is_ok_and(|value| value == "indent-source" || value == "indent-live")
             && !self.gui_probe_started.replace(true)
@@ -1240,6 +1259,22 @@ impl State {
                     }})()"#, size = f64::from(zoom) * 0.17, padding = f64::from(zoom) * 0.48,
                         top = f64::from(zoom) * 0.32, bottom = f64::from(zoom) * 0.34),
                         |result| { if let Err(error) = result { eprintln!("Zoom update failed: {error:?}"); } });
+                    if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "zoom-presets") {
+                        let done = self.gui_probe_done.clone();
+                        let waker = self.waker.clone();
+                        view.evaluate_javascript(r#"JSON.stringify([document.querySelector('.zoom-value')?.textContent,document.querySelector('.zoom-menu a[aria-current="true"]')?.textContent,document.querySelector('.zoom-presets')?.open])"#, move |result| {
+                            eprintln!("SERVO_GUI preset zoom result: {result:?}");
+                            if let Ok(embedder_traits::JSValue::String(json)) = result {
+                                if let Ok((displayed, selected, open)) = serde_json::from_str::<(String,String,bool)>(&json) {
+                                    if displayed == "125%" && selected == "125%" && !open {
+                                        eprintln!("SERVO_GUI Qt zoom popup and retained-DOM preset passed");
+                                        done.set(true);
+                                        let _ = waker.0.send_event(Wake);
+                                    }
+                                }
+                            }
+                        });
+                    }
                     if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "reader") {
                         let done = self.gui_probe_done.clone();
                         let waker = self.waker.clone();
