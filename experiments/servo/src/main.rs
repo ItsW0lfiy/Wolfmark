@@ -318,8 +318,36 @@ impl servo::WebViewDelegate for State {
                 if(event.isComposing||editor.dataset.composing==='1'||event.keyCode===229)return;
                 if(event.key==='Tab' && !event.ctrlKey && !event.altKey){{
                     event.preventDefault();
-                    if(!event.shiftKey){{editor.setRangeText('    ',editor.selectionStart,editor.selectionEnd,'end');changed();}}
-                    else{{const start=editor.selectionStart;const line=editor.value.lastIndexOf('\n',start-1)+1;const count=Math.min(4,(editor.value.slice(line).match(/^ */)||[''])[0].length);editor.setRangeText('',line,line+count,'preserve');changed();}}
+                    const start=editor.selectionStart,end=editor.selectionEnd;
+                    if(!event.shiftKey && start===end){{
+                        editor.setRangeText('    ',start,end,'end');
+                        changed();
+                    }}else{{
+                        // Indent whole selected lines rather than overwriting
+                        // a multiline selection. A trailing newline does not
+                        // add an otherwise unselected extra line.
+                        const lineStart=start===0?0:editor.value.lastIndexOf('\n',start-1)+1;
+                        const effectiveEnd=end>start && editor.value[end-1]==='\n'?end-1:end;
+                        const nextBreak=editor.value.indexOf('\n',effectiveEnd);
+                        const lineEnd=nextBreak<0?editor.value.length:nextBreak;
+                        const selected=editor.value.slice(lineStart,lineEnd);
+                        let totalDelta=0,firstDelta=0;
+                        const updated=selected.split('\n').map((line,index)=>{{
+                            const leading=(line.match(/^ */)||[''])[0].length;
+                            const next=event.shiftKey?line.slice(Math.min(4,leading)):'    '+line;
+                            const delta=next.length-line.length;
+                            totalDelta+=delta;
+                            if(index===0)firstDelta=delta;
+                            return next;
+                        }}).join('\n');
+                        if(updated!==selected){{
+                            editor.setRangeText(updated,lineStart,lineEnd,'preserve');
+                            const newStart=Math.max(lineStart,start+firstDelta);
+                            const newEnd=Math.max(newStart,end+totalDelta);
+                            editor.setSelectionRange(newStart,newEnd);
+                            changed();
+                        }}
+                    }}
                 }} else if((event.ctrlKey||event.metaKey) && !event.altKey
                    && (event.key.toLowerCase()==='b'||event.key.toLowerCase()==='i')){{
                     event.preventDefault();
@@ -347,6 +375,37 @@ impl servo::WebViewDelegate for State {
                 "JSON.stringify({loaded:document.readyState,editor:!!document.getElementById('source-editor'),find:!!document.getElementById('find-query')})",
                 |result| eprintln!("SERVO_GUI DOM handshake: {result:?}"),
             );
+        }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST")
+            .is_ok_and(|value| value == "indent-source" || value == "indent-live")
+            && !self.gui_probe_started.replace(true)
+        {
+            let scenario = std::env::var("WOLFMARK_SERVO_GUI_TEST").unwrap_or_default();
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"(() => {
+                const editor=document.getElementById('source-editor');
+                if(!editor || editor.readOnly)return false;
+                const live=document.getElementById('live-rich');
+                if(live){live.click();}
+                const original='Alpha\n    Beta\nGamma';
+                editor.value=original;
+                editor.setSelectionRange(0,original.length);
+                editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));
+                const expanded=editor.value==='    Alpha\n        Beta\n    Gamma';
+                const selectionPreserved=editor.selectionEnd===editor.value.length;
+                editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true}));
+                return expanded && selectionPreserved && editor.value===original
+                    && editor.selectionStart===0 && editor.selectionEnd===original.length
+                    && editor.dataset.unsynced==='1';
+            })()"#, move |result| {
+                eprintln!("SERVO_GUI multiline indentation: {result:?}");
+                if matches!(result, Ok(embedder_traits::JSValue::Boolean(true))) {
+                    eprintln!("SERVO_GUI multiline indentation passed ({scenario})");
+                    done.set(true);
+                    let _ = waker.0.send_event(Wake);
+                }
+            });
         }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "rich")
             && !self.gui_probe_started.replace(true)

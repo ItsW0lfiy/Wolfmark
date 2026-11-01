@@ -102,6 +102,14 @@ jobs:
             grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-source.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-source.log
             grep -F "Servo GUI edit" /tmp/wm-servo-gui-fixture.md
+            for scenario in indent-source indent-live; do
+              export WOLFMARK_SERVO_GUI_TEST="$scenario"
+              export WOLFMARK_SNAPSHOT_MODE="${scenario#indent-}"
+              printf "Alpha\\n    Beta\\nGamma\\n" > /tmp/wm-servo-indent-fixture.md
+              timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-indent-fixture.md > "/tmp/wm-$scenario.log" 2>&1 || { cat "/tmp/wm-$scenario.log"; exit 1; }
+              grep -F "SERVO_GUI multiline indentation passed ($scenario)" "/tmp/wm-$scenario.log"
+              grep -F "SERVO_GUI_TEST completed successfully" "/tmp/wm-$scenario.log"
+            done
             export WOLFMARK_SERVO_GUI_TEST=live-save
             export WOLFMARK_SNAPSHOT_MODE=live
             echo "# Integration Live Preview document" > /tmp/wm-servo-live-fixture.md
