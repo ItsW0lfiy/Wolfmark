@@ -276,7 +276,7 @@ impl servo::WebViewDelegate for State {
                     if(!Number.isSafeInteger(line)||line<1)return null;
                     let position=0;
                     for(let current=1;current<line;current++){{
-                        const next=editor.value.indexOf('\\n',position);
+                        const next=editor.value.indexOf('\n',position);
                         if(next<0)return editor.value.length;
                         position=next+1;
                     }}

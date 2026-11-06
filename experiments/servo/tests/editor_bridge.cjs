@@ -45,7 +45,7 @@ rich.emit('click');
 assert.equal(editor.scrollTop,90, 'editing resumes at preview position');
 // A click on rendered paragraph text must focus the corresponding Markdown
 // source line; preview Copy controls must continue to reach the Rust action.
-editor.value='# Heading\\n\\nParagraph\\n';
+editor.value='# Heading\n\nParagraph\n';
 const block={getAttribute:name=>name==='data-source-line'?'3':null};
 rich.contains=node=>node===block;
 const paragraph={closest:selector=>selector==='[data-source-line]'?block:null};

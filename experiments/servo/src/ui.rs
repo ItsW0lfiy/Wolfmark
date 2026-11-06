@@ -1365,7 +1365,7 @@ mod tests {
     #[test]
     fn live_preview_click_targets_are_rust_source_line_anchors() {
         let mut ui = Session::default();
-        ui.source = "# Heading\n\nParagraph with **bold** text.\n\n\`\`\`rust\nfn main() {}\n\`\`\`".into();
+        ui.source = "# Heading\n\nParagraph with **bold** text.\n\n```rust\nfn main() {}\n\````".into();
         ui.mode = Mode::Live;
         let html = ui.render_html();
         assert!(html.contains("<h1 id=\"heading\" data-source-line=\"1\">"));
