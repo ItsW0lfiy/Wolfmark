@@ -128,3 +128,11 @@ source/test changes. Its suite runs Rust unit regressions, checks Live Preview
 click-to-source and distinct code-copy IDs in a real rendered browser surface,
 and captures the same UI modes. A successful headless run is **not** approval
 for Windows Snap behavior, Windows installer parity, or the final visual design.
+
+### Installer document-handler boundary — 6 November 2026
+
+The Servo branch's Rust maintenance engine now forcibly disables file-handler
+registration regardless of legacy UI/CLI options. Installation, repair,
+modification and rollback clean old Wolfmark-owned associations, preserving
+other handlers and Windows UserChoice. The older Qt setup UI still needs a
+Servo-compatible replacement without its obsolete association checkbox.
