@@ -440,20 +440,21 @@ impl Session {
         // selected paragraph/heading rather than an unrelated previous caret.
         // Do not inject any document-supplied HTML or change Reader markup.
         for (block, line) in parsed.blocks.iter().zip(parsed.source_lines.iter()) {
-            let mut rendered = String::new();
+            let start = body.len();
             render_blocks(
-                &mut rendered, std::slice::from_ref(block),
+                &mut body, std::slice::from_ref(block),
                 self.path.as_deref(), &self.resources, &mut toc
             );
-            if *line > 0 && rendered.starts_with('<') {
-                if let Some(end_of_opening_tag) = rendered.find('>') {
-                    rendered.insert_str(
-                        end_of_opening_tag,
+            // Render into the accumulated body: code-box IDs derive from the
+            // current buffer length and must remain unique across blocks.
+            if *line > 0 && body[start..].starts_with('<') {
+                if let Some(end_of_opening_tag) = body[start..].find('>') {
+                    body.insert_str(
+                        start + end_of_opening_tag,
                         &format!(" data-source-line=\"{line}\"")
                     );
                 }
             }
-            body.push_str(&rendered);
         }
         body
     }
@@ -1373,6 +1374,25 @@ mod tests {
         assert!(html.contains("class=\"codebox\" data-source-line=\"5\""));
         // Source remains the only editable representation.
         assert!(html.contains("id=\"source-editor\""));
+    }
+
+    #[test]
+    fn live_preview_copy_ids_stay_distinct_between_code_blocks() {
+        let ui = Session::default();
+        let html = ui.live_rendered_html("```rust
+let a = 1;
+```
+
+```python
+print(2)
+```");
+        let ids: Vec<_> = html
+            .split("id=\"wm-code-")
+            .skip(1)
+            .filter_map(|fragment| fragment.split('"').next())
+            .collect();
+        assert_eq!(ids.len(), 2, "both blocks must expose Copy controls");
+        assert_ne!(ids[0], ids[1], "Copy must target its own code block");
     }
 
     #[test]
