@@ -119,3 +119,12 @@ while these remain unverified.
 - Extended the standalone host-bridge behavior test to exercise source-line selection and Copy routing.
 - Added a cross-platform filesystem regression: an open document's containing folder can be renamed, its file can be renamed and removed, and the in-memory document is still retained. This guards the explicit **no file/folder ownership or locking** boundary. Do not register file associations on install.
 - These are source and test changes; physical Windows GUI and Servo compilation still need CI/acceptance verification. Full caret-grapheme, image, scroll and packaging parity remain open.
+
+### Automated acceptance evidence
+
+The Linux Mesa/Xvfb GUI workflow now follows the authoritative Servo branch
+rather than the obsolete Codex migration branch, and triggers on actual Servo
+source/test changes. Its suite runs Rust unit regressions, checks Live Preview
+click-to-source and distinct code-copy IDs in a real rendered browser surface,
+and captures the same UI modes. A successful headless run is **not** approval
+for Windows Snap behavior, Windows installer parity, or the final visual design.

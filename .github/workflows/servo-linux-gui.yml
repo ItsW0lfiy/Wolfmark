@@ -3,9 +3,15 @@ name: Servo migration — Linux software-rendered GUI
 on:
   push:
     branches:
-      - codex/servo-migration-20261029
+      - experiment/servo-embedding-poc-20261026
     paths:
       - ".github/workflows/servo-linux-gui.yml"
+      - "experiments/servo/src/**"
+      - "experiments/servo/tests/**"
+      - "experiments/servo/Cargo.toml"
+      - "experiments/servo/Cargo.lock"
+      - "src/markdown/**"
+      - "src/images/**"
   workflow_dispatch:
 
 concurrency:
@@ -57,6 +63,10 @@ jobs:
         run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target
       - name: Typecheck Rust integration and unit-test targets
         run: cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests
+      - name: Execute Servo unit and file-ownership regression tests
+        run: |
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" \
+            cargo test --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --locked -- --test-threads=1
       - name: Verify software OpenGL and capture four UI modes
         shell: bash
         run: |
@@ -128,6 +138,12 @@ jobs:
             timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-rich-fixture.md > /tmp/wm-rich.log 2>&1 || { cat /tmp/wm-rich.log; exit 1; }
             grep -F "SERVO_GUI rich Live Preview contextual toggle passed" /tmp/wm-rich.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-rich.log
+            export WOLFMARK_SERVO_GUI_TEST=live-target
+            export WOLFMARK_SNAPSHOT_MODE=live
+            printf "# Anchor heading\\n\\nClick this paragraph.\\n\\n\`\`\`rust\\nlet a = 1;\\n\`\`\`\\n\\n\`\`\`python\\nprint(2)\\n\`\`\`\\n" > /tmp/wm-servo-target-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-target-fixture.md > /tmp/wm-live-target.log 2>&1 || { cat /tmp/wm-live-target.log; exit 1; }
+            grep -F "SERVO_GUI Live Preview source-line target and unique Copy controls passed" /tmp/wm-live-target.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live-target.log
             export WOLFMARK_SERVO_GUI_TEST=image
             export WOLFMARK_SNAPSHOT_MODE=reader
             mkdir -p /tmp/wm-servo-image-fixture

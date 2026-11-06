@@ -473,6 +473,34 @@ impl servo::WebViewDelegate for State {
                 }
             });
         }
+        if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "live-target")
+            && !self.gui_probe_started.replace(true)
+        {
+            let done = self.gui_probe_done.clone();
+            let waker = self.waker.clone();
+            webview.evaluate_javascript(r#"(() => {
+                const rich=document.getElementById('live-rich');
+                const editor=document.getElementById('source-editor');
+                if(!rich||!editor)return false;
+                const paragraph=rich.querySelector('p[data-source-line="3"]');
+                const codes=[...rich.querySelectorAll('code[id^="wm-code-"]')].map(node=>node.id);
+                if(!paragraph||codes.length!==2||codes[0]===codes[1])return false;
+                editor.setSelectionRange(0,0);
+                paragraph.click();
+                const expected=editor.value.indexOf('\n\n')+2;
+                const targeted=rich.closest('.live-context').classList.contains('editing')
+                    && editor.selectionStart===expected && editor.selectionEnd===expected;
+                editor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+                return targeted&&!rich.closest('.live-context').classList.contains('editing');
+            })()"#, move |result| {
+                eprintln!("SERVO_GUI Live Preview source target: {result:?}");
+                if matches!(result, Ok(embedder_traits::JSValue::Boolean(true))) {
+                    eprintln!("SERVO_GUI Live Preview source-line target and unique Copy controls passed");
+                    done.set(true);
+                    let _ = waker.0.send_event(Wake);
+                }
+            });
+        }
         if std::env::var("WOLFMARK_SERVO_GUI_TEST").is_ok_and(|value| value == "menu")
             && !self.gui_probe_started.replace(true)
         {
