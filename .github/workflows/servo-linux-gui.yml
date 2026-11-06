@@ -60,9 +60,9 @@ jobs:
           restore-keys: |
             servo-linux-ubuntu24-v1-
       - name: Build actual Servo executable
-        run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target
+        run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --locked
       - name: Typecheck Rust integration and unit-test targets
-        run: cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests
+        run: cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests --locked
       - name: Execute Servo unit and file-ownership regression tests
         run: |
           xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" \
@@ -140,7 +140,7 @@ jobs:
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-rich.log
             export WOLFMARK_SERVO_GUI_TEST=live-target
             export WOLFMARK_SNAPSHOT_MODE=live
-            printf "# Anchor heading\\n\\nClick this paragraph.\\n\\n\`\`\`rust\\nlet a = 1;\\n\`\`\`\\n\\n\`\`\`python\\nprint(2)\\n\`\`\`\\n" > /tmp/wm-servo-target-fixture.md
+            printf "# Anchor heading\n\nClick this paragraph.\n\n\`\`\`rust\nlet a = 1;\n\`\`\`\n\n\`\`\`python\nprint(2)\n\`\`\`\n" > /tmp/wm-servo-target-fixture.md
             timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-target-fixture.md > /tmp/wm-live-target.log 2>&1 || { cat /tmp/wm-live-target.log; exit 1; }
             grep -F "SERVO_GUI Live Preview source-line target and unique Copy controls passed" /tmp/wm-live-target.log
             grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live-target.log
