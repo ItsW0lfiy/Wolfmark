@@ -10,6 +10,7 @@ on:
       - ".cargo/config.toml"
       - "experiments/servo/**"
       - "src/**"
+      - "installer/maintenance/**"
       - "Cargo.toml"
   workflow_dispatch:
 
@@ -58,6 +59,13 @@ jobs:
           })
           if ($names -contains 'wolfmark-servo-test') {
             throw 'Servo experiment unexpectedly entered the default Qt workspace.'
+          }
+      - name: Verify installer cannot claim document types
+        shell: pwsh
+        run: |
+          cargo test -p wolfmark-maintenance --locked --lib
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Windows installer file association regression failed.'
           }
       - name: Resolve and compile-check isolated Servo experiment
         shell: pwsh
