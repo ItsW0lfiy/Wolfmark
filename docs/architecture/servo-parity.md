@@ -1,6 +1,6 @@
 # Wolfmark Servo migration — implementation and acceptance ledger
 
-**Target branch:** `codex/servo-migration-20261029`. **Production:** Qt remains default on `main`; migration is not yet accepted. A successful Cargo compile is only the first gate. Always inspect the actual implementation and current CI before marking features complete.
+**Target branch:** `experiment/servo-embedding-poc-20261026` (authoritative Servo branch; the former codex migration branch was fast-forwarded to this branch). **Production:** Qt remains default on `main`; migration is not yet accepted. A successful Cargo compile is only the first gate. Always inspect the actual implementation and current CI before marking features complete.
 
 ## UI and functional comparison
 
@@ -111,3 +111,11 @@ while these remain unverified.
   transfer. Windows CI runs it before compilation.
 - Local Node checks passed; no local Rust toolchain or Servo GUI was available.
   Physical IME handling and exact rich-text caret/typography parity remain open.
+
+### Live Preview source navigation and file ownership regression — 6 November 2026
+
+- Contextual Preview now adds top-level, Rust-parser-owned source line anchors, only in Live Preview. Clicking a rendered heading, paragraph or code block returns focus to its source line instead of the old unrelated caret position.
+- The Live Preview click handler no longer consumes clicks on the existing code-frame Copy control. Keyboard activation of that control likewise remains available.
+- Extended the standalone host-bridge behavior test to exercise source-line selection and Copy routing.
+- Added a cross-platform filesystem regression: an open document's containing folder can be renamed, its file can be renamed and removed, and the in-memory document is still retained. This guards the explicit **no file/folder ownership or locking** boundary. Do not register file associations on install.
+- These are source and test changes; physical Windows GUI and Servo compilation still need CI/acceptance verification. Full caret-grapheme, image, scroll and packaging parity remain open.

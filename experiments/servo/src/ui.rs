@@ -435,9 +435,26 @@ impl Session {
         let parsed = parser::parse(source);
         let mut body = String::new();
         let mut toc = Vec::new();
-        render_blocks(
-            &mut body, &parsed.blocks, self.path.as_deref(), &self.resources, &mut toc
-        );
+        // Annotate the top-level, trusted Rust-rendered blocks with source
+        // line positions. Clicking Live Preview should open the editor at the
+        // selected paragraph/heading rather than an unrelated previous caret.
+        // Do not inject any document-supplied HTML or change Reader markup.
+        for (block, line) in parsed.blocks.iter().zip(parsed.source_lines.iter()) {
+            let mut rendered = String::new();
+            render_blocks(
+                &mut rendered, std::slice::from_ref(block),
+                self.path.as_deref(), &self.resources, &mut toc
+            );
+            if *line > 0 && rendered.starts_with('<') {
+                if let Some(end_of_opening_tag) = rendered.find('>') {
+                    rendered.insert_str(
+                        end_of_opening_tag,
+                        &format!(" data-source-line=\"{line}\"")
+                    );
+                }
+            }
+            body.push_str(&rendered);
+        }
         body
     }
 
@@ -1346,6 +1363,19 @@ mod tests {
     }
 
     #[test]
+    fn live_preview_click_targets_are_rust_source_line_anchors() {
+        let mut ui = Session::default();
+        ui.source = "# Heading\n\nParagraph with **bold** text.\n\n\`\`\`rust\nfn main() {}\n\`\`\`".into();
+        ui.mode = Mode::Live;
+        let html = ui.render_html();
+        assert!(html.contains("<h1 id=\"heading\" data-source-line=\"1\">"));
+        assert!(html.contains("<p data-source-line=\"3\">"));
+        assert!(html.contains("class=\"codebox\" data-source-line=\"5\""));
+        // Source remains the only editable representation.
+        assert!(html.contains("id=\"source-editor\""));
+    }
+
+    #[test]
     fn live_preview_retains_raw_source_and_has_contextual_decoration() {
         let source = "# Heading\n\n**bold** and <script>invalid</script>";
         let decorated = decorated_source(source);
@@ -1541,6 +1571,30 @@ mod tests {
         assert!(!ui.poll_external_files());
         assert!(ui.source.contains("Local unsaved"));
         assert!(ui.notice.as_deref().unwrap_or("").contains("Unsaved edits were preserved"));
+    }
+
+    #[test]
+    fn open_session_never_locks_a_document_or_its_parent_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let original_dir = root.path().join("before");
+        let moved_dir = root.path().join("after");
+        std::fs::create_dir(&original_dir).unwrap();
+        let original_file = original_dir.join("wolf.md");
+        std::fs::write(&original_file, "# Still in memory").unwrap();
+        let mut session = Session::default();
+        session.open(&original_file);
+        assert_eq!(session.open_documents.len(), 1);
+        // This must also work on Windows, where retained file handles would
+        // prevent a rename and violate Wolfmark's non-ownership boundary.
+        std::fs::rename(&original_dir, &moved_dir)
+            .expect("opening a document must not claim or lock its folder");
+        let renamed = moved_dir.join("renamed.md");
+        std::fs::rename(moved_dir.join("wolf.md"), &renamed)
+            .expect("opening a document must not lock its file");
+        assert!(!session.poll_external_files());
+        assert_eq!(session.source, "# Still in memory");
+        std::fs::remove_file(&renamed).expect("open session must not block file deletion");
+        assert_eq!(session.source, "# Still in memory");
     }
 
     #[test]

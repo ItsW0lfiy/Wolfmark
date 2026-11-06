@@ -43,4 +43,21 @@ assert.equal(rich.scrollTop,900, 'preview restores proportional reading position
 rich.scrollTop=180;
 rich.emit('click');
 assert.equal(editor.scrollTop,90, 'editing resumes at preview position');
-console.log('Editor bridge: composition ownership, committed input, scroll mirrors and Live transition passed');
+// A click on rendered paragraph text must focus the corresponding Markdown
+// source line; preview Copy controls must continue to reach the Rust action.
+editor.value='# Heading\\n\\nParagraph\\n';
+const block={getAttribute:name=>name==='data-source-line'?'3':null};
+rich.contains=node=>node===block;
+const paragraph={closest:selector=>selector==='[data-source-line]'?block:null};
+const click=rich.emit('click',{target:paragraph});
+assert(click.prevented,'a document paragraph click enters editing');
+assert.equal(editor.selectionStart,11,'Live Preview should seek paragraph source line');
+assert.equal(editor.selectionEnd,11);
+editor.emit('keydown',{key:'Escape'});
+const codeCopy={closest:selector=>selector==='a.code-copy'?{}:null};
+const copy=rich.emit('click',{target:codeCopy});
+assert(!copy.prevented,'code Copy must not be swallowed by the preview editor');
+assert(!classes.has('editing'),'Copy must not switch the preview into editing');
+const copyKeyboard=rich.emit('keydown',{key:'Enter',target:codeCopy});
+assert(!copyKeyboard.prevented,'keyboard Copy must keep its native activation');
+console.log('Editor bridge: IME, source-line targeting, code Copy and Live transition passed');

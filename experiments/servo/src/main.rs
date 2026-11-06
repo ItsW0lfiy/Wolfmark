@@ -272,20 +272,42 @@ impl servo::WebViewDelegate for State {
                     context.classList.remove('editing');
                     rich.scrollTop=fraction*Math.max(0,rich.scrollHeight-rich.clientHeight);
                 }};
-                rich.addEventListener('click',event=>{{
-                    // Do not let a Markdown link navigate when clicking to
-                    // enter editing. Navigation stays under Rust policy.
-                    event.preventDefault();
+                const positionOfSourceLine=line=>{{
+                    if(!Number.isSafeInteger(line)||line<1)return null;
+                    let position=0;
+                    for(let current=1;current<line;current++){{
+                        const next=editor.value.indexOf('\\n',position);
+                        if(next<0)return editor.value.length;
+                        position=next+1;
+                    }}
+                    return position;
+                }};
+                const enterEditing=event=>{{
+                    // The preview's paragraph/heading anchors come only from
+                    // Rust's parsed source lines, never from document scripts.
+                    const target=event?.target?.closest?.('[data-source-line]');
+                    const sourceLine=target && rich.contains(target)
+                        ? Number(target.getAttribute('data-source-line')) : null;
+                    const caret=sourceLine===null ? null : positionOfSourceLine(sourceLine);
                     const fraction=rich.scrollTop/Math.max(1,rich.scrollHeight-rich.clientHeight);
                     context.classList.add('editing');
                     editor.scrollTop=fraction*Math.max(0,editor.scrollHeight-editor.clientHeight);
                     editor.focus();
+                    if(caret!==null)editor.setSelectionRange(caret,caret);
+                }};
+                rich.addEventListener('click',event=>{{
+                    // Keep the existing native/Rust-owned code Copy action
+                    // working; other preview clicks enter source editing.
+                    if(event?.target?.closest?.('a.code-copy'))return;
+                    event.preventDefault();
+                    enterEditing(event);
                 }});
                 rich.addEventListener('keydown',event=>{{
+                    // Child links (notably Copy) own their keyboard activation.
+                    if(event.target && event.target!==rich)return;
                     if(event.key==='Enter'||event.key===' '){{
                         event.preventDefault();
-                        context.classList.add('editing');
-                        editor.focus();
+                        enterEditing(event);
                     }}
                 }});
                 editor.addEventListener('keydown',event=>{{
