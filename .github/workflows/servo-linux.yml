@@ -1,0 +1,68 @@
+name: Servo migration — Linux compile parity
+
+on:
+  push:
+    branches:
+      - codex/servo-migration-20261029
+    paths:
+      - ".github/workflows/servo-linux.yml"
+      - "experiments/servo/**"
+      - "src/**"
+  workflow_dispatch:
+
+concurrency:
+  group: servo-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-servo-compile:
+    name: Compile-check Servo frontend on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      CARGO_TERM_COLOR: always
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux Servo/graphics toolchain dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang-18 llvm-18-dev libclang-18-dev pkg-config cmake ninja-build \
+            libfontconfig1-dev libfreetype-dev libdbus-1-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxcb1-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxkbcommon-dev libwayland-dev libgtk-3-dev libasound2-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libudev-dev libssl-dev
+      - name: Restore Servo compilation cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-linux-ubuntu24-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-linux-ubuntu24-v1-
+      - name: Verify Qt remains the default Cargo workspace
+        run: |
+          cargo metadata --no-deps --format-version 1 | python3 -c \
+            'import sys,json; d=json.load(sys.stdin); assert all("wolfmark-servo-test" not in x for x in d["workspace_members"])'
+      - name: Typecheck Servo application on Linux
+        run: |
+          cargo check --manifest-path experiments/servo/Cargo.toml \
+            --target-dir out/servo-cargo/target
+      - name: Typecheck Servo regression tests on Linux
+        run: |
+          cargo check --manifest-path experiments/servo/Cargo.toml \
+            --target-dir out/servo-cargo/target --tests
+      - name: Run standalone scroll controllers on Linux
+        run: |
+          rustc --edition=2024 --test experiments/servo/src/smooth_scroll.rs -o /tmp/wolfmark-smooth-tests
+          /tmp/wolfmark-smooth-tests
+          rustc --edition=2024 --test experiments/servo/src/middle_scroll.rs -o /tmp/wolfmark-middle-tests
+          /tmp/wolfmark-middle-tests

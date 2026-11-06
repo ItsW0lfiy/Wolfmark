@@ -1,0 +1,68 @@
+name: Servo migration — Windows graphical snapshot smoke
+
+on:
+  push:
+    branches:
+      - codex/servo-migration-20261029
+    paths:
+      - ".github/workflows/servo-ui-snapshot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Build and capture Servo UI modes
+    runs-on: windows-2022
+    timeout-minutes: 65
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+      CARGO_TERM_COLOR: always
+      WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+      WOLFMARK_SNAPSHOT_WIDTH: "1648"
+      WOLFMARK_SNAPSHOT_HEIGHT: "928"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Servo Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-windows-msvc-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-windows-msvc-v1-
+      - name: Build executable (not just cargo check)
+        shell: pwsh
+        run: |
+          cargo build-servo-test
+          if ($LASTEXITCODE -ne 0) { throw 'Servo GUI build failed' }
+      - name: Capture Reader, Source, Live Preview and Settings
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "out/servo-screenshots" -Force | Out-Null
+          $root = (Resolve-Path "out/servo-screenshots").Path
+          $exe = (Resolve-Path "out/servo-cargo/target/debug/wolfmark-servo-test.exe").Path
+          foreach ($mode in @("reader", "source", "live", "settings")) {
+            $env:WOLFMARK_SNAPSHOT_MODE = $mode
+            $env:WOLFMARK_SERVO_SNAPSHOT = Join-Path $root "servo-$mode.png"
+            Write-Host "Capturing Wolfmark $mode UI"
+            & $exe
+            if ($LASTEXITCODE -ne 0) { throw "Servo $mode launch failed ($LASTEXITCODE)" }
+            if (!(Test-Path $env:WOLFMARK_SERVO_SNAPSHOT)) {
+              throw "Servo $mode screenshot missing"
+            }
+            if ((Get-Item $env:WOLFMARK_SERVO_SNAPSHOT).Length -lt 10000) {
+              throw "Servo $mode screenshot unexpectedly small"
+            }
+          }
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: servo-ui-graphical-snapshots
+          path: out/servo-screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 7
