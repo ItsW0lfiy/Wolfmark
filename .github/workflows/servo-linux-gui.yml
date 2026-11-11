@@ -1,0 +1,164 @@
+name: Servo migration — Linux software-rendered GUI
+
+on:
+  push:
+    branches:
+      - experiment/servo-embedding-poc-20261026
+    paths:
+      - ".github/workflows/servo-linux-gui.yml"
+      - "experiments/servo/src/**"
+      - "experiments/servo/tests/**"
+      - "experiments/servo/Cargo.toml"
+      - "experiments/servo/Cargo.lock"
+      - "src/markdown/**"
+      - "src/images/**"
+  workflow_dispatch:
+
+concurrency:
+  group: servo-linux-gui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux-gui:
+    name: Linux Mesa/Xvfb Servo UI screenshots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    env:
+      CARGO_TERM_COLOR: always
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+      GDK_BACKEND: x11
+      WOLFMARK_SNAPSHOT_WIDTH: "1648"
+      WOLFMARK_SNAPSHOT_HEIGHT: "928"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Servo graphics and headless OpenGL prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang-18 llvm-18-dev libclang-18-dev pkg-config cmake ninja-build \
+            libfontconfig1-dev libfreetype-dev libdbus-1-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxcb1-dev libxcursor-dev libxi-dev libxrandr-dev \
+            libxkbcommon-dev libwayland-dev libgtk-3-dev libasound2-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libudev-dev libssl-dev xvfb xauth mesa-utils \
+            libgl1-mesa-dri libglx-mesa0
+      - name: Restore cached Linux Servo compilation
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-linux-ubuntu24-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-linux-ubuntu24-v1-
+      - name: Build actual Servo executable
+        run: cargo build --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --locked
+      - name: Typecheck Rust integration and unit-test targets
+        run: cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests --locked
+      - name: Execute Servo unit and file-ownership regression tests
+        run: |
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" \
+            cargo test --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --locked -- --test-threads=1
+      - name: Verify software OpenGL and capture four UI modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/servo-linux-screenshots
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
+            set -euo pipefail
+            glxinfo -B
+            for mode in reader source live settings menu; do
+              echo "Capturing Wolfmark Servo ${mode} using Mesa software GL"
+              export WOLFMARK_SNAPSHOT_MODE="$mode"
+              export WOLFMARK_SERVO_SNAPSHOT="out/servo-linux-screenshots/servo-${mode}.png"
+              timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test
+              test -s "$WOLFMARK_SERVO_SNAPSHOT"
+              test "$(stat -c%s "$WOLFMARK_SERVO_SNAPSHOT")" -ge 10000
+            done
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            export WOLFMARK_SERVO_SNAPSHOT="out/servo-linux-screenshots/servo-frameless.png"
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --frameless-test
+            test -s "$WOLFMARK_SERVO_SNAPSHOT"
+          '
+      - name: Test menu, Reader, Source, Live, and locally decoded image in real Servo GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a -s "-screen 0 1648x928x24 +extension GLX" bash -c '
+            set -euo pipefail
+            unset WOLFMARK_SERVO_SNAPSHOT
+            export WOLFMARK_SERVO_GUI_TEST=menu
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-menu.log 2>&1 || { cat /tmp/wm-menu.log; exit 1; }
+            grep -F "SERVO_GUI Qt document actions menu passed" /tmp/wm-menu.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-menu.log
+            export WOLFMARK_SERVO_GUI_TEST=zoom-presets
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-zoom-presets.log 2>&1 || { cat /tmp/wm-zoom-presets.log; exit 1; }
+            grep -F "SERVO_GUI Qt zoom popup and retained-DOM preset passed" /tmp/wm-zoom-presets.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-zoom-presets.log
+            export WOLFMARK_SERVO_GUI_TEST=reader
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test > /tmp/wm-reader.log 2>&1 || { cat /tmp/wm-reader.log; exit 1; }
+            grep -F "SERVO_GUI reader search selection and retained-DOM zoom passed" /tmp/wm-reader.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-reader.log
+            export WOLFMARK_SERVO_GUI_TEST=source-save
+            export WOLFMARK_SNAPSHOT_MODE=source
+            echo "# Integration source document" > /tmp/wm-servo-gui-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-gui-fixture.md > /tmp/wm-source.log 2>&1 || { cat /tmp/wm-source.log; exit 1; }
+            grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-source.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-source.log
+            grep -F "Servo GUI edit" /tmp/wm-servo-gui-fixture.md
+            for scenario in indent-source indent-live; do
+              export WOLFMARK_SERVO_GUI_TEST="$scenario"
+              export WOLFMARK_SNAPSHOT_MODE="${scenario#indent-}"
+              printf "Alpha\\n    Beta\\nGamma\\n" > /tmp/wm-servo-indent-fixture.md
+              timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-indent-fixture.md > "/tmp/wm-$scenario.log" 2>&1 || { cat "/tmp/wm-$scenario.log"; exit 1; }
+              grep -F "SERVO_GUI multiline indentation passed ($scenario)" "/tmp/wm-$scenario.log"
+              grep -F "SERVO_GUI_TEST completed successfully" "/tmp/wm-$scenario.log"
+            done
+            export WOLFMARK_SERVO_GUI_TEST=live-save
+            export WOLFMARK_SNAPSHOT_MODE=live
+            echo "# Integration Live Preview document" > /tmp/wm-servo-live-fixture.md
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-live-fixture.md > /tmp/wm-live.log 2>&1 || { cat /tmp/wm-live.log; exit 1; }
+            grep -F "SERVO_GUI source edit synchronized and saved" /tmp/wm-live.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live.log
+            grep -F "Servo GUI edit" /tmp/wm-servo-live-fixture.md
+            export WOLFMARK_SERVO_GUI_TEST=rich
+            export WOLFMARK_SNAPSHOT_MODE=live
+            printf "# Contextual Heading\\n\\nA **strong** paragraph.\\n" > /tmp/wm-servo-rich-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-rich-fixture.md > /tmp/wm-rich.log 2>&1 || { cat /tmp/wm-rich.log; exit 1; }
+            grep -F "SERVO_GUI rich Live Preview contextual toggle passed" /tmp/wm-rich.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-rich.log
+            export WOLFMARK_SERVO_GUI_TEST=live-target
+            export WOLFMARK_SNAPSHOT_MODE=live
+            printf "# Anchor heading\n\nClick this paragraph.\n\n\`\`\`rust\nlet a = 1;\n\`\`\`\n\n\`\`\`python\nprint(2)\n\`\`\`\n" > /tmp/wm-servo-target-fixture.md
+            timeout 40s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-target-fixture.md > /tmp/wm-live-target.log 2>&1 || { cat /tmp/wm-live-target.log; exit 1; }
+            grep -F "SERVO_GUI Live Preview source-line target and unique Copy controls passed" /tmp/wm-live-target.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-live-target.log
+            export WOLFMARK_SERVO_GUI_TEST=image
+            export WOLFMARK_SNAPSHOT_MODE=reader
+            mkdir -p /tmp/wm-servo-image-fixture
+            cp assets/icons/wolfmark-128x128.png /tmp/wm-servo-image-fixture/local-image.png
+            printf "# Image fixture\n\n![Wolfmark](local-image.png)\n" > /tmp/wm-servo-image-fixture/image.md
+            timeout 50s out/servo-cargo/target/debug/wolfmark-servo-test --document /tmp/wm-servo-image-fixture/image.md > /tmp/wm-image.log 2>&1 || { cat /tmp/wm-image.log; exit 1; }
+            grep -F "SERVO_GUI local image displayed with nonzero natural size" /tmp/wm-image.log
+            grep -F "SERVO_GUI_TEST completed successfully" /tmp/wm-image.log
+          '
+
+      - name: Save graphical evidence even if the renderer fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfmark-servo-linux-ui-snapshots
+          path: out/servo-linux-screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,0 +1,110 @@
+name: Servo embedding experiment — Windows compile
+
+on:
+  push:
+    branches:
+      - experiment/servo-embedding-poc-20261026
+      - codex/servo-migration-20261029
+    paths:
+      - ".github/workflows/servo-experiment.yml"
+      - ".cargo/config.toml"
+      - "experiments/servo/**"
+      - "src/**"
+      - "installer/maintenance/**"
+      - "Cargo.toml"
+  workflow_dispatch:
+
+# Avoid compiling the same ~800-crate Servo graph for every small UI commit.
+concurrency:
+  group: servo-experiment-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows-servo-compile:
+    name: Compile-check isolated Servo crate
+    runs-on: windows-2022
+    timeout-minutes: 55
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Servo Cargo build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            out/servo-cargo/target
+          key: servo-windows-msvc-v1-${{ hashFiles('experiments/servo/Cargo.lock', '.cargo/config.toml') }}
+          restore-keys: |
+            servo-windows-msvc-v1-
+      - name: Verify editor bridge input and Live transition behavior
+        run: node experiments/servo/tests/editor_bridge.cjs
+      - name: Show toolchain details
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          clang --version
+      - name: Confirm the default Cargo workspace remains Qt-only
+        shell: pwsh
+        run: |
+          $json = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $names = @($json.workspace_members | ForEach-Object {
+            $id = $_
+            ($json.packages | Where-Object { $_.id -eq $id }).name
+          })
+          if ($names -contains 'wolfmark-servo-test') {
+            throw 'Servo experiment unexpectedly entered the default Qt workspace.'
+          }
+      - name: Verify installer cannot claim document types
+        shell: pwsh
+        run: |
+          cargo test -p wolfmark-maintenance --locked --lib
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Windows installer file association regression failed.'
+          }
+      - name: Resolve and compile-check isolated Servo experiment
+        shell: pwsh
+        run: |
+          $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
+          cargo check-servo-test --locked
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo compile check failed; inspect build logs for dependency/SDK/API errors.'
+          }
+      - name: Typecheck Servo prototype regression tests
+        shell: pwsh
+        run: |
+          $env:LIBCLANG_PATH = 'C:\Program Files\LLVM\bin'
+          cargo check --manifest-path experiments/servo/Cargo.toml --target-dir out/servo-cargo/target --tests --locked
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo prototype test targets failed to compile.'
+          }
+      - name: Assert that the exact Cargo lockfile was sufficient
+        shell: pwsh
+        run: |
+          git diff --exit-code -- experiments/servo/Cargo.lock
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Servo Cargo.lock changed despite locked compile; commit the resolved lockfile.'
+          }
+      - name: Execute isolated Rust scrolling regression tests
+        shell: pwsh
+        run: |
+          foreach ($source in @("experiments/servo/src/smooth_scroll.rs", "experiments/servo/src/middle_scroll.rs")) {
+            $exe = Join-Path $env:RUNNER_TEMP ((Split-Path $source -LeafBase) + "-tests.exe")
+            rustc --edition=2024 --test $source -o $exe
+            if ($LASTEXITCODE -ne 0) { throw "Could not compile $source tests" }
+            & $exe
+            if ($LASTEXITCODE -ne 0) { throw "$source motion tests failed" }
+          }
+      - name: Upload resolved experiment lockfile when generated
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: servo-experiment-cargo-lock
+          path: experiments/servo/Cargo.lock
+          if-no-files-found: warn
+          retention-days: 7

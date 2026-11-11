@@ -41,7 +41,8 @@ enum Command {
         uninstaller: PathBuf,
         #[arg(long)]
         cancel_file: Option<PathBuf>,
-        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        // Parse old installer arguments but never authorize document handlers.
+        #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
         file_associations: bool,
         #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
         desktop_shortcut: bool,

@@ -165,9 +165,11 @@ impl Engine {
         operation: Operation,
         payload_root: &Path,
         manifest: &PayloadManifest,
-        options: InstallOptions,
+        mut options: InstallOptions,
         uninstaller_source: &Path,
     ) -> Result<OperationResult, String> {
+        // Document associations are forbidden, including for old setup clients.
+        options.file_associations = false;
         if !matches!(
             operation,
             Operation::Install | Operation::Update | Operation::Reinstall
@@ -209,7 +211,7 @@ impl Engine {
 
     pub fn repair(&self, uninstaller_source: &Path) -> Result<OperationResult, String> {
         integration::request_wolfmark_exit()?;
-        let state = self
+        let mut state = self
             .state()?
             .ok_or_else(|| "Wolfmark is not installed".to_owned())?;
         let current_cache = self.paths.cache_root.join("current");
@@ -229,6 +231,7 @@ impl Engine {
         }
         let uninstaller = self.paths.state_root.join("Wolfmark-Uninstall.exe");
         copy_one(uninstaller_source, &uninstaller)?;
+        state.options.file_associations = false;
         integration::apply(
             &state.options,
             &state.manifest.build.version,
@@ -242,6 +245,7 @@ impl Engine {
                 remaining.join(", ")
             ));
         }
+        write_json_atomic(&self.paths.state_root.join(STATE_FILE), &state)?;
         self.result(
             Operation::Repair,
             !damaged.is_empty(),
@@ -255,13 +259,13 @@ impl Engine {
 
     pub fn modify(
         &self,
-        file_associations: bool,
+        _file_associations: bool,
         desktop_shortcut: bool,
     ) -> Result<OperationResult, String> {
         let mut state = self
             .state()?
             .ok_or_else(|| "Wolfmark is not installed".to_owned())?;
-        state.options.file_associations = file_associations;
+        state.options.file_associations = false;
         state.options.desktop_shortcut = desktop_shortcut;
         state.updated_at = Utc::now().timestamp();
         let uninstaller = self.paths.state_root.join("Wolfmark-Uninstall.exe");
@@ -459,6 +463,8 @@ impl Engine {
             remove_owned_files(&journal.target_directory, &candidate)?;
         }
         if let Some(previous) = &journal.previous_state {
+            let mut restored = previous.clone();
+            restored.options.file_associations = false;
             let backup = self
                 .paths
                 .state_root
@@ -473,12 +479,12 @@ impl Engine {
                 )?;
                 let uninstaller = self.paths.state_root.join("Wolfmark-Uninstall.exe");
                 integration::apply(
-                    &previous.options,
-                    &previous.manifest.build.version,
-                    &previous.manifest.build.build_id,
+                    &restored.options,
+                    &restored.manifest.build.version,
+                    &restored.manifest.build.build_id,
                     &uninstaller,
                 )?;
-                write_json_atomic(&self.paths.state_root.join(STATE_FILE), previous)?;
+                write_json_atomic(&self.paths.state_root.join(STATE_FILE), &restored)?;
             }
         } else {
             let _ = integration::remove();

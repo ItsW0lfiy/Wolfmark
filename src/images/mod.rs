@@ -2,7 +2,7 @@ mod cache;
 mod loader;
 pub mod paths;
 
-pub use loader::{ImageDimensions, ImagePipeline, probe_dimensions};
+pub use loader::{ImageDimensions, ImagePipeline, decode as decode_image, probe_dimensions};
 pub use paths::{AssetResolution, AssetState, resolve_local_image};
 
 #[derive(Clone, Debug)]

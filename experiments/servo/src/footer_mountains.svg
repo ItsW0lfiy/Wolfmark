@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 250" role="img" aria-label="Mountain silhouettes">
+  <!-- Decorative Wolfmark sidebar scenery. No external assets or scripts. -->
+  <defs>
+    <linearGradient id="horizon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#45484d" stop-opacity=".14"/>
+      <stop offset=".64" stop-color="#4a4b50" stop-opacity=".27"/>
+      <stop offset="1" stop-color="#0c0d11" stop-opacity=".85"/>
+    </linearGradient>
+    <linearGradient id="slope" x1="0" y1="0" x2="1" y2=".8">
+      <stop stop-color="#6b7077" stop-opacity=".53"/>
+      <stop offset=".45" stop-color="#25272d"/>
+      <stop offset="1" stop-color="#101114"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#15161b" stop-opacity="1"/>
+      <stop offset=".32" stop-color="#15161b" stop-opacity=".75"/>
+      <stop offset=".7" stop-color="#15161b" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#15161b" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#horizon)" d="M0 153L110 113 169 133 248 76 306 127 383 61 426 87 481 28 541 86 600 42 680 97V250H0Z"/>
+  <path fill="#2d3036" opacity=".72" d="M70 189L160 122 208 146 283 93 343 143 408 78 462 109 519 52 591 127 643 102 680 121V250H0Z"/>
+  <path fill="url(#slope)" d="M196 250L278 171 332 191 384 116 420 145 494 42 551 111 614 146 661 116 680 132V250Z"/>
+  <path fill="#9c9da2" opacity=".41" d="M494 42L477 87 487 79 493 93 508 80 519 104 503 74Z"/>
+  <path fill="#a0a2a8" opacity=".27" d="M384 116L374 143 387 132 397 149 393 132Z"/>
+  <path fill="#777a7f" opacity=".22" d="M519 52L506 80 518 74 531 95 527 79Z"/>
+  <path fill="#1a1c22" d="M0 243L83 221 143 231 211 205 257 226 302 189 359 223 412 182 464 202 508 164 563 204 616 176 680 195V250H0Z"/>
+  <g fill="#101216" opacity=".92">
+    <path d="M355 231v-51l-20 28 13-4-23 25 26-5V250h8v-26l25 5-22-25 13 4Z"/>
+    <path d="M427 250v-88l-30 40 20-7-29 35 34-9V250Z"/>
+    <path d="M524 250v-82l-26 36 17-5-26 31 30-8V250Z"/>
+    <path d="M600 250v-74l-24 32 17-5-26 30 28-7V250Z"/>
+    <path d="M663 250v-88l-30 42 20-7-29 36 34-11V250Z"/>
+    <path d="M296 250v-55l-21 31 14-4-20 26 22-6V250Z"/>
+  </g>
+  <rect width="680" height="250" fill="url(#fade)"/>
+</svg>
