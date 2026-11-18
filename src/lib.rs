@@ -1,4 +1,5 @@
 pub mod app;
+pub mod archive;
 pub mod images;
 pub mod markdown;
 pub mod native_api;

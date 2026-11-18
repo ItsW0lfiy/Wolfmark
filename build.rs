@@ -3,6 +3,7 @@ use std::process::Command;
 
 fn main() {
     let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("Cargo manifest"));
+    watch_git_identity(&manifest);
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("Cargo target operating system");
     if target_os == "windows" {
         let qt = find_qt(&manifest).unwrap_or_else(|message| panic!("{message}"));
@@ -27,6 +28,11 @@ fn main() {
         "native/qt/wolf_style.h",
         "native/qt/wolf_style.cpp",
         "native/qt/document_zoom.h",
+        "native/qt/document_output.h",
+        "native/qt/document_properties.h",
+        "native/qt/page_preview.h",
+        "native/qt/page_preview.cpp",
+        "native/qt/document_output.cpp",
         "native/qt/document_editor.h",
         "native/qt/document_editor.cpp",
         "native/qt/document_zoom.cpp",
@@ -83,6 +89,21 @@ fn find_qt(manifest: &Path) -> Result<PathBuf, String> {
     Err("Qt 6.8.2 or another compatible Qt 6 Widgets SDK was not found. Run `cargo setup` from the Wolfmark repository root, or set WOLFMARK_QT_DIR or QTDIR.".into())
 }
 
+fn watch_git_identity(manifest: &Path) {
+    let mut names = vec!["HEAD".to_owned(), "packed-refs".to_owned()];
+    if let Some(reference) = git_value(manifest, &["symbolic-ref", "--quiet", "HEAD"]) {
+        names.push(reference);
+    }
+    for name in names {
+        if let Some(path) = git_value(manifest, &["rev-parse", "--git-path", &name]) {
+            let path = manifest.join(path);
+            if path.exists() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+    }
+}
+
 fn qt_is_usable(path: &Path) -> bool {
     path.join("include/QtWidgets/QApplication").is_file()
         && path
@@ -135,6 +156,8 @@ fn qt_bridge_build(manifest: &Path) -> cc::Build {
         .file(manifest.join("native/qt/wolfmark_updates.cpp"))
         .file(manifest.join("native/qt/wolf_style.cpp"))
         .file(manifest.join("native/qt/document_zoom.cpp"))
+        .file(manifest.join("native/qt/document_output.cpp"))
+        .file(manifest.join("native/qt/page_preview.cpp"))
         .file(manifest.join("native/qt/document_editor.cpp"))
         .file(manifest.join("native/qt/document_sidebar.cpp"))
         .file(manifest.join("native/qt/smooth_scroll_controller.cpp"))
@@ -181,6 +204,7 @@ fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {
         .include(qt.join("include/QtGui"))
         .include(qt.join("include/QtWidgets"))
         .include(qt.join("include/QtNetwork"))
+        .include(qt.join("include/QtPrintSupport"))
         .flag("/EHsc")
         .flag("/permissive-")
         .flag("/Zc:__cplusplus")
@@ -193,7 +217,13 @@ fn compile_qt_bridge_windows(manifest: &Path, qt: &Path) {
         "cargo:rustc-link-search=native={}",
         qt.join("lib").display()
     );
-    for library in ["Qt6Widgets", "Qt6Gui", "Qt6Network", "Qt6Core"] {
+    for library in [
+        "Qt6Widgets",
+        "Qt6Gui",
+        "Qt6Network",
+        "Qt6PrintSupport",
+        "Qt6Core",
+    ] {
         println!("cargo:rustc-link-lib=dylib={library}");
     }
     for library in ["dwmapi", "uxtheme", "user32", "shell32"] {
@@ -211,6 +241,15 @@ fn compile_qt_bridge_linux(manifest: &Path) {
         .probe("Qt6Network")
         .unwrap_or_else(|error| panic!("Qt 6 Network development package not found: {error}"));
     let mut build = qt_bridge_build(manifest);
+    let printsupport = pkg_config::Config::new()
+        .atleast_version("6")
+        .probe("Qt6PrintSupport")
+        .unwrap_or_else(|error| {
+            panic!("Qt 6 Print Support development package not found: {error}")
+        });
+    for include in printsupport.include_paths {
+        build.include(include);
+    }
     build
         .pic(true)
         .flag("-Wall")
@@ -245,6 +284,7 @@ fn stage_windows_runtime(qt: &Path) {
         "Qt6Gui.dll",
         "Qt6Widgets.dll",
         "Qt6Network.dll",
+        "Qt6PrintSupport.dll",
     ] {
         copy_if_changed(&qt.join("bin").join(name), &output.join(name));
     }

@@ -1,6 +1,8 @@
 #pragma once
+#include "document_output.h"
 
 #include <QString>
+#include <QStringList>
 
 #include <utility>
 
@@ -29,6 +31,10 @@ public:
     void setCheckOnStartup(bool value) { updates_.check_on_startup = value; }
     void setIncludePrereleases(bool value) { updates_.include_prereleases = value; }
     void setLastOpenDirectory(QString value) { last_open_directory_ = std::move(value); }
+    [[nodiscard]] const QStringList& recentDocuments() const { return recent_documents_; }
+    void rememberDocument(const QString& path);
+    [[nodiscard]] const PageSettings& pageSettings() const { return page_settings_; }
+    void setPageSettings(const PageSettings& settings) { page_settings_ = settings; }
 
 private:
     UserSettings(QString file_path, bool portable, bool include_prereleases_default);
@@ -39,6 +45,8 @@ private:
     QString last_open_directory_;
     QString recovery_warning_;
     bool editor_word_wrap_ = true;
+    QStringList recent_documents_;
+    PageSettings page_settings_;
 };
 
 } // namespace wolfmark::qt

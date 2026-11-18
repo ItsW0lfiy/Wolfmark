@@ -14,7 +14,7 @@ $baseUrl = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt
 $archivePath = Join-Path $archiveRoot "$stamp$archive"
 
 function Test-QtSdk([string]$Root = $sdkRoot) {
-    foreach ($library in 'Qt6Core.lib', 'Qt6Gui.lib', 'Qt6Widgets.lib', 'Qt6Network.lib') {
+    foreach ($library in 'Qt6Core.lib', 'Qt6Gui.lib', 'Qt6Widgets.lib', 'Qt6Network.lib', 'Qt6PrintSupport.lib') {
         if (-not (Test-Path -LiteralPath (Join-Path $Root "lib/$library") -PathType Leaf)) {
             return $false
         }

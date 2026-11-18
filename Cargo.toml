@@ -1,6 +1,6 @@
 [package]
 name = "wolfmark"
-version = "0.1.0-dev.7"
+version = "0.2.0-dev.1"
 edition = "2024"
 rust-version = "1.94"
 build = "build.rs"
@@ -28,6 +28,8 @@ semver = "1.0.27"
 sha2 = "0.10.9"
 two-face = { version = "0.5.1", default-features = false, features = ["syntect-onig"] }
 url = "2.5.7"
+zip = { version = "9.7.0", default-features = false }
+base64 = "0.23.1"
 
 [build-dependencies]
 cc = "1.2.38"

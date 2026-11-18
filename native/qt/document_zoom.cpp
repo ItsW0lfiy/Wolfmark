@@ -57,8 +57,11 @@ void DocumentZoom::captureFrame(QTextFrame* frame) {
 }
 
 void DocumentZoom::apply(int percent) {
+    applyRatio(percent / 100.0);
+}
+
+void DocumentZoom::applyRatio(double ratio) {
     if (!document_) return;
-    const double ratio = percent / 100.0;
     QElapsedTimer timer;
     timer.start();
     auto font = font_;

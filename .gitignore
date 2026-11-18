@@ -1,4 +1,5 @@
 /build/
+/.xmake/
 /build-*/
 /target/
 /.uv-cache/

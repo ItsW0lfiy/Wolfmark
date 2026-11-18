@@ -37,10 +37,10 @@ function Get-WindowsVersion([string]$Version) {
     if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$') {
         throw "Wolfmark version '$Version' cannot be represented as a Windows file version."
     }
-    $build = ([int]$Matches[3] * 1000) + $(if ($Matches[4]) { [int]$Matches[4] } else { 999 })
+    $build = if ($Matches[4]) { [int]$Matches[4] } else { 0 }
     return [pscustomobject]@{
-        Dotted = "$($Matches[1]).$($Matches[2]).$build.0"
-        Resource = "$($Matches[1]),$($Matches[2]),$build,0"
+        Dotted = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$build"
+        Resource = "$($Matches[1]),$($Matches[2]),$($Matches[3]),$build"
     }
 }
 
@@ -164,7 +164,7 @@ try {
     }
     New-Item -ItemType Directory -Force (Join-Path $packageRoot 'platforms'), (Join-Path $packageRoot 'assets/branding'), (Join-Path $packageRoot 'assets/icons'), (Join-Path $packageRoot 'licenses'), (Join-Path $setupRuntime 'platforms'), (Join-Path $setupRuntime 'assets/branding') | Out-Null
     Copy-RequiredFile 'out/cargo/release/wolfmark.exe' (Join-Path $packageRoot 'Wolfmark.exe')
-    foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $packageRoot }
+    foreach ($name in 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll', 'Qt6PrintSupport.dll') { Copy-RequiredFile (Join-Path $QtRoot "bin/$name") $packageRoot }
     Copy-RequiredFile (Join-Path $QtRoot 'plugins/platforms/qwindows.dll') (Join-Path $packageRoot 'platforms')
     Copy-RequiredFile 'assets/branding/wolfmark-symbol.png' (Join-Path $packageRoot 'assets/branding')
     Copy-RequiredFile 'assets/icons/wolfmark-markdown.ico' (Join-Path $packageRoot 'assets/icons')
@@ -175,6 +175,7 @@ try {
     Copy-RequiredFile 'docs/licenses/Qt-LGPL-3.0-only.txt' (Join-Path $packageRoot 'licenses')
     Copy-RequiredFile 'LICENSE' (Join-Path $packageRoot 'licenses/Qt-GPL-3.0-only.txt')
     Copy-RequiredFile 'docs/licenses/NSIS-zlib-license.txt' (Join-Path $packageRoot 'licenses')
+    Copy-RequiredFile 'docs/licenses/zip-MIT.txt' (Join-Path $packageRoot 'licenses')
     foreach ($name in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') { Copy-RequiredFile (Join-Path $redist $name) $packageRoot }
 
     $maintenance = 'out/cargo/release/WolfmarkMaintenance.exe'

@@ -1,6 +1,6 @@
 [package]
 name = "wolfmark-maintenance"
-version = "0.1.0-dev.7"
+version = "0.2.0-dev.1"
 edition = "2024"
 rust-version = "1.94"
 description = "Framework-independent installation and maintenance core for Wolfmark"

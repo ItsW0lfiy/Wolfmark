@@ -5,6 +5,9 @@
 #include "wolf_title_bar.h"
 #include "document_zoom.h"
 #include "document_editor.h"
+#include "document_output.h"
+#include "document_properties.h"
+#include "page_preview.h"
 #include "document_sidebar.h"
 #include "smooth_scroll_controller.h"
 #include "windows_window_frame.h"
@@ -52,6 +55,8 @@
 #include <QPointer>
 #include <QPixmap>
 #include <QProcess>
+#include <QProgressDialog>
+#include <QPrinter>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
@@ -926,7 +931,7 @@ public:
                cursorWidth() == 0;
     }
 
-    void queueAllImagesForSmoke() {
+    void queueAllImages() {
         for (auto& occurrence : image_occurrences_) {
             if (occurrence.loaded || occurrence.failed || occurrence.requested ||
                 image_requested_.contains(occurrence.id)) {
@@ -1886,6 +1891,7 @@ private:
 
     void buildList(QTextCursor& cursor, std::size_t& index, int depth) {
         const auto begin = commands_[index++];
+        const int list_id = cursor.position() + 1;
         int item_number = static_cast<int>(begin.number);
         while (index < commands_.size() && commands_[index].kind != command_kind::end_list) {
             if (commands_[index].kind != command_kind::begin_item) {
@@ -1913,6 +1919,14 @@ private:
                     tab.position = 22;
                     block.setTabPositions({tab});
                     block.setBottomMargin(4.0);
+                    if (!marker_inserted) {
+                        namespace property = wolfmark::qt::property;
+                        block.setProperty(property::list_id, list_id);
+                        block.setProperty(property::list_level, depth);
+                        block.setProperty(property::list_ordered, (begin.flags & text_style::ordered) != 0);
+                        block.setProperty(property::list_start, begin.number);
+                        block.setProperty(property::list_task, (item.flags & (text_style::checked | text_style::unchecked)) != 0);
+                    }
                     beginBlock(cursor, block, 0);
                     auto marker_format = baseCharacterFormat();
                     marker_format.setForeground(QColor(colour::secondary));
@@ -2846,6 +2860,7 @@ public:
         setAcceptDrops(true);
         update_manager_ = new wolfmark::qt::UpdateManager(api_, this);
         buildUi();
+        qApp->installEventFilter(this);
         updateStatus();
         if (user_settings_.updates().check_on_startup &&
             !qEnvironmentVariableIsSet("WOLFMARK_DISABLE_UPDATE_CHECKS")) {
@@ -2864,13 +2879,20 @@ public:
         api_->window_state_free(window_state_);
     }
 
-    bool openDocument(const QString& path) {
+    bool openDocument(const QString& path, QString* error = nullptr) {
+        const auto fail = [this, error, &path](const QString& message) {
+            const auto detail = QStringLiteral("%1\n\n%2").arg(QDir::toNativeSeparators(path), message);
+            if (error) *error = detail;
+            else QMessageBox::warning(this, QStringLiteral("Could not open document"), detail);
+            return false;
+        };
         const QFileInfo file(path);
         if (!isSupportedDocumentFile(file)) {
-            return false;
+            return fail(file.exists() ? QStringLiteral("Choose a .md, .markdown, or .txt file.")
+                                      : QStringLiteral("The file no longer exists or cannot be accessed."));
         }
         const auto canonical_path = file.canonicalFilePath();
-        if (canonical_path.isEmpty()) return false;
+        if (canonical_path.isEmpty()) return fail(QStringLiteral("The document path could not be resolved."));
         for (int index = 0; index < static_cast<int>(documents_.size()); ++index) {
             if (QString::compare(documents_[static_cast<std::size_t>(index)]->canonical_path,
                                  canonical_path,
@@ -2881,6 +2903,9 @@ public:
 #endif
                                  ) == 0) {
                 activateDocument(index);
+                user_settings_.rememberDocument(canonical_path);
+                QString settings_error;
+                if (!user_settings_.save(&settings_error)) qWarning("%s", qUtf8Printable(settings_error));
                 return true;
             }
         }
@@ -2897,8 +2922,7 @@ public:
             delete session->editor;
             delete session->view;
             api_->backend_free(session->backend);
-            QMessageBox::warning(this, QStringLiteral("Could not open document"), open_error);
-            return false;
+            return fail(open_error);
         }
         session->page = new QStackedWidget;
         session->page->addWidget(session->view);
@@ -2928,6 +2952,12 @@ public:
                 raw->reader_entry_line = raw->view->sourceLineAtViewport();
         };
         const bool rendered = renderSession(session.get(), true);
+        if (!rendered) {
+            const auto message = session->file_error;
+            delete session->page;
+            api_->backend_free(session->backend);
+            return fail(message);
+        }
         session->watcher = new QFileSystemWatcher(this);
         session->watcher->addPath(canonical_path);
         session->watcher->addPath(file.absolutePath());
@@ -2945,12 +2975,199 @@ public:
         documents_.push_back(std::move(session));
         activateDocument(static_cast<int>(documents_.size()) - 1);
         user_settings_.setLastOpenDirectory(file.absolutePath());
+        user_settings_.rememberDocument(canonical_path);
         QString settings_error;
         if (!user_settings_.save(&settings_error)) qWarning("%s", qUtf8Printable(settings_error));
         return rendered;
     }
 
     void runSmoke(const QString& mode) {
+        if (mode == QStringLiteral("file-opening")) {
+            QTimer::singleShot(100, this, [this] {
+                QTemporaryDir directory(QDir::currentPath() + QStringLiteral("/out/tests/open-XXXXXX"));
+                bool ok = directory.isValid();
+                const auto folder = directory.filePath(QStringLiteral("folder Ω # & (test)"));
+                ok &= QDir().mkpath(folder);
+                const auto path = QDir(folder).filePath(QStringLiteral("file 月 🐺 # % &.md"));
+                const QByteArray source("# Open regression\n\n**Exact** source with spaces.\n");
+                { QFile file(path); ok &= file.open(QIODevice::WriteOnly) && file.write(source) == source.size(); }
+                const auto before = documents_.size();
+                QString error;
+                ok &= openDocument(path, &error) && documents_.size() == before + 1;
+                auto* first = active_;
+                const auto counters = api_->backend_counters(first->backend);
+                ok &= first->editor->encodedBytes() == source && first->view->plainText().contains(QStringLiteral("Open regression"));
+                ok &= openDocument(QDir(folder).filePath(QStringLiteral("../folder Ω # & (test)/file 月 🐺 # % &.md")), &error);
+                ok &= documents_.size() == before + 1 && active_ == first &&
+                    api_->backend_counters(first->backend).parse_count == counters.parse_count;
+                // Exercise the real picker through the application-wide QAction.
+                const auto picked_path = QDir(folder).filePath(QStringLiteral("picked Ω #.markdown"));
+                const QByteArray picked_source("# Picked through Ctrl+O\n\nNew session from the picker.\n");
+                { QFile file(picked_path); ok &= file.open(QIODevice::WriteOnly) && file.write(picked_source) == picked_source.size(); }
+                qputenv("WOLFMARK_TEST_FILE_PICKER", "1");
+                auto picker_used = std::make_shared<bool>(false);
+                auto picker_accepted = std::make_shared<bool>(false);
+                QTimer::singleShot(150, this, [picked_path, picker_used, picker_accepted] {
+                    if (auto* picker = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
+                        *picker_used = true;
+                        QObject::connect(picker, &QDialog::accepted, picker, [picker_accepted] { *picker_accepted = true; });
+                        picker->setDirectory(QFileInfo(picked_path).absolutePath()); picker->selectFile(picked_path);
+                        if (auto* filename = picker->findChild<QLineEdit*>(QStringLiteral("fileNameEdit")))
+                            filename->setText(QLatin1Char('"') + QFileInfo(picked_path).fileName() + QLatin1Char('"'));
+                        QMetaObject::invokeMethod(picker, "accept", Qt::QueuedConnection);
+                    }
+                });
+                QTimer::singleShot(5000, this, [this] {
+                    if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                        std::fprintf(stderr, "PICKER_ERROR %s\n", qUtf8Printable(message->text())); message->reject();
+                    }
+                    for (auto* picker : findChildren<QFileDialog*>()) picker->reject();
+                });
+                auto* action = findChild<QAction*>(QStringLiteral("openDocumentAction"));
+                ok &= action && action->shortcut() == QKeySequence::Open && action->shortcutContext() == Qt::WindowShortcut;
+                setDocumentMode(2);
+                first->editor->setFocus();
+                activateWindow();
+                QApplication::processEvents();
+                QKeyEvent open_key(QEvent::KeyPress, Qt::Key_O, Qt::ControlModifier);
+                QApplication::sendEvent(first->editor, &open_key);
+                qunsetenv("WOLFMARK_TEST_FILE_PICKER");
+                ok &= *picker_used && *picker_accepted && documents_.size() == before + 2 &&
+                    active_->editor->encodedBytes() == picked_source && active_->view->plainText().contains(QStringLiteral("Picked through Ctrl+O"));
+                ok &= openDocument(path, &error) && active_ == first;
+                const auto second_path = QDir(folder).filePath(QStringLiteral("dropped.txt"));
+                { QFile file(second_path); ok &= file.open(QIODevice::WriteOnly) && file.write("literal\t月\n") > 0; }
+                setDocumentMode(2);
+                const auto unchanged = first->editor->encodedBytes();
+                QMimeData data; data.setUrls({QUrl::fromLocalFile(second_path)});
+                QDragEnterEvent enter(QPoint(20, 20), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(first->editor->viewport(), &enter);
+                QDropEvent drop(QPointF(20, 20), Qt::CopyAction, &data, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(first->editor->viewport(), &drop);
+                ok &= drop.isAccepted() && documents_.size() == before + 3 && first->editor->encodedBytes() == unchanged;
+                ok &= user_settings_.recentDocuments().contains(QFileInfo(second_path).canonicalFilePath());
+                const auto reloaded = wolfmark::qt::UserSettings::load(true);
+                ok &= reloaded.recentDocuments() == user_settings_.recentDocuments();
+                ok &= !openDocument(QDir(folder).filePath(QStringLiteral("missing.md")), &error) && !error.isEmpty();
+                const auto invalid = QDir(folder).filePath(QStringLiteral("invalid.md"));
+                { QFile file(invalid); ok &= file.open(QIODevice::WriteOnly) && file.write(QByteArray("\xff\x00", 2)) == 2; }
+                ok &= !openDocument(invalid, &error) && error.contains(QStringLiteral("UTF-8"));
+                ok &= documents_.size() == before + 3;
+                { QFile file(path); ok &= file.open(QIODevice::ReadOnly) && file.readAll() == source; }
+                ok &= QFile::rename(path, path + QStringLiteral(".moved"));
+                ok &= QDir().rename(folder, folder + QStringLiteral(" renamed"));
+                ok &= QFile::remove(QDir(folder + QStringLiteral(" renamed")).filePath(QFileInfo(path).fileName() + QStringLiteral(".moved")));
+                std::fprintf(stdout, "WOLFMARK_SMOKE file_opening=%s picker=checked action=checked drop=checked duplicate=checked recent=checked unicode=checked invalid=checked rename_delete=checked\n", ok ? "ok" : "failed");
+                QCoreApplication::exit(ok ? 0 : 40);
+            });
+            return;
+        }
+        if (mode == QStringLiteral("export")) {
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+            auto* session = active_;
+            session->view->queueAllImages();
+            auto* poll = new QTimer(this); poll->setInterval(30);
+            auto elapsed = std::make_shared<QElapsedTimer>(); elapsed->start();
+            QObject::connect(poll, &QTimer::timeout, this, [this, session, poll, elapsed] {
+                if (session->view->pendingImageDecodes() > 0 && elapsed->elapsed() < 30000) return;
+                poll->stop();
+                const auto bytes = session->editor->encodedBytes();
+                const auto counters = api_->backend_counters(session->backend);
+                const auto constructions = session->view->constructionCount();
+                const auto selection = session->view->textCursor();
+                bool ok = session->view->pendingImageDecodes() == 0;
+                auto settings = wolfmark::qt::PageSettings::forPreset(QStringLiteral("Technical report"));
+                settings.title = QStringLiteral("Wolfmark export — 月 Ω"); settings.author = QStringLiteral("Wolfmark regression");
+                settings.different_first = true; settings.first_header = QStringLiteral("First page");
+                ok &= settings.validate().isEmpty() && wolfmark::qt::PageSettings::fromJson(settings.toJson()).toJson() == settings.toJson();
+                user_settings_.setPageSettings(settings);
+                QString persistence_error;
+                ok &= user_settings_.save(&persistence_error) &&
+                    wolfmark::qt::UserSettings::load(true).pageSettings().toJson() == settings.toJson();
+                const auto root = QDir::current().absoluteFilePath(qEnvironmentVariable("WOLFMARK_EXPORT_ROOT", QStringLiteral("out/tests/exports")));
+                ok &= QDir().mkpath(root);
+                std::fprintf(stdout, "EXPORT phase=layout_start\n");
+                wolfmark::qt::DocumentOutput output(session->view->document(), session->view->zoomPercent(), settings);
+                std::fprintf(stdout, "EXPORT phase=layout_ready pages=%d\n", output.pageCount());
+                wolfmark::qt::PagePreview preview;
+                preview.resize(800, 600); preview.setDocument(&output); preview.show();
+                QApplication::processEvents(); preview.viewport()->repaint();
+                ok &= preview.paintedPages() >= 1 && preview.paintedPages() <= 2;
+                preview.setContinuous(false); preview.setCurrentPage(std::min(2, output.pageCount()));
+                preview.viewport()->repaint();
+                ok &= preview.currentPage() == std::min(2, output.pageCount()) && preview.paintedPages() == 1;
+                preview.setContinuous(true);
+                for (int percent : {80, 100, 125, 150, 100}) {
+                    preview.setZoomFactor(percent / 100.0);
+                    ok &= preview.currentPage() == std::min(2, output.pageCount());
+                }
+                preview.hide();
+                for (const auto& format : {QStringLiteral("pdf"), QStringLiteral("docx"), QStringLiteral("odt"), QStringLiteral("html"), QStringLiteral("txt")}) {
+                    QString error;
+                    const bool wrote = output.write(format, QDir(root).filePath(QStringLiteral("document.") + format), api_, &error);
+                    std::fprintf(stdout, "EXPORT format=%s written=%d error=%s\n", qUtf8Printable(format), wrote, qUtf8Printable(error));
+                    ok &= wrote;
+                }
+                QPrinter printer(QPrinter::HighResolution);
+                printer.setOutputFormat(QPrinter::PdfFormat); printer.setResolution(600); printer.setFullPage(true);
+                auto print_layout = settings.layout(); print_layout.setMode(QPageLayout::FullPageMode); printer.setPageLayout(print_layout);
+                printer.setOutputFileName(QDir(root).filePath(QStringLiteral("native-print.pdf")));
+                QString print_error;
+                ok &= output.print(printer, &print_error);
+                QTextDocument unsafe;
+                QTextCursor unsafe_cursor(&unsafe); QTextCharFormat unsafe_format;
+                unsafe_format.setAnchor(true); unsafe_format.setAnchorHref(QStringLiteral("jav\nascript:alert(1)"));
+                unsafe_cursor.insertText(QStringLiteral("Unsafe link remains readable"), unsafe_format);
+                wolfmark::qt::DocumentOutput safe_output(&unsafe, 100, settings);
+                const auto safe_path = QDir(root).filePath(QStringLiteral("unsafe-links.html"));
+                QString safe_error;
+                ok &= safe_output.blockedLinkSpans() == 1 && safe_output.write(QStringLiteral("html"), safe_path, api_, &safe_error);
+                { QFile file(safe_path); ok &= file.open(QIODevice::ReadOnly); const auto html = file.readAll();
+                  ok &= html.contains("Unsafe link remains readable") && !html.contains("ascript:"); }
+                for (const auto paper : {QPageSize::A4, QPageSize::A3, QPageSize::A5, QPageSize::B5, QPageSize::Letter, QPageSize::Legal, QPageSize::Custom}) {
+                    for (bool landscape : {false, true}) {
+                        auto test = settings; test.paper = paper; test.landscape = landscape;
+                        const auto size = test.layout().fullRect(QPageLayout::Millimeter).size();
+                        ok &= test.validate().isEmpty() && size.width() > 100 && size.height() > 100;
+                    }
+                }
+                auto custom = settings; custom.paper = QPageSize::Custom; custom.width_mm = 150; custom.height_mm = 210; custom.landscape = true;
+                wolfmark::qt::DocumentOutput custom_output(session->view->document(), 100, custom);
+                QString custom_error;
+                const auto custom_mm = custom.layout().fullRect(QPageLayout::Millimeter).size();
+                ok &= std::abs(custom_mm.width() - 210) < .01 && std::abs(custom_mm.height() - 150) < .01 &&
+                    custom_output.write(QStringLiteral("pdf"), QDir(root).filePath(QStringLiteral("custom-landscape.pdf")), api_, &custom_error);
+                for (const int percent : {80, 100, 125, 150, 100}) {
+                    session->view->changeZoom(percent - session->view->zoomPercent());
+                    wolfmark::qt::DocumentOutput zoomed(session->view->document(), percent, settings);
+                    ok &= zoomed.pageCount() == output.pageCount();
+                }
+                auto invalid = settings; invalid.margins_mm = {200, 200, 200, 200};
+                ok &= !invalid.validate().isEmpty();
+                const auto after = api_->backend_counters(session->backend);
+                ok &= after.parse_count == counters.parse_count && after.load_count == counters.load_count &&
+                      after.image_request_count == counters.image_request_count && session->view->constructionCount() == constructions &&
+                      session->editor->encodedBytes() == bytes && !session->editor->document()->isModified() &&
+                      session->view->textCursor().anchor() == selection.anchor() && session->view->textCursor().position() == selection.position();
+                QJsonObject report{{"pages", output.pageCount()}, {"widthPoints", output.paperPoints().width()}, {"heightPoints", output.paperPoints().height()},
+                    {"images", session->view->discoveredImages()}, {"loadedImages", session->view->loadedImages()}, {"settings", settings.toJson()}};
+                QFile report_file(QDir(root).filePath(QStringLiteral("layout.json")));
+                ok &= report_file.open(QIODevice::WriteOnly) && report_file.write(QJsonDocument(report).toJson()) > 0;
+                std::fprintf(stdout, "WOLFMARK_SMOKE export=%s pages=%d source=unchanged counters=unchanged zoom=checked paper=checked\n", ok ? "ok" : "failed", output.pageCount());
+                QCoreApplication::exit(ok ? 0 : 41);
+            });
+            poll->start();
+            return;
+        }
+        if (mode == QStringLiteral("output-ui") || mode == QStringLiteral("output-dialog")) {
+            QTimer::singleShot(100, this, [this, mode] {
+                const bool test = mode == QStringLiteral("output-dialog");
+                if (test) qputenv("WOLFMARK_OUTPUT_TEST", "1");
+                showOutput(true);
+                QCoreApplication::exit(!test || QCoreApplication::instance()->property("exportDialogOk").toBool() ? 0 : 42);
+            });
+            return;
+        }
         if (mode == QStringLiteral("native-window") ||
             mode == QStringLiteral("maximize") ||
             mode == QStringLiteral("layout-normal")) {
@@ -3170,6 +3387,8 @@ public:
                 std::fflush(stderr); qApp->exit(21);
             });
             QTimer::singleShot(250, this, [this, stage] {
+                activateWindow();
+                QApplication::processEvents();
                 *stage = QStringLiteral("modes");
                 bool ok = documents_.size() == 2 && active_->mode == OpenDocumentSession::Mode::Reader;
                 auto first_failure = std::make_shared<QString>();
@@ -3191,11 +3410,14 @@ public:
                 const auto disk = editor->diskFingerprint();
                 const auto original = editor->sourceText();
                 const auto before = api_->backend_counters(backend_);
+                advance(QStringLiteral("source-focus"));
                 setDocumentMode(2);
                 ok &= editor->hasFocus() && !editor->isReadOnly();
+                advance(QStringLiteral("source-zoom"));
                 changeZoom(25);
                 ok &= active_->zoom_percent == 125 && zoom_label_->text() == QStringLiteral("125%");
                 changeZoom(-25);
+                advance(QStringLiteral("source-history"));
                 auto cursor = editor->textCursor();
                 cursor.movePosition(QTextCursor::End);
                 cursor.insertText(QStringLiteral("\nUnsaved 月🐺 **addition**"));
@@ -3342,6 +3564,19 @@ public:
                       accessible->textInterface()->text(0, accessible->textInterface()->characterCount()).contains(QStringLiteral("**bold**"));
                 auto* clipboard = snapshotClipboard();
                 editor->selectAll(); editor->copy();
+                const auto copied_before_events = QGuiApplication::clipboard()->text().size();
+#ifdef _WIN32
+                const bool native_clipboard_open = OpenClipboard(nullptr) != FALSE;
+                const auto native_clipboard_error = native_clipboard_open ? 0UL : GetLastError();
+                if (native_clipboard_open) CloseClipboard();
+                std::fprintf(stderr, "EDITOR_CLIPBOARD_NATIVE open=%d error=%lu owns=%d selection=%d selected_units=%d before_events=%lld\n",
+                    native_clipboard_open, native_clipboard_error, QGuiApplication::clipboard()->ownsClipboard(),
+                    editor->textCursor().hasSelection(), editor->textCursor().selectionEnd() - editor->textCursor().selectionStart(),
+                    static_cast<long long>(copied_before_events));
+#else
+                Q_UNUSED(copied_before_events);
+#endif
+                QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
                 const bool copy_exact = QGuiApplication::clipboard()->text() == editor->sourceText();
                 std::fprintf(stdout, "EDITOR_CLIPBOARD source_units=%lld copied_units=%lld source_nbsp=%lld copied_nbsp=%lld\n",
                     static_cast<long long>(editor->sourceText().size()), static_cast<long long>(QGuiApplication::clipboard()->text().size()),
@@ -3464,14 +3699,26 @@ public:
         if (mode == QStringLiteral("startup-arguments")) {
             QTimer::singleShot(0, this, [this] {
                 QStringList names;
+                bool ok = true;
                 names.reserve(static_cast<qsizetype>(documents_.size()));
-                for (const auto& session : documents_)
+                for (const auto& session : documents_) {
                     names.push_back(QFileInfo(session->canonical_path).fileName());
+                    QFile file(session->canonical_path);
+                    ok &= file.open(QIODevice::ReadOnly) && file.readAll() == session->editor->encodedBytes();
+                    const bool literal = QFileInfo(session->canonical_path).suffix().compare(QStringLiteral("txt"), Qt::CaseInsensitive) == 0;
+                    const auto counters = api_->backend_counters(session->backend);
+                    ok &= counters.load_count == 1 && counters.parse_count == (literal ? 0ULL : 1ULL);
+                    if (literal) {
+                        auto text = session->view->document()->toRawText();
+                        text.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+                        ok &= text == session->editor->sourceText();
+                    }
+                }
                 const auto joined = names.join(QLatin1Char('|')).toUtf8();
-                std::fprintf(stdout, "WOLFMARK_SMOKE startup_arguments=ok documents=%zu names=%s\n",
-                             documents_.size(), joined.constData());
+                std::fprintf(stdout, "WOLFMARK_SMOKE startup_arguments=%s documents=%zu names=%s\n",
+                             ok ? "ok" : "failed", documents_.size(), joined.constData());
                 std::fflush(stdout);
-                QCoreApplication::exit(0);
+                QCoreApplication::exit(ok ? 0 : 43);
             });
             return;
         }
@@ -3560,12 +3807,12 @@ public:
         if (mode == QStringLiteral("updates")) {
             update_manager_->check(true, true, [this](wolfmark::qt::UpdateCheckResult first) {
                 const bool first_ok = first.status == wolfmark::qt::UpdateCheckResult::Status::Available &&
-                    first.release.version == QStringLiteral("0.1.0-dev.8");
+                    first.release.version == QStringLiteral("0.2.0-dev.2");
                 update_manager_->check(true, true,
                     [this, first_ok](wolfmark::qt::UpdateCheckResult cached) {
                     const bool cache_ok = cached.status ==
                         wolfmark::qt::UpdateCheckResult::Status::Available &&
-                        cached.release.version == QStringLiteral("0.1.0-dev.8");
+                        cached.release.version == QStringLiteral("0.2.0-dev.2");
                     update_manager_->check(true, true,
                         [first_ok, cache_ok](wolfmark::qt::UpdateCheckResult failure) {
                         const bool failure_ok = failure.status ==
@@ -4586,7 +4833,7 @@ public:
         if (mode == QStringLiteral("images") || mode == QStringLiteral("image-geometry")) {
             const bool geometry = mode == QStringLiteral("image-geometry");
             const bool initial_geometry_ok = !geometry || document_->testImageGeometry();
-            document_->queueAllImagesForSmoke();
+            document_->queueAllImages();
             auto* deadline = new QTimer(this);
             deadline->setInterval(25);
             auto* elapsed = new QElapsedTimer;
@@ -4608,7 +4855,7 @@ public:
                         resize(1280, 820);
                         geometry_ok &= document_->testImageGeometry();
                         reloadDocument();
-                        document_->queueAllImagesForSmoke();
+                        document_->queueAllImages();
                         return;
                     }
                     for (const int zoom : {125, 150, 100, 80, 100}) {
@@ -4654,6 +4901,24 @@ protected:
         QWidget::closeEvent(event);
     }
 
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        auto* target = qobject_cast<QWidget*>(watched);
+        if (target && target->window() == this &&
+            (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove ||
+             event->type() == QEvent::Drop)) {
+            auto* drop = static_cast<QDropEvent*>(event);
+            if (drop->mimeData()->hasUrls()) {
+                if (event->type() == QEvent::Drop) {
+                    for (const auto& url : drop->mimeData()->urls())
+                        if (url.isLocalFile()) openDocument(url.toLocalFile());
+                }
+                drop->acceptProposedAction();
+                return true;
+            }
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
     void keyPressEvent(QKeyEvent* event) override {
         if (event->key() == Qt::Key_F11) {
             toggleFullscreen();
@@ -4662,11 +4927,6 @@ protected:
         }
         if (event->key() == Qt::Key_Escape && fullscreen_) {
             leaveFullscreen();
-            event->accept();
-            return;
-        }
-        if (event->matches(QKeySequence::Open)) {
-            chooseDocument();
             event->accept();
             return;
         }
@@ -5096,6 +5356,34 @@ private:
         more->setFixedWidth(32);
         auto* menu = new QMenu(more);
         menu->setObjectName(QStringLiteral("documentMenu"));
+        auto* open_action = menu->addAction(QStringLiteral("Open documents…"), this,
+                                           [this] { chooseDocument(); });
+        open_action->setObjectName(QStringLiteral("openDocumentAction"));
+        open_action->setShortcut(QKeySequence::Open);
+        open_action->setShortcutContext(Qt::WindowShortcut);
+        addAction(open_action);
+        auto* recent = menu->addMenu(QStringLiteral("Recent documents"));
+        QObject::connect(recent, &QMenu::aboutToShow, this, [this, recent] {
+            recent->clear();
+            for (const auto& path : user_settings_.recentDocuments()) {
+                auto* action = recent->addAction(QDir::toNativeSeparators(path), this,
+                                                 [this, path] { openDocument(path); });
+                action->setToolTip(path);
+            }
+            if (recent->isEmpty()) recent->addAction(QStringLiteral("No recent documents"))->setEnabled(false);
+        });
+        menu->addSeparator();
+        menu->addAction(QStringLiteral("Document Page View / Page setup…"), this,
+                        [this] { showOutput(false); });
+        auto* export_action = menu->addAction(QStringLiteral("Export document…"), this,
+                                             [this] { showOutput(true); });
+        export_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+E")));
+        addAction(export_action);
+        auto* print_action = menu->addAction(QStringLiteral("Print preview…"), this,
+                                            [this] { showOutput(false); });
+        print_action->setShortcut(QKeySequence::Print);
+        addAction(print_action);
+        menu->addSeparator();
         menu->addAction(QStringLiteral("Save\tCtrl+S"), this,
                         [this] { saveSession(active_, false); });
         menu->addAction(QStringLiteral("Save As…\tCtrl+Shift+S"), this,
@@ -5279,6 +5567,9 @@ private:
         shortcut->setObjectName(QStringLiteral("emptyHint"));
         open_row->addSpacing(8);
         open_row->addWidget(shortcut);
+        auto* empty_recent = new WolfButton(QStringLiteral("Recent documents"));
+        empty_recent->setMenu(recent);
+        open_row->addWidget(empty_recent);
         open_row->addStretch();
         prompt_layout->addLayout(open_row);
         QTimer::singleShot(0, empty_open, [empty_open] {
@@ -5300,17 +5591,47 @@ private:
     }
 
 
+    void showOutput(bool exporting) {
+        if (!active_) return;
+        auto* session = active_;
+        if (session->rendered_revision != session->editor->sourceRevision() && !renderSession(session)) {
+            QMessageBox::warning(this, QStringLiteral("Cannot prepare document"), session->file_error); return;
+        }
+        session->view->queueAllImages();
+        if (session->view->pendingImageDecodes() > 0) {
+            QProgressDialog progress(QStringLiteral("Preparing local images for page layout…"), QStringLiteral("Cancel"), 0, 0, this);
+            progress.setWindowModality(Qt::WindowModal);
+            QTimer poll; poll.setInterval(30);
+            QElapsedTimer elapsed; elapsed.start();
+            QObject::connect(&poll, &QTimer::timeout, &progress, [&] {
+                if (session->view->pendingImageDecodes() == 0) progress.accept();
+                else if (elapsed.elapsed() > 30000) progress.reject();
+            });
+            poll.start();
+            if (progress.exec() != QDialog::Accepted) {
+                QMessageBox::information(this, QStringLiteral("Page layout cancelled"), QStringLiteral("Image preparation was cancelled or exceeded 30 seconds. The document remains open.")); return;
+            }
+        }
+        auto settings = user_settings_.pageSettings();
+        wolfmark::qt::showDocumentOutput(this, session->view->document(), session->view->zoomPercent(),
+                                        session->canonical_path, settings, api_, exporting,
+                                        session->mode == OpenDocumentSession::Mode::Reader ? session->view->textCursor() : QTextCursor());
+        user_settings_.setPageSettings(settings);
+        QString error;
+        if (!user_settings_.save(&error)) QMessageBox::warning(this, QStringLiteral("Could not save page settings"), error);
+    }
+
     void chooseDocument() {
         auto initial = user_settings_.lastOpenDirectory();
         if (initial.isEmpty() || !QFileInfo(initial).isDir()) {
             initial = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
         }
-        const auto path = QFileDialog::getOpenFileName(
-            this, QStringLiteral("Open document"), initial,
+        QFileDialog picker(this, QStringLiteral("Open documents"), initial,
             QStringLiteral("Wolfmark documents (*.md *.markdown *.txt);;Markdown files (*.md *.markdown);;Text files (*.txt);;All files (*)"));
-        if (!path.isEmpty()) {
-            openDocument(path);
-        }
+        picker.setFileMode(QFileDialog::ExistingFiles);
+        if (qEnvironmentVariableIsSet("WOLFMARK_TEST_FILE_PICKER")) picker.setOption(QFileDialog::DontUseNativeDialog);
+        if (picker.exec() == QDialog::Accepted)
+            for (const auto& path : picker.selectedFiles()) openDocument(path);
     }
 
     void showSettings(const QString& snapshot_path = {}) {
@@ -6213,7 +6534,7 @@ void applyWolfmarkStyle(QApplication& application) {
 } // namespace
 
 extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const WolfmarkApiTable* api) {
-    if (api == nullptr || api->version != 4) {
+    if (api == nullptr || api->version != 5) {
         return 2;
     }
     QCoreApplication::setOrganizationName(QStringLiteral("Wolfmark"));
@@ -6230,6 +6551,7 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
     for (auto& argument : argument_storage) {
         qt_arguments.push_back(argument.data());
     }
+    qt_arguments.push_back(nullptr);
     int qt_argc = argc;
     QApplication application(qt_argc, qt_arguments.data());
     application.setWindowIcon(applicationIcon());
@@ -6285,10 +6607,34 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
     QString smoke_mode;
     QStringList document_paths;
     QStringList startup_errors;
+    const auto append_document_path = [&](const QString& argument) {
+            const QFileInfo file(QDir::current().absoluteFilePath(argument));
+            if (isSupportedDocumentFile(file)) {
+                document_paths.push_back(file.canonicalFilePath());
+            } else if (!file.exists()) {
+                startup_errors.push_back(
+                    QStringLiteral("%1 — file not found").arg(QDir::toNativeSeparators(argument)));
+            } else {
+                startup_errors.push_back(
+                    QStringLiteral("%1 — unsupported document type")
+                        .arg(QDir::toNativeSeparators(argument)));
+            }
+    };
+    bool positional_only = false;
     for (int index = 1; index < qt_argc; ++index) {
         const auto argument =
             QString::fromUtf8(qt_arguments[static_cast<std::size_t>(index)]);
-        if (argument == QStringLiteral("--smoke-render")) {
+        if (!positional_only && argument == QStringLiteral("--")) { positional_only = true; continue; }
+        if (positional_only) { append_document_path(argument); continue; }
+        if (argument == QStringLiteral("--smoke-output-dialog")) {
+            smoke_mode = QStringLiteral("output-dialog");
+        } else if (argument == QStringLiteral("--smoke-export")) {
+            smoke_mode = QStringLiteral("export");
+        } else if (argument == QStringLiteral("--smoke-output-ui")) {
+            smoke_mode = QStringLiteral("output-ui");
+        } else if (argument == QStringLiteral("--smoke-file-opening")) {
+            smoke_mode = QStringLiteral("file-opening");
+        } else if (argument == QStringLiteral("--smoke-render")) {
             smoke_mode = QStringLiteral("render");
         } else if (argument == QStringLiteral("--smoke-style")) {
             smoke_mode = QStringLiteral("style");
@@ -6349,20 +6695,15 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
         } else if (argument == QStringLiteral("--smoke-updates")) {
             smoke_mode = QStringLiteral("updates");
         } else if (!argument.startsWith(QLatin1Char('-'))) {
-            const QFileInfo file(QDir::current().absoluteFilePath(argument));
-            if (isSupportedDocumentFile(file)) {
-                document_paths.push_back(file.canonicalFilePath());
-            } else if (!file.exists()) {
-                startup_errors.push_back(
-                    QStringLiteral("%1 — file not found").arg(QDir::toNativeSeparators(argument)));
-            } else {
-                startup_errors.push_back(
-                    QStringLiteral("%1 — unsupported document type")
-                        .arg(QDir::toNativeSeparators(argument)));
-            }
+            append_document_path(argument);
         }
     }
-    for (const auto& document_path : document_paths) window.openDocument(document_path);
+    for (const auto& document_path : document_paths) {
+        QString error;
+        if (!window.openDocument(document_path, &error)) startup_errors.push_back(error);
+    }
+    if (smoke_mode == QStringLiteral("startup-arguments"))
+        std::fprintf(stdout, "STARTUP rejected=%lld\n", static_cast<long long>(startup_errors.size()));
     if (smoke_mode.isEmpty() && !startup_errors.isEmpty()) {
         QTimer::singleShot(0, &window, [&window, startup_errors] {
             QMessageBox::warning(

@@ -13,6 +13,7 @@ class DocumentZoom {
 public:
     void capture(QTextDocument* document);
     void apply(int percent);
+    void applyRatio(double ratio);
     [[nodiscard]] bool matches(int percent) const;
 
 private:

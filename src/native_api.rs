@@ -79,10 +79,11 @@ pub struct NativeApiTable {
         bool,
     ) -> NativeBuffer,
     pub editor_decorations: unsafe extern "C" fn(*const u8, usize) -> NativeBuffer,
+    pub package_document: unsafe extern "C" fn(*const u8, usize) -> NativeBuffer,
 }
 
 static NATIVE_API: NativeApiTable = NativeApiTable {
-    version: 4,
+    version: 5,
     backend_new: wolfmark_backend_new,
     backend_free: wolfmark_backend_free,
     open_document: wolfmark_open_document,
@@ -99,6 +100,7 @@ static NATIVE_API: NativeApiTable = NativeApiTable {
     window_leave_fullscreen: wolfmark_window_leave_fullscreen,
     render_source: wolfmark_render_source,
     editor_decorations: wolfmark_editor_decorations,
+    package_document: wolfmark_package_document,
 };
 
 pub fn table_address() -> usize {
@@ -119,7 +121,28 @@ impl NativeImageResult {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn wolfmark_api_version() -> u32 {
-    4
+    5
+}
+
+/// # Safety
+/// `input` must reference `len` readable bytes throughout the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wolfmark_package_document(input: *const u8, len: usize) -> NativeBuffer {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the caller guarantees a readable UTF-8 JSON buffer.
+        let input = unsafe { required_utf8(input, len) }.map_err(str::to_owned)?;
+        crate::archive::package(input.as_bytes())
+    }));
+    match result {
+        Ok(Ok(bytes)) => NativeBuffer::from_vec(bytes),
+        result => {
+            let error = match result {
+                Ok(Err(error)) => error,
+                _ => "Document package generation failed".into(),
+            };
+            NativeBuffer::from_vec(serde_json::json!({"error":error}).to_string().into_bytes())
+        }
+    }
 }
 
 /// # Safety

@@ -67,6 +67,61 @@ fn numeric_metric(output: &str, name: &str) -> u64 {
         .unwrap_or_else(|| panic!("missing numeric metric {name} in {output}"))
 }
 
+#[test]
+fn opening_uses_real_picker_and_routes_file_drops_without_editing_source() {
+    let output = run_smoke("--smoke-file-opening", "wolfmark-visual-test.md");
+    assert!(output.contains("file_opening=ok"), "{output}");
+}
+
+#[test]
+fn export_dialog_requires_overwrite_confirmation_and_protects_source() {
+    let generated = GeneratedTestDirectory::recreate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("out/tests/export-dialog"),
+    );
+    let source = generated.path().join("source # Ω.md");
+    std::fs::write(&source, "# Export dialog\n\nSource stays intact.\n").unwrap();
+    let output = run_smoke("--smoke-output-dialog", source.to_str().unwrap());
+    assert!(output.contains("export_dialog=ok"), "{output}");
+}
+
+#[test]
+fn page_layout_exports_real_packages_without_reparsing_or_changing_source() {
+    use std::io::Read;
+    let source = std::fs::read(fixture("wolfmark-visual-test.md")).unwrap();
+    let output = run_smoke("--smoke-export", "wolfmark-visual-test.md");
+    assert!(output.contains("export=ok"), "{output}");
+    assert_eq!(
+        std::fs::read(fixture("wolfmark-visual-test.md")).unwrap(),
+        source
+    );
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("out/tests/exports");
+    let mut package =
+        zip::ZipArchive::new(std::fs::File::open(root.join("document.docx")).unwrap()).unwrap();
+    let mut document = String::new();
+    package
+        .by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut document)
+        .unwrap();
+    assert!(document.contains("<w:tbl>"));
+    assert!(document.contains("Heading6"));
+    assert!(document.contains("<w:drawing>"));
+    assert!(document.contains("<w:hyperlink"));
+    assert!(document.contains("<w:sectPr>"));
+    assert!(package.by_name("word/media/image1.png").is_ok());
+    assert!(package.by_name("word/footer1.xml").is_ok());
+    let pdf = std::fs::read(root.join("document.pdf")).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"));
+    let html = std::fs::read_to_string(root.join("document.html")).unwrap();
+    assert!(html.contains("data:image/png;base64,"));
+    assert!(!html.contains("wolfmark-image:"));
+    assert!(
+        std::fs::read(root.join("document.odt"))
+            .unwrap()
+            .starts_with(b"PK")
+    );
+}
+
 fn run_startup_arguments_smoke(arguments: &[PathBuf]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-startup-arguments")
@@ -208,6 +263,68 @@ fn shell_startup_arguments_open_supported_documents_once() {
 }
 
 #[test]
+fn startup_opens_external_temp_paths_across_drives_without_losing_unicode_or_whitespace() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let generated = GeneratedTestDirectory::recreate(
+        std::env::temp_dir().join(format!("wolfmark-opening-{unique}")),
+    );
+    let path = generated.path().join("external # & % Ω 月.txt");
+    std::fs::write(&path, "literal\ttext  with spaces\n月 Ω\n").unwrap();
+    let output = run_startup_arguments_smoke(&[path]);
+    assert!(
+        output.contains("startup_arguments=ok documents=1"),
+        "{output}"
+    );
+}
+
+#[test]
+fn unreadable_startup_file_reports_failure_without_opening_or_changing_it() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let generated = GeneratedTestDirectory::recreate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("out/tests/unreadable-opening"),
+    );
+    let path = generated.path().join("locked.md");
+    let source = b"# External writer owns this test lock\n";
+    std::fs::write(&path, source).unwrap();
+    let external_lock = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .share_mode(0)
+        .open(&path)
+        .unwrap();
+    let output = run_startup_arguments_smoke(std::slice::from_ref(&path));
+    assert!(
+        output.contains("documents=0") && output.contains("rejected=1"),
+        "{output}"
+    );
+    drop(external_lock);
+    assert_eq!(std::fs::read(&path).unwrap(), source);
+}
+
+#[test]
+fn command_line_end_of_options_opens_dash_prefixed_names() {
+    let generated = GeneratedTestDirectory::recreate(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("out/tests/dash-opening"),
+    );
+    std::fs::write(generated.path().join("-notes.md"), "# Dash path\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
+        .args(["--smoke-startup-arguments", "--", "-notes.md"])
+        .current_dir(generated.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("documents=1"));
+}
+
+#[test]
 fn native_settings_migrate_and_recover_safely() {
     let output = Command::new(env!("CARGO_BIN_EXE_wolfmark"))
         .arg("--smoke-settings")
@@ -237,10 +354,10 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
         let release_json = serde_json::json!([{
             "draft": false,
             "prerelease": true,
-            "tag_name": "0.1.0-dev.8",
-            "name": "Wolfmark dev.8 fixture",
+            "tag_name": "0.2.0-dev.2",
+            "name": "Wolfmark next development fixture",
             "body": "Fixture release",
-            "html_url": "https://github.com/ItsW0lfiy/Moonmark/releases/tag/0.1.0-dev.8",
+            "html_url": "https://github.com/ItsW0lfiy/Wolfmark/releases/tag/0.2.0-dev.2",
             "assets": []
         }])
         .to_string();
@@ -259,7 +376,10 @@ fn native_update_transport_uses_etag_cache_and_fails_safely() {
             }
             let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(
-                request.contains("user-agent: wolfmark/0.1.0-dev.7"),
+                request.contains(&format!(
+                    "user-agent: wolfmark/{}",
+                    env!("CARGO_PKG_VERSION")
+                )),
                 "{request}"
             );
             if request_index == 0 {

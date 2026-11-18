@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSaveFile>
@@ -77,8 +78,14 @@ UserSettings UserSettings::load(bool include_prereleases_default) {
         }
 
         const auto root = document.object();
+        settings.page_settings_ = PageSettings::fromJson(root.value(QStringLiteral("documentLayout")).toObject());
         const auto updates = root.value(QStringLiteral("updates")).toObject();
         const auto files = root.value(QStringLiteral("files")).toObject();
+        for (const auto& value : files.value(QStringLiteral("recentDocuments")).toArray()) {
+            if (value.isString() && !value.toString().isEmpty() && settings.recent_documents_.size() < 20 &&
+                !settings.recent_documents_.contains(value.toString()))
+                settings.recent_documents_.push_back(value.toString());
+        }
         const auto editor = root.value(QStringLiteral("editor")).toObject();
         if (editor.value(QStringLiteral("wordWrap")).isBool())
             settings.editor_word_wrap_ = editor.value(QStringLiteral("wordWrap")).toBool();
@@ -118,10 +125,12 @@ bool UserSettings::save(QString* error) const {
     updates.insert(QStringLiteral("includePrereleases"), updates_.include_prereleases);
     QJsonObject files;
     files.insert(QStringLiteral("lastOpenDirectory"), last_open_directory_);
+    files.insert(QStringLiteral("recentDocuments"), QJsonArray::fromStringList(recent_documents_));
     QJsonObject root;
     root.insert(QStringLiteral("schemaVersion"), schema_version);
     root.insert(QStringLiteral("updates"), updates);
     root.insert(QStringLiteral("files"), files);
+    root.insert(QStringLiteral("documentLayout"), page_settings_.toJson());
     root.insert(QStringLiteral("editor"), QJsonObject{{QStringLiteral("wordWrap"), editor_word_wrap_}});
 
     QSaveFile file(file_path_);
@@ -135,6 +144,21 @@ bool UserSettings::save(QString* error) const {
         return false;
     }
     return true;
+}
+
+void UserSettings::rememberDocument(const QString& path) {
+    for (auto it = recent_documents_.begin(); it != recent_documents_.end();) {
+        if (QString::compare(*it, path,
+#ifdef _WIN32
+                             Qt::CaseInsensitive
+#else
+                             Qt::CaseSensitive
+#endif
+                             ) == 0) it = recent_documents_.erase(it);
+        else ++it;
+    }
+    recent_documents_.prepend(path);
+    while (recent_documents_.size() > 20) recent_documents_.removeLast();
 }
 
 } // namespace wolfmark::qt
