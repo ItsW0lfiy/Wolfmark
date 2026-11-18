@@ -23,7 +23,7 @@ enum class InstallerPresence {
 
 struct InstallerOptions {
     QString installFolder;
-    bool fileAssociations = true;
+    bool fileAssociations = false;
     bool desktopShortcut = false;
 };
 

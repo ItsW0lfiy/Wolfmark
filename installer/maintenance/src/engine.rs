@@ -255,13 +255,13 @@ impl Engine {
 
     pub fn modify(
         &self,
-        file_associations: bool,
+        _file_associations: bool,
         desktop_shortcut: bool,
     ) -> Result<OperationResult, String> {
         let mut state = self
             .state()?
             .ok_or_else(|| "Wolfmark is not installed".to_owned())?;
-        state.options.file_associations = file_associations;
+        state.options.file_associations = false;
         state.options.desktop_shortcut = desktop_shortcut;
         state.updated_at = Utc::now().timestamp();
         let uninstaller = self.paths.state_root.join("Wolfmark-Uninstall.exe");
@@ -319,10 +319,11 @@ impl Engine {
         journal: &mut TransactionJournal,
         payload_root: &Path,
         manifest: &PayloadManifest,
-        options: InstallOptions,
+        mut options: InstallOptions,
         uninstaller_source: &Path,
         previous: Option<InstallState>,
     ) -> Result<OperationResult, String> {
+        options.file_associations = false;
         fs::create_dir_all(&self.paths.state_root).map_err(|error| error.to_string())?;
         let staged = self
             .paths

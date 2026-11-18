@@ -27,7 +27,7 @@ MaintenanceController::MaintenanceController(
       silent_(silent) {
     state_.targetVersion = QStringLiteral(WOLFMARK_SETUP_VERSION_STRING);
     state_.options.installFolder = paths_.installFolder;
-    state_.options.fileAssociations = true;
+    state_.options.fileAssociations = false;
     state_.options.desktopShortcut = false;
 }
 
@@ -228,7 +228,7 @@ bool MaintenanceController::parseDetection(const QByteArray& output, bool presen
     const QJsonObject options = state.value(QStringLiteral("options")).toObject();
     if (!options.isEmpty()) {
         state_.options.installFolder = options.value(QStringLiteral("installDirectory")).toString(paths_.installFolder);
-        state_.options.fileAssociations = options.value(QStringLiteral("fileAssociations")).toBool(true);
+        state_.options.fileAssociations = options.value(QStringLiteral("fileAssociations")).toBool(false);
         state_.options.desktopShortcut = options.value(QStringLiteral("desktopShortcut")).toBool(false);
     }
     state_.installed = statusKind_ != QStringLiteral("absent");

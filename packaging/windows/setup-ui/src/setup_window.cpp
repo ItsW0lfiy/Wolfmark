@@ -26,6 +26,7 @@
 #include <QUrl>
 
 #include "bootstrap_log.h"
+#include "wolfmark_setup_version.h"
 
 namespace {
 // Fixed-size installer needs a moveable system titlebar, not a second Qt frame.
@@ -257,11 +258,13 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
-    associationsCheck_ = new SetupCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"));
+    associationsCheck_ = new SetupCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"), this);
     desktopCheck_ = new SetupCheckBox(QStringLiteral("Create a desktop shortcut"));
     associationsCheck_->setAccessibleName(QStringLiteral("Register for Open With and Windows Default Apps"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
-    layout->addWidget(associationsCheck_);
+    associationsCheck_->setChecked(false);
+    associationsCheck_->setEnabled(false);
+    associationsCheck_->hide();
     layout->addWidget(desktopCheck_);
     layout->addStretch(1);
 
@@ -498,7 +501,7 @@ void SetupWindow::showMaintenance(const InstallerState& state) {
                           .arg(state.installedVersion, state.installedBuildId);
     if (!state.statusDetail.isEmpty()) details += QStringLiteral("\n") + state.statusDetail;
     maintenanceVersion_->setText(details);
-    maintenanceDefaults_->setVisible(state.options.fileAssociations);
+    maintenanceDefaults_->hide();
     pages_->setCurrentWidget(maintenancePage_);
 }
 
@@ -569,7 +572,7 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
         break;
     }
     launchCheck_->setVisible(action == InstallerAction::Install || action == InstallerAction::Update || action == InstallerAction::Reinstall);
-    completeDefaults_->setVisible(action != InstallerAction::Uninstall && state.options.fileAssociations);
+    completeDefaults_->hide();
     pages_->setCurrentWidget(completePage_);
 }
 
@@ -620,7 +623,7 @@ void SetupWindow::showSmokeState(const QString& stateName) {
     InstallerState smoke;
     smoke.installed = true;
     smoke.installedVersion = QStringLiteral("0.1.0-dev.6");
-    smoke.targetVersion = QStringLiteral("0.1.0-dev.7");
+    smoke.targetVersion = QStringLiteral(WOLFMARK_SETUP_VERSION_STRING);
     smoke.options.installFolder = QStringLiteral("C:/Program Files/Wolfmark");
     smoke.options.fileAssociations = true;
     if (stateName == QStringLiteral("install")) {
@@ -684,7 +687,7 @@ InstallerOptions SetupWindow::optionsFromControls() const {
     InstallerOptions options;
     options.installFolder = state_.activeAction == InstallerAction::Install
         ? locationEdit_->text() : state_.options.installFolder;
-    options.fileAssociations = associationsCheck_->isChecked();
+    options.fileAssociations = false;
     options.desktopShortcut = desktopCheck_->isChecked();
     return options;
 }
