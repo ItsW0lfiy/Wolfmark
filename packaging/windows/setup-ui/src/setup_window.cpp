@@ -258,13 +258,8 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
-    associationsCheck_ = new SetupCheckBox(QStringLiteral("Register for Open With and Windows Default Apps"), this);
     desktopCheck_ = new SetupCheckBox(QStringLiteral("Create a desktop shortcut"));
-    associationsCheck_->setAccessibleName(QStringLiteral("Register for Open With and Windows Default Apps"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
-    associationsCheck_->setChecked(false);
-    associationsCheck_->setEnabled(false);
-    associationsCheck_->hide();
     layout->addWidget(desktopCheck_);
     layout->addStretch(1);
 
@@ -470,7 +465,6 @@ void SetupWindow::showInstall(const InstallerState& state) {
     locationEdit_->setVisible(!modifying);
     locationButton_->setVisible(!modifying);
     locationEdit_->setText(state.options.installFolder);
-    associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
     primaryButton_->setText(modifying ? QStringLiteral("Apply changes") : QStringLiteral("Install Wolfmark"));
     pages_->setCurrentWidget(installPage_);
@@ -488,7 +482,6 @@ void SetupWindow::showUpdate(const InstallerState& state) {
     locationLabel_->setVisible(false);
     locationEdit_->setVisible(false);
     locationButton_->setVisible(false);
-    associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
     primaryButton_->setText(QStringLiteral("Update Wolfmark"));
     pages_->setCurrentWidget(installPage_);

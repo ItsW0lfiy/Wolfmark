@@ -61,7 +61,7 @@ void checkOptions(const RecordingHost& host, InstallerAction action, const Insta
     require(host.options_.installFolder == expected.installFolder,
             "Setup lost or replaced the installation directory");
     require(host.options_.fileAssociations == expected.fileAssociations,
-            "Setup lost the file-association choice");
+            "Setup must not request file-handler registration");
     require(host.options_.desktopShortcut == expected.desktopShortcut,
             "Setup lost the desktop-shortcut choice");
 }
@@ -103,6 +103,7 @@ void installUsesSelectedDirectory() {
     require(location != nullptr, "Install directory control missing");
     InstallerOptions selected = state.options;
     selected.installFolder = QString::fromUtf16(u"D:/Chosen folder/Wolfmark \u03a9");
+    selected.fileAssociations = false;
     location->setText(selected.installFolder);
     click(window, QStringLiteral("Install Wolfmark"));
     checkOptions(host, InstallerAction::Install, selected);
@@ -111,14 +112,17 @@ void installUsesSelectedDirectory() {
 void updateUsesCurrentCheckboxChoices() {
     RecordingHost host;
     SetupWindow window(&host);
-    const InstallerState state = installedState();
+    InstallerState state = installedState();
+    state.options.fileAssociations = true;
     window.showUpdate(state);
     window.show();
     for (QCheckBox* box : window.findChildren<QCheckBox*>()) {
+        require(!box->text().contains(QStringLiteral("Open With")),
+                "Setup must not offer file-handler registration");
         if (box->isVisible()) box->setChecked(!box->isChecked());
     }
     InstallerOptions selected = state.options;
-    selected.fileAssociations = true;
+    selected.fileAssociations = false;
     selected.desktopShortcut = false;
     click(window, QStringLiteral("Update Wolfmark"));
     checkOptions(host, InstallerAction::Update, selected);
