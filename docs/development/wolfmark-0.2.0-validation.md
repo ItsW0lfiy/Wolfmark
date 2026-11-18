@@ -61,6 +61,9 @@ Logs and generated test artifacts are ignored under `out/tests`.
 | Debian Cargo check/build and library tests | Passed 40/40; `linux-final-dev020.log`, `linux-test-dev020.log` |
 | Debian native opening/export/overwrite | Passed under Qt offscreen; `linux-final-dev020.log`, `linux-font-export-dev020.log`, `linux-final-clean-dev020.log` |
 | `scripts/test_setup_ui_contract.ps1` | Passed native fresh/stale update, chosen install target, legacy association flags, current shortcuts, and recording-core dispatch. No real install. `setup-contract-dev020.log` |
+| `xmake package` | Passed clean-tree release build, native setup compile/contracts, NSIS assembly, portable ZIP and checksums; `package-dev020.log` |
+| `scripts/test_windows_setup.ps1` without lifecycle switches | Passed artifact/checksum/payload hashes, app-local portable startup, real detection, recording-core setup actions, Unicode/spaces, NSIS extraction and error/exit propagation; `package-smoke-dev020.log` |
+| `tools/render_performance.ps1` | All nine release-mode image geometry, zoom, editor, image loading and scroll cases passed; `render-performance-dev020.log` |
 | `scripts/fetch_document_schemas.py` | Downloaded official ECMA-376 Transitional and ODF 1.3 schemas to ignored local storage |
 | `scripts/validate_document_exports.py --schemas out/tests/schema-download-check` | Windows and font-equipped Linux outputs passed all WordprocessingML/ODF XML schemas, ZIP/XML/HTML checks and independent PDF checks |
 | `git diff --check` | Passed after removing trailing whitespace in changed documentation |
@@ -92,6 +95,9 @@ file and verifies retained content. Export tests compare original source bytes,
 dirty state and selection. Isolated registry tests use disposable HKCU subtrees,
 protect foreign entries including reused Wolfmark names, and preserve UserChoice
 and hash values. No live default association was changed during this task.
+Picker automation uses Qt's non-native `QFileDialog` for deterministic widget
+interaction. The production Windows shell file chooser still needs a manual
+desktop check; this is not claimed as physical shell-dialog acceptance.
 
 ## Output and native visual review
 
@@ -143,11 +149,47 @@ and native-document construction counts during page changes and zoom. Image
 stress discovered 260 occurrences, loaded 250, and retained failed placeholders.
 The existing native render/zoom/layout/scroll/watcher matrix also passed in the
 full suite. Measurements are local observations, not cross-hardware guarantees.
+The additional release performance matrix loaded 250 occurrences with six image
+requests and a 15,360,000-byte image cache. Zoom retained zero parse/load/native
+construction/image-request deltas. The image scroll run reported 16.23 ms p95
+paint intervals and 1,040 microseconds p95 paint cost on this machine.
+
+## Packages and final Git state
+
+Local development artifacts are under `out/release/0.2.0-dev.1`:
+
+- `Wolfmark-Setup-win-x64.exe`: 25,342,704 bytes (24.17 MiB).
+- `Wolfmark-portable-win-x64.zip`: 17,139,581 bytes (16.35 MiB).
+- `SHA256SUMS.txt`: both artifact hashes were independently checked.
+
+Their clean source identity is
+`c3bf401096d12d7a4f575bba7175b46e3176a597` / `c3bf401096d1`, channel
+`development`. The final follow-up changes only this validation report. App and
+setup display `0.2.0-dev.1`; numeric Windows resources use `0.2.0.1`. The staged
+payload contains Qt Print Support and the added ZIP license notice. Portable
+startup was checked with PATH limited to Windows system directories. Neither
+the generated installer nor the real installation lifecycle was executed.
+
+Local implementation commits:
+
+- `4c4cb26`: file-URI decoding regression.
+- `e27adc7`: installer ownership/foreign-entry protection.
+- `9413371`: page layout, export, opening, build and dev-version milestone.
+- `60729e2`: native setup legacy-flag regressions and obsolete control removal.
+- `d7fe535`: visually verified font-selector sizing.
+- `c3bf401`: official document-schema QA, CI, notices and acceptance documentation.
+
+A final fetch found remote main still at `9ea8d72`. Both remote and local main
+were proven ancestors of the completed task. Local main was fast-forwarded from
+`3bff29f` to the task result, retaining all 15 user commits and all six task
+commits. The checkout was returned to **main**; the task branch is retained.
+The final report-only commit is on main. Nothing was pushed, tagged or released.
+The local-only ignored `AGENTS.md` and exclude metadata were not committed.
 
 ## Remaining acceptance and limitations
 
 - Stable 0.2.0 is not prepared or published. Keep `0.2.0-dev.1`.
-- Physical Windows clipboard, mixed DPI/monitor/taskbar behavior, screen reader,
+- Physical Windows clipboard and shell picker, mixed DPI/monitor/taskbar behavior, screen reader,
   physical printers/page ranges and user installer lifecycle still need manual
   acceptance. Screenshots and synthetic native checks do not establish those.
 - Independent Word/LibreOffice rendered DOCX/ODT review remains incomplete.
@@ -163,5 +205,3 @@ full suite. Measurements are local observations, not cross-hardware guarantees.
   deferred. Export selected content applies to Reader selections.
 - Page preview snapshots the current buffer. External changes during the modal
   dialog require reopening it. Missing/blocked images remain placeholders.
-- Packaging results and final Git reconciliation are recorded after the package
-  and startup checks; nothing is pushed or installed by those checks.
