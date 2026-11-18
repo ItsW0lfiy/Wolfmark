@@ -34,7 +34,9 @@ pub fn resolve_local_image(document_path: &Path, reference: &str) -> AssetResolu
         return resolve_path(decoded_path, reference);
     }
 
-    if let Ok(url) = Url::parse(&decoded) {
+    // Parse URIs before percent-decoding: encoded # and ? belong to the path,
+    // not to URI fragments/queries. Url::to_file_path performs that decoding.
+    if let Ok(url) = Url::parse(&reference.replace('\\', "/")) {
         if matches!(url.scheme(), "http" | "https") {
             return resolution(
                 AssetState::Remote,
@@ -173,7 +175,9 @@ mod tests {
         ] {
             assert_eq!(
                 resolve_local_image(&document, &reference).state,
-                AssetState::Allowed
+                AssetState::Allowed,
+                "reference: {reference}; document: {}",
+                document.display()
             );
         }
         assert_eq!(
