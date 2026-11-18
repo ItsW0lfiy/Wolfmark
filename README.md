@@ -6,11 +6,13 @@ Wolfmark is a Windows-first, viewer-first Markdown application. It is one native
 
 Wolfmark is free and open source. All first-party features are available without payment: there is no paid tier, subscription, feature paywall, or paid unlock. Optional donations may support development, but donating never changes the functionality available in Wolfmark.
 
-Current development milestone: `0.1.0-dev.7` — First Windows Release & Shell Integration.
+Current development milestone: `0.2.0-dev.1` — native document layout and offline export. Stable 0.2.0 acceptance is still in progress.
+
+Xmake is the preferred project command interface; Cargo remains the underlying builder. See [0.2.0 development and acceptance](docs/development/wolfmark-0.2.0.md).
 
 Document editing is available through **Reader | Live Preview | Source** from a
-compact titlebar mode menu. Reader remains the default; the tab strip appears
-with multiple open documents. Source and Live Preview share one buffer and undo
+compact titlebar mode menu. Reader remains the default; open documents live in
+one document sidebar. Source and Live Preview share one buffer and undo
 history; Save/Save As are explicit and detect external conflicts.
 See [document sessions and editing](docs/architecture/document-editing.md) for
 source preservation, contextual syntax and current limitations.
@@ -21,7 +23,9 @@ Install Rust with the MSVC target, PowerShell 7, and Visual Studio Build Tools w
 
 ```powershell
 cargo setup
-cargo app
+xmake f -m debug
+xmake
+xmake run wolfmark
 ```
 
 Build the setup EXE, portable ZIP, and checksums with:

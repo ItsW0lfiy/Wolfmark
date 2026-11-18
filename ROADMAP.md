@@ -1,5 +1,9 @@
 # Wolfmark roadmap
 
+## Active 0.2.0 milestone
+
+Native page layout, page setup, PDF/DOCX/ODT/HTML/text exports, printing, automatic contents, metadata, profiles, and opening/file-lifetime regressions are promoted into 0.2.0 development. See [scope and acceptance](docs/development/wolfmark-0.2.0.md). Servo is abandoned as the planned Qt replacement; its historical branches remain preserved. Xmake orchestrates the existing Cargo and Qt Widgets implementation.
+
 The roadmap records intended product direction, not release dates or promises.
 
 Wolfmark is being built as a **renderer-first, file-first, all-in-one Markdown application**. It takes inspiration from applications such as FeatherMD, Obsidian, MarkText, and other strong Markdown workflows, but Wolfmark should keep its own architecture, renderer, interaction model, and visual identity.

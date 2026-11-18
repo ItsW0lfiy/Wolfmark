@@ -1,5 +1,7 @@
 # Building
 
+For the active 0.2.0 milestone, **Xmake is the preferred project interface**. See [commands and acceptance](wolfmark-0.2.0.md). The direct Cargo workflows below remain supported.
+
 ## Quick start
 
 After installing Rust/MSVC, PowerShell 7, and the Visual Studio C++ x64 workload with a Windows SDK:

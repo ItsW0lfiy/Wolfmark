@@ -1,7 +1,7 @@
 # Wolfmark — Feature Tracker
 
-> **Last reviewed:** 2026-11-11  
-> **Status baseline:** `main` at `c6c6d63fe57870ad66ae5035b5baee3aee739c75` (`0.1.0-dev.7`), with historical feature discussions and the [roadmap](ROADMAP.md).  
+> **Last reviewed:** 2026-11-18
+> **Status baseline:** `0.2.0-dev.1` development, based on `9ea8d72`; see [acceptance results](docs/development/wolfmark-0.2.0-validation.md). Stable acceptance remains incomplete.
 > **Purpose:** Track what exists, what still needs work, and ideas not yet committed to implementation. This is a *feature inventory*, not a promise of release dates.
 
 ## How to read this file
@@ -22,12 +22,12 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 
 ## 1. Critical bugs and safety boundaries
 
-- [ ] **BUG / BLOCKER:** Confirm and fix the user's reported inability to open files in the actual running build. `main` contains an Open dialog, `Ctrl+O`, drag/drop, and `openDocument()` paths, **but their presence does not resolve the report**.
-- [ ] **VERIFY:** Successfully open existing `.md`, `.markdown`, and `.txt` files using the Open button, `Ctrl+O`, drag-and-drop, and startup arguments on Windows.
-- [ ] **VERIFY:** Test spaces, non-ASCII/Unicode names, relative/absolute paths, multiple documents, inaccessible documents, invalid formats, missing paths, error reporting, and repeated opens.
-- [ ] **BUG / BLOCKER:** Remove installer-created file-handler claims/registrations on `main`. Older `main` installer code/docs still register Open With capabilities, ProgIDs, and supported extensions. **The newer user boundary supersedes that behavior.**
+- [x] Fix window-wide Open shortcut routing, editor file-drop interception, silent opening errors, and failed sessions being retained. Real picker acceptance and drops are regression-tested.
+- [x] Native opening regressions cover `.md`, `.markdown`, `.txt`, Unicode/spaces/reserved characters, CLI arguments, multiple documents, canonical duplicates, and persisted recent documents.
+- [x] Missing/invalid/unreadable-file errors, cross-drive opening, and the command-line `--` delimiter have focused Windows regressions.
+- [x] Stop installer file-handler registrations; remove only legacy entries matching the known installation. Isolated registry tests protect foreign handlers and defaults.
 - [ ] **VERIFY:** Installation, repair, update, modification, rollback, and removal must not claim, register, silently reassign, or take ownership of `.md`/`.markdown`/`.txt` file handlers. Clean up registrations created by older Wolfmark builds while preserving unrelated handlers and the user's Windows defaults.
-- [ ] **VERIFY:** Opening and editing must not keep unnecessary locks/handles on documents or parent folders. A document/folder can be renamed, moved, or removed by the user/OS while Wolfmark maintains safe in-memory state.
+- [x] Opening regression renames an open document and its parent directory, deletes it, and checks unchanged content/source bytes. Physical installer lifecycle acceptance remains separate.
 - [x] Source-level external modification/conflict detection for opened documents and unsaved changes.
 - [x] Source-level atomic save through `QSaveFile` with direct-write fallback disabled.
 - [ ] **VERIFY:** Test save/reload conflicts, preservation of dirty buffers, interrupted saves, concurrent external edits, and error recovery on real Windows filesystems.
@@ -37,10 +37,10 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 
 - [x] Existing single-process application built with Rust, C++20, Qt 6 Widgets, and native `QTextDocument`.
 - [x] Existing Cargo-controlled Qt build, linking and Qt runtime staging through `build.rs`.
-- [ ] **PLANNED / NEW DIRECTION:** Make **Xmake the primary project build manager**; it should orchestrate C++/Qt and invoke Cargo for Rust where needed.
-- [ ] Provide documented Xmake workflows for setup, debug/release build, run, test, lint, packaging, and clean on supported platforms.
-- [ ] Preserve deterministic toolchain discovery and deploy Qt DLLs/plugins/assets through the new build system.
-- [ ] Decide on a clean Xmake/Cargo interop and caching layout without duplicate builds or competing dependency ownership.
+- [x] Xmake is the preferred project command interface, delegating to the retained Cargo/native Qt build.
+- [x] Document Xmake debug/release, run, test, check, package and clean commands; existing `cargo setup` bootstraps the SDK.
+- [x] Preserve Cargo SDK discovery and runtime staging; add Qt Print Support to linking and packaging.
+- [x] Xmake and direct Cargo share the same dependency ownership and output cache.
 - [ ] **CANDIDATE:** Evaluate which existing Rust/C++ boundary abstractions should remain, simplify, or be rewritten when technically beneficial.
 - [ ] **CANDIDATE:** Evaluate selective or extensive Qt Quick/QML migration and a Widgets/QML hybrid, with actual rendering/performance/input comparisons.
 - [ ] **CANDIDATE:** Adopt other Qt modules where they materially improve functionality (e.g., image, SVG, concurrency, printing, platform integration).
@@ -56,8 +56,7 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 ## 3. Files, documents, and sessions
 
 - [x] Markdown `.md`/`.markdown` and literal `.txt` handling in the Qt source.
-- [x] Native Open file picker and visible Open action wired in code (**reported runtime bug; see `1**).
-- [x] `Ctrl+O` action and drag-and-drop/open-from-command-line handlers in code (**runtime validation pending**).
+- [x] Native Open file picker, window-wide `Ctrl+O`, drag-and-drop and command-line opening, with runtime regressions (see section 1).
 - [x] Multiple retained document sessions in a single process.
 - [x] Per-document native renderer/editor objects and switching without unnecessary reloads.
 - [x] Close and reload opened document actions.
@@ -65,7 +64,8 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 - [x] Per-document Reader/Source/Live mode and zoom/scroll preservation while the session is retained.
 - [x] File watching and clean-change reload with dirty-change conflict indicators.
 - [ ] Better cross-restart restoration of open documents, their positions, modes, selected panels, and search state.
-- [ ] Recent files and recent folders.
+- [x] Persisted canonical recent documents with menu and empty-screen access.
+- [ ] Recent-folder history beyond the retained last open directory.
 - [ ] Reopen recently closed documents.
 - [ ] Pin/retain important documents.
 - [ ] Quick Open covering recent and available documents.
@@ -248,15 +248,19 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 
 ## 14. Printing, export, and publishing
 
-- [ ] Native print support.
-- [ ] PDF and HTML export.
+- [x] Native Qt print dialog and shared page painter; physical printer acceptance remains pending.
+- [x] A4/A3/A5/B5/Letter/Legal/custom page preview, portrait/landscape, single/continuous pages, page navigation and fit/zoom.
+- [x] Page/style/metadata controls and four presets, persisted independently of Markdown source.
+- [x] Native PDF, editable DOCX/ODT, standalone HTML and plain-text export. Official XML schemas and independent PDF checks supplement native regressions.
 - [ ] Image export for rendered pages/diagrams where relevant.
 - [ ] Multiple-document/chapter export with ordered sections.
-- [ ] Automatic exported table of contents, page breaks, and chapter separation.
-- [ ] Rewrite internal links/anchors and bundle referenced resources.
+- [x] Generated heading contents, optional cover and H1 page breaks, headers/footers, first-page variants and page numbering. Contents are a static heading list, not a live paginated Word TOC.
+- [x] Embed prepared local images in DOCX/ODT and standalone HTML; preserve safe links and anchors. Unsafe schemes are inert and reported.
 - [ ] EPUB export.
-- [ ] Export presets, preview, and diagnostics for missing/unsupported assets.
-- [ ] Reuse core Markdown semantics/presentation as much as possible.
+- [x] Export preview, diagnostics, source-overwrite guard and explicit replacement confirmation.
+- [x] Reuse existing Comrak, presentation and native document; page changes do not reload/reparse or request images again.
+- [ ] Named custom profile libraries, document-specific sidecars, heading numbering and batch export.
+- [ ] **VERIFY:** Independent Word/LibreOffice rendered DOCX/ODT acceptance and physical printer testing.
 
 ## 15. Installer, portable distribution, and updates
 

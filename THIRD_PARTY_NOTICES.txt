@@ -1,4 +1,4 @@
-Wolfmark uses Qt 6.11.2 Core, Gui, Widgets, and Network dynamically.
+Wolfmark uses Qt 6.11.2 Core, Gui, Widgets, Network, and Print Support dynamically.
 
 Qt is Copyright (C) The Qt Company Ltd. and other contributors. These Qt components are available under commercial terms or the GNU Lesser General Public License version 3 / GNU General Public License version 3. Copies of those license texts are included in this package.
 
@@ -12,3 +12,5 @@ Qt 6.11.2 source: https://download.qt.io/official_releases/qt/6.11/6.11.2/single
 Wolfmark's Windows setup executable is produced with NSIS 3.12. NSIS is Copyright (C) 1999-2026 Contributors to the NSIS project and is distributed under the zlib/libpng license. A copy is included at licenses/NSIS-zlib-license.txt.
 
 NSIS project and license: https://nsis.sourceforge.io/License
+
+Document packages use zip 9.7.0 (MIT; zip-rs/zip2 contributors) and base64 0.23.1 (MIT OR Apache-2.0). ZIP default compression/crypto features are disabled; document XML and PNG resources are stored without an extra client runtime. The zip MIT license is included at licenses/zip-MIT.txt in packages and docs/licenses/zip-MIT.txt in source.

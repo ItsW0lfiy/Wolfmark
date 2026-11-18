@@ -27,3 +27,9 @@ Dev.7's Windows installer uses NSIS 3.12 under the zlib/libpng license. NSIS is 
 - NSIS release data and hashes: https://github.com/NSIS-Dev/release-data
 
 Before each public release, regenerate the dependency inventory from the locked graph, inspect changes, include all required third-party notices, and verify the exact Qt deployment against its SBOM. A crate's manifest declaration is evidence for review, not a substitute for reading the applicable license text.
+
+## 0.2.0-dev.1 additions
+
+Qt Print Support is dynamically linked under the existing Qt open-source licensing model. Its local 6.11.2 Windows runtime adds 405,304 bytes before packaging compression. No QML, browser engine, managed runtime, Office, or Pandoc dependency is introduced.
+
+Document packages use maintained zip 9.7.0 under MIT, with default features disabled and stored entries, plus the existing graph's base64 0.23.1 (MIT OR Apache-2.0). The ZIP license text is retained as `zip-MIT.txt`; the locked graph also adds equivalent, hashbrown, indexmap, typed-path, constant_time_eq, and zeroize support. Packaging must retain the complete locked dependency inventory and release-specific Qt compliance gate.

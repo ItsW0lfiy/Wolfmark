@@ -9,6 +9,9 @@ on:
       - "assets/branding/**"
       - "src/**"
       - "build.rs"
+      - "xmake.lua"
+      - "tests/**"
+      - "scripts/*document*.py"
       - "fixtures/crimson-graphite-visual-reference.md"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -42,7 +45,7 @@ jobs:
       - name: Install native Qt dependencies
         run: |
           apt-get update
-          apt-get install -y ca-certificates curl git g++ pkg-config qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins libgl1-mesa-dev fonts-dejavu-core
+          apt-get install -y ca-certificates curl git g++ pkg-config qt6-base-dev qt6-base-dev-tools qt6-qpa-plugins libgl1-mesa-dev fonts-dejavu-core fonts-noto-cjk python3 python3-lxml python3-pypdf
       - uses: dtolnay/rust-toolchain@stable
       - name: Check application
         run: cargo check -p wolfmark --locked
@@ -50,6 +53,17 @@ jobs:
         run: cargo test -p wolfmark --locked
       - name: Link native Qt desktop application
         run: cargo build -p wolfmark --locked
+      - name: Verify native opening and offline exports
+        env:
+          QT_QPA_PLATFORM: offscreen
+          WOLFMARK_DISABLE_UPDATE_CHECKS: "1"
+        run: |
+          timeout 60s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-file-opening
+          timeout 120s ./out/cargo/debug/wolfmark fixtures/wolfmark-visual-test.md --smoke-export
+      - name: Validate document packages against official schemas
+        run: |
+          python3 scripts/fetch_document_schemas.py out/tests/schemas
+          python3 scripts/validate_document_exports.py --schemas out/tests/schemas
       - name: Test Markdown render and capture Reader UI
         env:
           QT_QPA_PLATFORM: offscreen
@@ -295,7 +309,7 @@ jobs:
           $root = $PWD.Path
           $out = Join-Path $root 'out/setup-qa'
           New-Item -ItemType Directory -Force -Path "$out/generated", "$out/bin", "$out/obj" | Out-Null
-          @('#define WOLFMARK_SETUP_VERSION_COMMAS 0,1,0,7', '#define WOLFMARK_SETUP_VERSION_STRING "0.1.0-dev.7"') |
+          @('#define WOLFMARK_SETUP_VERSION_COMMAS 0,2,0,1', '#define WOLFMARK_SETUP_VERSION_STRING "0.2.0-dev.1"') |
             Set-Content "$out/generated/wolfmark_setup_version.h" -Encoding ascii
           $project = Join-Path $root 'packaging/windows/setup-ui/WolfmarkSetup.vcxproj'
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
