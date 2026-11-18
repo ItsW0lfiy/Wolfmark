@@ -582,6 +582,8 @@ bool showDocumentOutput(QWidget* parent, const QTextDocument* source, int source
     check(page_form, QStringLiteral("Page break before H1"), "headingBreaks");
     for (const auto& item : {std::pair{"Body font", "bodyFont"}, {"Heading font", "headingFont"}}) {
         auto* widget = new QFontComboBox; widget->setAccessibleName(QLatin1String(item.first));
+        widget->setMinimumContentsLength(8);
+        widget->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         style_form->addRow(QLatin1String(item.first), widget); fields.insert(QLatin1String(item.second), widget);
         QObject::connect(widget, &QFontComboBox::currentFontChanged, &dialog, changed);
     }
