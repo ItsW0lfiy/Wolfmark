@@ -4907,9 +4907,10 @@ protected:
             (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove ||
              event->type() == QEvent::Drop)) {
             auto* drop = static_cast<QDropEvent*>(event);
-            if (drop->mimeData()->hasUrls()) {
+            const auto urls = drop->mimeData()->urls();
+            if (std::any_of(urls.cbegin(), urls.cend(), [](const QUrl& url) { return url.isLocalFile(); })) {
                 if (event->type() == QEvent::Drop) {
-                    for (const auto& url : drop->mimeData()->urls())
+                    for (const auto& url : urls)
                         if (url.isLocalFile()) openDocument(url.toLocalFile());
                 }
                 drop->acceptProposedAction();
@@ -4958,7 +4959,8 @@ protected:
     }
 
     void dragEnterEvent(QDragEnterEvent* event) override {
-        if (event->mimeData()->hasUrls()) {
+        const auto urls = event->mimeData()->urls();
+        if (std::any_of(urls.cbegin(), urls.cend(), [](const QUrl& url) { return url.isLocalFile(); })) {
             event->acceptProposedAction();
         }
     }
