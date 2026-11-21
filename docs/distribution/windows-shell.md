@@ -15,23 +15,24 @@ Arguments beginning with `-` are treated as switches, not file names. Missing an
 
 ## Installer boundary in 0.2.0
 
-Wolfmark does not register document handlers, supported extensions, ProgIDs,
-Open With capabilities, or default-file associations. Legacy command-line and
-state fields can still be read for compatibility, but cannot enable registration.
-The installed application keeps its ordinary App Paths and Installed Apps entries
-and shortcuts. Portable archives perform no registration.
+The installer option **Add Wolfmark to Windows Open with and Default Apps**
+lists the installed executable as a candidate for `.md`, `.markdown`, and `.txt`.
+Users choose defaults through Windows. Setup leaves extension defaults, Windows
+UserChoice and hashes alone. Portable builds do not register themselves.
 
-Install, update, repair, modification, rollback restoration, and removal clean
-legacy handlers only when their command or icon matches the known Wolfmark
-installation directory. Entries using the same names but pointing elsewhere are
-preserved. Extension defaults, other applications' Open With entries, and Windows
-UserChoice/hash values are never rewritten. No Windows Default Apps action is
-offered by the setup UI.
+Fresh setup leaves the option off. Update and reinstall show the saved choice,
+and repair restores entries when enabled. If a previous 0.2.0 development build
+erased your preference, run the corrected setup, choose **Change installation
+options**, and enable the option. The update page can also enable it explicitly.
 
-Registry regressions use disposable uniquely named HKCU subtrees. They verify
-that new application registration creates no handlers, that legacy cleanup keeps
-other handlers/defaults intact, and that foreign entries reusing Wolfmark names
-are preserved. No test writes to the live Classes or UserChoice trees.
+Disabling or uninstalling removes entries identified as belonging to the
+installed Wolfmark. Conflicting registrations are preserved. Opening a document
+releases its read handles and leaves the source available to other applications.
+
+See Microsoft's [Default Programs registration](https://learn.microsoft.com/en-us/windows/win32/shell/default-programs)
+and [Open with registration](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-include-an-application-on-the-open-with-dialog-box).
+Automated tests use isolated registry subtrees. Explorer launch and Default Apps
+visibility need acceptance on a normal Windows desktop.
 
 Wolfmark retains its multiple-process policy. No single-instance mutex, named
 pipe, or shell-routing IPC is introduced by this milestone.

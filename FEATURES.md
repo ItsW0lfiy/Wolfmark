@@ -25,8 +25,8 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 - [x] Fix window-wide Open shortcut routing, editor file-drop interception, silent opening errors, and failed sessions being retained. Real picker acceptance and drops are regression-tested.
 - [x] Native opening regressions cover `.md`, `.markdown`, `.txt`, Unicode/spaces/reserved characters, CLI arguments, multiple documents, canonical duplicates, and persisted recent documents.
 - [x] Missing/invalid/unreadable-file errors, cross-drive opening, and the command-line `--` delimiter have focused Windows regressions.
-- [x] Stop installer file-handler registrations; remove only legacy entries matching the known installation. Isolated registry tests protect foreign handlers and defaults.
-- [ ] **VERIFY:** Installation, repair, update, modification, rollback, and removal must not claim, register, silently reassign, or take ownership of `.md`/`.markdown`/`.txt` file handlers. Clean up registrations created by older Wolfmark builds while preserving unrelated handlers and the user's Windows defaults.
+- [x] Optional Windows Open with and Default Apps registration for `.md`, `.markdown`, and `.txt`. Windows retains control of default selection.
+- [ ] **VERIFY:** Exercise Open with and Default Apps on a normal Windows desktop after install, update, repair, modify and uninstall.
 - [x] Opening regression renames an open document and its parent directory, deletes it, and checks unchanged content/source bytes. Physical installer lifecycle acceptance remains separate.
 - [x] Source-level external modification/conflict detection for opened documents and unsaved changes.
 - [x] Source-level atomic save through `QSaveFile` with direct-write fallback disabled.
@@ -355,7 +355,7 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 - [ ] **ONGOING POLICY:** Do not add permanent UI buttons for every feature; prefer contextual actions, a command palette, and optional panels.
 - [ ] **SUPERSEDED:** Servo-only future frontend, the anti-C++ restriction, Rust-only application ownership, and Qt Widgets immutability.
 - [ ] **SUPERSEDED:** Full offline setup as the preferred installer (portable ZIP remains).
-- [ ] **SUPERSEDED:** Windows Open With/file association registration as part of installer integration.
+- [x] Optional Windows Open with registration is an existing feature. Removing an existing feature requires explicit user authorization.
 - [ ] **SUPERSEDED:** A second horizontal document-tab strip and redundant Open dropdown in the approved sidebar design.
 - [ ] **SUPERSEDED:** Move official first-party capabilities into an optional mod merely to keep Wolfmark's codebase artificially small.
 

@@ -61,6 +61,7 @@ private:
     QLabel* locationLabel_ = nullptr;
     QLineEdit* locationEdit_ = nullptr;
     QPushButton* locationButton_ = nullptr;
+    QCheckBox* associationsCheck_ = nullptr;
     QCheckBox* desktopCheck_ = nullptr;
     QPushButton* primaryButton_ = nullptr;
     QWidget* maintenancePage_ = nullptr;

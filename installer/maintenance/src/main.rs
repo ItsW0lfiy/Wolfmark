@@ -41,8 +41,8 @@ enum Command {
         uninstaller: PathBuf,
         #[arg(long)]
         cancel_file: Option<PathBuf>,
-        #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
-        file_associations: bool,
+        #[arg(long, action = clap::ArgAction::Set)]
+        file_associations: Option<bool>,
         #[arg(long, default_value_t = false, action = clap::ArgAction::Set)]
         desktop_shortcut: bool,
         #[arg(long, default_value = "install")]
@@ -130,17 +130,24 @@ fn run() -> Result<(), String> {
                 "reinstall" => Operation::Reinstall,
                 _ => return Err(format!("unsupported deployment operation: {operation}")),
             };
-            serde_json::to_value(engine.install(
-                operation,
-                &payload,
-                &read_manifest(manifest)?,
-                InstallOptions {
-                    install_directory: install_dir,
-                    file_associations,
-                    desktop_shortcut,
-                },
-                &uninstaller,
-            )?)
+            serde_json::to_value(
+                engine.install(
+                    operation,
+                    &payload,
+                    &read_manifest(manifest)?,
+                    InstallOptions {
+                        install_directory: install_dir,
+                        file_associations: match file_associations {
+                            Some(enabled) => enabled,
+                            None => engine
+                                .state()?
+                                .is_some_and(|state| state.options.file_associations),
+                        },
+                        desktop_shortcut,
+                    },
+                    &uninstaller,
+                )?,
+            )
             .map_err(|error| error.to_string())?
         }
         Command::Repair { uninstaller } => {

@@ -258,6 +258,13 @@ QWidget* SetupWindow::createInstallPage() {
     locationRow->addWidget(locationButton_);
     layout->addLayout(locationRow);
 
+    associationsCheck_ = new SetupCheckBox(QStringLiteral("Add Wolfmark to Windows Open with and Default Apps"));
+    const auto choiceHelp = QStringLiteral("Makes Wolfmark available as a choice. Choose your defaults in Windows settings.");
+    associationsCheck_->setAccessibleDescription(choiceHelp);
+    layout->addWidget(associationsCheck_);
+    auto* associationHelp = new QLabel(choiceHelp);
+    associationHelp->setWordWrap(true);
+    layout->addWidget(associationHelp);
     desktopCheck_ = new SetupCheckBox(QStringLiteral("Create a desktop shortcut"));
     desktopCheck_->setAccessibleName(QStringLiteral("Create a desktop shortcut"));
     layout->addWidget(desktopCheck_);
@@ -465,6 +472,7 @@ void SetupWindow::showInstall(const InstallerState& state) {
     locationEdit_->setVisible(!modifying);
     locationButton_->setVisible(!modifying);
     locationEdit_->setText(state.options.installFolder);
+    associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
     primaryButton_->setText(modifying ? QStringLiteral("Apply changes") : QStringLiteral("Install Wolfmark"));
     pages_->setCurrentWidget(installPage_);
@@ -482,6 +490,7 @@ void SetupWindow::showUpdate(const InstallerState& state) {
     locationLabel_->setVisible(false);
     locationEdit_->setVisible(false);
     locationButton_->setVisible(false);
+    associationsCheck_->setChecked(state.options.fileAssociations);
     desktopCheck_->setChecked(state.options.desktopShortcut);
     primaryButton_->setText(QStringLiteral("Update Wolfmark"));
     pages_->setCurrentWidget(installPage_);
@@ -494,7 +503,7 @@ void SetupWindow::showMaintenance(const InstallerState& state) {
                           .arg(state.installedVersion, state.installedBuildId);
     if (!state.statusDetail.isEmpty()) details += QStringLiteral("\n") + state.statusDetail;
     maintenanceVersion_->setText(details);
-    maintenanceDefaults_->hide();
+    maintenanceDefaults_->setVisible(state.options.fileAssociations);
     pages_->setCurrentWidget(maintenancePage_);
 }
 
@@ -565,7 +574,7 @@ void SetupWindow::showComplete(InstallerAction action, const InstallerState& sta
         break;
     }
     launchCheck_->setVisible(action == InstallerAction::Install || action == InstallerAction::Update || action == InstallerAction::Reinstall);
-    completeDefaults_->hide();
+    completeDefaults_->setVisible(state_.options.fileAssociations && action != InstallerAction::Uninstall);
     pages_->setCurrentWidget(completePage_);
 }
 
@@ -680,7 +689,7 @@ InstallerOptions SetupWindow::optionsFromControls() const {
     InstallerOptions options;
     options.installFolder = state_.activeAction == InstallerAction::Install
         ? locationEdit_->text() : state_.options.installFolder;
-    options.fileAssociations = false;
+    options.fileAssociations = associationsCheck_->isChecked();
     options.desktopShortcut = desktopCheck_->isChecked();
     return options;
 }

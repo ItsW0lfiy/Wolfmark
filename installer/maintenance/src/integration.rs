@@ -120,12 +120,12 @@ pub fn apply(
         .set_value("Version", &version)
         .map_err(|error| error.to_string())?;
     installer
-        .set_value("FileAssociations", &0_u32)
+        .set_value("FileAssociations", &u32::from(options.file_associations))
         .map_err(|error| error.to_string())?;
     installer
         .set_value("DesktopShortcut", &u32::from(options.desktop_shortcut))
         .map_err(|error| error.to_string())?;
-    remove_file_associations(&hklm, &options.install_directory)?;
+    configure_file_associations(&hklm, options)?;
 
     let (uninstall, _) = hklm
         .create_subkey_with_flags(UNINSTALL_KEY, KEY_READ | KEY_WRITE)
@@ -246,14 +246,102 @@ fn write_application_registration(hklm: &RegKey, executable: &Path) -> Result<()
         .map_err(|error| error.to_string())
 }
 
-// Legacy fixture creation only: production never registers a document handler.
-#[cfg(test)]
+fn configure_file_associations(registry: &RegKey, options: &InstallOptions) -> Result<(), String> {
+    let directory = &options.install_directory;
+    if !options.file_associations {
+        return remove_file_associations(registry, directory);
+    }
+    let executable = directory.join("Wolfmark.exe");
+    let command = format!("\"{}\" \"%1\"", executable.display());
+    write_file_associations(registry, directory, &executable, &command)
+}
+
 fn write_file_associations(
     hklm: &RegKey,
     install_directory: &Path,
     executable: &Path,
     command: &str,
 ) -> Result<(), String> {
+    for key in [
+        APPLICATION_KEY,
+        MARKDOWN_PROGID,
+        TEXT_PROGID,
+        CAPABILITIES_KEY,
+    ] {
+        match hklm.open_subkey(key) {
+            Ok(existing) => {
+                let owned = if key == CAPABILITIES_KEY {
+                    existing
+                        .get_value::<String, _>("ApplicationIcon")
+                        .ok()
+                        .is_some_and(|icon| {
+                            icon.eq_ignore_ascii_case(&format!("{},0", executable.display()))
+                        })
+                } else {
+                    match existing
+                        .open_subkey(r"shell\open\command")
+                        .and_then(|verb| verb.get_value::<String, _>(""))
+                    {
+                        Ok(value) => value.eq_ignore_ascii_case(command),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => existing
+                            .get_value::<String, _>("WolfmarkInstallExecutable")
+                            .ok()
+                            .is_some_and(|path| {
+                                path.eq_ignore_ascii_case(&executable.to_string_lossy())
+                            }),
+                        Err(error) => return Err(error.to_string()),
+                    }
+                };
+                if !owned {
+                    return Err(format!("Windows registration is already in use: {key}"));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    match hklm
+        .open_subkey(r"Software\RegisteredApplications")
+        .and_then(|key| key.get_value::<String, _>("Wolfmark"))
+    {
+        Ok(path) if !path.eq_ignore_ascii_case(CAPABILITIES_KEY) => {
+            return Err("Windows registration name Wolfmark is already in use".into());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.to_string()),
+    }
+    let (application, _) = hklm
+        .create_subkey_with_flags(APPLICATION_KEY, KEY_READ | KEY_WRITE)
+        .map_err(|error| format!("creating Open With registration failed: {error}"))?;
+    application
+        .set_value("FriendlyAppName", &"Wolfmark")
+        .map_err(|error| error.to_string())?;
+    let (icon, _) = application
+        .create_subkey_with_flags("DefaultIcon", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    icon.set_value("", &format!("\"{}\",0", executable.display()))
+        .map_err(|error| error.to_string())?;
+    let (command_key, _) = application
+        .create_subkey_with_flags(r"shell\open\command", KEY_READ | KEY_WRITE)
+        .map_err(|error| error.to_string())?;
+    command_key
+        .set_value("", &command)
+        .map_err(|error| error.to_string())?;
+    application
+        .set_value(
+            "WolfmarkInstallExecutable",
+            &executable.to_string_lossy().as_ref(),
+        )
+        .map_err(|error| error.to_string())?;
+    let (types, _) = application
+        .create_subkey("SupportedTypes")
+        .map_err(|error| error.to_string())?;
+    for extension in [".md", ".markdown", ".txt"] {
+        types
+            .set_value(extension, &"")
+            .map_err(|error| error.to_string())?;
+    }
     let (registered, _) = hklm
         .create_subkey_with_flags(r"Software\RegisteredApplications", KEY_READ | KEY_WRITE)
         .map_err(|error| error.to_string())?;
@@ -319,7 +407,6 @@ fn write_file_associations(
     Ok(())
 }
 
-#[cfg(test)]
 fn write_progid(
     hklm: &RegKey,
     key: &str,
@@ -520,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn application_registration_never_claims_document_handlers() {
+    fn disabled_registration_does_not_add_document_handlers() {
         let registry = TestRegistry::new();
         let executable = PathBuf::from(r"C:\Program Files\Wolfmark\Wolfmark.exe");
         write_application_registration(&registry.root, &executable).unwrap();
@@ -546,6 +633,64 @@ mod tests {
                 "unexpected handler registration: {key}"
             );
         }
+    }
+
+    #[test]
+    fn enabled_registration_uses_installed_path_and_repairs_missing_entries() {
+        let registry = TestRegistry::new();
+        let mut options = InstallOptions {
+            install_directory: PathBuf::from(r"C:\Installed apps\Wolfmark Ω"),
+            file_associations: true,
+            desktop_shortcut: false,
+        };
+        let root = &registry.root;
+        configure_file_associations(root, &options).unwrap();
+        let application = root.open_subkey(APPLICATION_KEY).unwrap();
+        for (extension, progid) in [
+            (".md", "Wolfmark.MarkdownDocument"),
+            (".markdown", "Wolfmark.MarkdownDocument"),
+            (".txt", "Wolfmark.TextDocument"),
+        ] {
+            let types = application.open_subkey("SupportedTypes").unwrap();
+            assert_eq!(types.get_value::<String, _>(extension).unwrap(), "");
+            let key = root
+                .open_subkey(format!(r"Software\Classes\{extension}"))
+                .unwrap();
+            assert!(key.get_value::<String, _>("").is_err());
+            assert_eq!(
+                key.open_subkey("OpenWithProgids")
+                    .unwrap()
+                    .get_value::<String, _>(progid)
+                    .unwrap(),
+                ""
+            );
+        }
+        let verb_path = format!(r"{APPLICATION_KEY}\shell\open\command");
+        let expected = format!(
+            "\"{}\" \"%1\"",
+            options.install_directory.join("Wolfmark.exe").display()
+        );
+        assert_eq!(
+            root.open_subkey(&verb_path)
+                .unwrap()
+                .get_value::<String, _>("")
+                .unwrap(),
+            expected
+        );
+        root.delete_subkey_all(&verb_path).unwrap();
+        configure_file_associations(root, &options).unwrap();
+        assert_eq!(
+            root.open_subkey(&verb_path)
+                .unwrap()
+                .get_value::<String, _>("")
+                .unwrap(),
+            expected
+        );
+        options.file_associations = false;
+        configure_file_associations(root, &options).unwrap();
+        configure_file_associations(root, &options).unwrap();
+        assert!(root.open_subkey(APPLICATION_KEY).is_err());
+        assert!(root.open_subkey(CAPABILITIES_KEY).is_err());
     }
 
     #[test]
@@ -578,6 +723,9 @@ mod tests {
         registered
             .set_value("Wolfmark", &r"Software\Other\Capabilities")
             .unwrap();
+        assert!(
+            write_file_associations(&registry.root, &directory, &executable, &command).is_err()
+        );
         remove_file_associations(&registry.root, &directory).unwrap();
         assert_eq!(key.get_value::<String, _>("").unwrap(), foreign);
         assert_eq!(
