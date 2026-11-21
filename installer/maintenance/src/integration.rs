@@ -130,6 +130,7 @@ pub fn apply(
     }
     let previous_executable = previous_directory.map(|path| path.join("Wolfmark.exe"));
     write_application_registration(&hklm, &executable, previous_executable.as_deref())?;
+    configure_file_associations(&hklm, options, previous_directory)?;
 
     let (installer, _) = hklm
         .create_subkey_with_flags(INSTALLER_KEY, KEY_READ | KEY_WRITE)
@@ -149,8 +150,6 @@ pub fn apply(
     installer
         .set_value("DesktopShortcut", &u32::from(options.desktop_shortcut))
         .map_err(|error| error.to_string())?;
-    configure_file_associations(&hklm, options, previous_directory)?;
-
     let (uninstall, _) = hklm
         .create_subkey_with_flags(UNINSTALL_KEY, KEY_READ | KEY_WRITE)
         .map_err(|error| format!("creating Installed Apps registration failed: {error}"))?;
