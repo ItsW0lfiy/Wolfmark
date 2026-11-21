@@ -48,7 +48,7 @@ task_end()
 task("package")
     on_run(function ()
         assert(is_host("windows"), "Windows packaging requires Windows; Linux packaging is not yet implemented")
-        os.execv("cargo", {"package-app"})
+        os.execv("pwsh", {"-NoProfile", "-File", "scripts/run_background_windows.ps1", "-Action", "package"})
     end)
     set_menu {usage = "xmake package", description = "Build Windows installer, portable ZIP, and checksums"}
 task_end()
