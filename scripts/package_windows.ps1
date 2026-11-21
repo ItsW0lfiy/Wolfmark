@@ -37,7 +37,11 @@ function Get-WindowsVersion([string]$Version) {
     if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+))?$') {
         throw "Wolfmark version '$Version' cannot be represented as a Windows file version."
     }
-    $build = if ($Matches[4]) { [int]$Matches[4] } else { 0 }
+    if ($Matches[4] -and [decimal]$Matches[4] -ge [uint16]::MaxValue) {
+        throw "Windows prerelease version must use dev.0 through dev.65534."
+    }
+    # Match build.rs: reserve the highest revision for stable releases.
+    $build = if ($Matches[4]) { [int]$Matches[4] } else { [uint16]::MaxValue }
     return [pscustomobject]@{
         Dotted = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$build"
         Resource = "$($Matches[1]),$($Matches[2]),$($Matches[3]),$build"

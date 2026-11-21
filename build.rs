@@ -362,17 +362,24 @@ fn compile_windows_resources() {
 }
 
 fn windows_numeric_version(version: &str) -> [u16; 4] {
-    let (core, prerelease) = version.split_once('-').unwrap_or((version, ""));
+    let (core, prerelease) = version
+        .split_once('-')
+        .map_or((version, None), |(core, prerelease)| {
+            (core, Some(prerelease))
+        });
     let mut core_parts = core.split('.').map(|part| part.parse::<u16>().unwrap_or(0));
-    let prerelease_number = prerelease
-        .rsplit('.')
-        .next()
-        .and_then(|part| part.parse::<u16>().ok())
-        .unwrap_or(0);
+    // Reserve the highest revision so stable sorts after every dev build.
+    let revision = prerelease.map_or(u16::MAX, |value| {
+        value
+            .strip_prefix("dev.")
+            .and_then(|number| number.parse::<u16>().ok())
+            .filter(|&number| number < u16::MAX)
+            .expect("Windows prerelease version must use dev.0 through dev.65534")
+    });
     [
         core_parts.next().unwrap_or(0),
         core_parts.next().unwrap_or(0),
         core_parts.next().unwrap_or(0),
-        prerelease_number,
+        revision,
     ]
 }
