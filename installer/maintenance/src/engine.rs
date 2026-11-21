@@ -234,6 +234,7 @@ impl Engine {
             &state.manifest.build.version,
             &state.manifest.build.build_id,
             &uninstaller,
+            None,
         )?;
         let remaining = verify_payload(&state.options.install_directory, &state.manifest)?;
         if !remaining.is_empty() {
@@ -270,6 +271,7 @@ impl Engine {
             &state.manifest.build.version,
             &state.manifest.build.build_id,
             &uninstaller,
+            None,
         )?;
         write_json_atomic(&self.paths.state_root.join(STATE_FILE), &state)?;
         self.result(
@@ -291,8 +293,8 @@ impl Engine {
                 }
             }
             remove_empty_directories(&state.options.install_directory)?;
+            integration::remove(&state.options.install_directory)?;
         }
-        integration::remove()?;
         for entry in [STATE_FILE, JOURNAL_FILE] {
             let path = self.paths.state_root.join(entry);
             if path.exists() {
@@ -362,6 +364,9 @@ impl Engine {
             &manifest.build.version,
             &manifest.build.build_id,
             &uninstaller,
+            previous
+                .as_ref()
+                .map(|state| state.options.install_directory.as_path()),
         )?;
         self.advance(journal, TransactionPhase::IntegrationApplied)?;
         self.check_cancel()?;
@@ -477,11 +482,12 @@ impl Engine {
                     &previous.manifest.build.version,
                     &previous.manifest.build.build_id,
                     &uninstaller,
+                    Some(&journal.target_directory),
                 )?;
                 write_json_atomic(&self.paths.state_root.join(STATE_FILE), previous)?;
             }
         } else {
-            let _ = integration::remove();
+            let _ = integration::remove(&journal.target_directory);
         }
         self.advance(journal, TransactionPhase::RolledBack)
     }

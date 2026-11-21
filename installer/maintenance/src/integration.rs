@@ -101,11 +101,35 @@ pub fn apply(
     version: &str,
     build_id: &str,
     uninstaller: &Path,
+    previous_directory: Option<&Path>,
 ) -> Result<(), String> {
     let executable = options.install_directory.join("Wolfmark.exe");
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
-    write_application_registration(&hklm, &executable)?;
+    for (key, location_value) in [
+        (UNINSTALL_KEY, "InstallLocation"),
+        (INSTALLER_KEY, "InstallDir"),
+    ] {
+        match hklm.open_subkey(key) {
+            Ok(entry) => {
+                let location: String = entry.get_value(location_value).map_err(|error| {
+                    format!("Checking registration ownership for {key}: {error}")
+                })?;
+                if !location.eq_ignore_ascii_case(&options.install_directory.to_string_lossy())
+                    && !previous_directory
+                        .is_some_and(|path| location.eq_ignore_ascii_case(&path.to_string_lossy()))
+                {
+                    return Err(format!(
+                        "Windows installer registration is already in use: {key}"
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let previous_executable = previous_directory.map(|path| path.join("Wolfmark.exe"));
+    write_application_registration(&hklm, &executable, previous_executable.as_deref())?;
 
     let (installer, _) = hklm
         .create_subkey_with_flags(INSTALLER_KEY, KEY_READ | KEY_WRITE)
@@ -125,7 +149,7 @@ pub fn apply(
     installer
         .set_value("DesktopShortcut", &u32::from(options.desktop_shortcut))
         .map_err(|error| error.to_string())?;
-    configure_file_associations(&hklm, options)?;
+    configure_file_associations(&hklm, options, previous_directory)?;
 
     let (uninstall, _) = hklm
         .create_subkey_with_flags(UNINSTALL_KEY, KEY_READ | KEY_WRITE)
@@ -200,14 +224,29 @@ pub fn apply(
     Ok(())
 }
 
-pub fn remove() -> Result<(), String> {
+pub fn remove(directory: &Path) -> Result<(), String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    if let Ok(installer) = hklm.open_subkey(INSTALLER_KEY)
-        && let Ok(directory) = installer.get_value::<String, _>("InstallDir")
+    remove_file_associations(&hklm, directory)?;
+    let executable = directory.join("Wolfmark.exe");
+    if let Some(target) = app_path_target(&hklm)?
+        && target.eq_ignore_ascii_case(&executable.to_string_lossy())
     {
-        remove_file_associations(&hklm, Path::new(&directory))?;
+        hklm.delete_subkey_all(APP_PATH_KEY)
+            .map_err(|error| error.to_string())?;
     }
-    for key in [APP_PATH_KEY, UNINSTALL_KEY, INSTALLER_KEY] {
+    for (key, location_value) in [
+        (UNINSTALL_KEY, "InstallLocation"),
+        (INSTALLER_KEY, "InstallDir"),
+    ] {
+        match hklm
+            .open_subkey(key)
+            .and_then(|entry| entry.get_value::<String, _>(location_value))
+        {
+            Ok(location) if location.eq_ignore_ascii_case(&directory.to_string_lossy()) => {}
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.to_string()),
+        }
         match hklm.delete_subkey_all(key) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -237,7 +276,18 @@ fn notify_associations_changed() {
     };
 }
 
-fn write_application_registration(hklm: &RegKey, executable: &Path) -> Result<(), String> {
+fn write_application_registration(
+    hklm: &RegKey,
+    executable: &Path,
+    previous_executable: Option<&Path>,
+) -> Result<(), String> {
+    if let Some(target) = app_path_target(hklm)?
+        && !target.eq_ignore_ascii_case(&executable.to_string_lossy())
+        && !previous_executable
+            .is_some_and(|path| target.eq_ignore_ascii_case(&path.to_string_lossy()))
+    {
+        return Err("Windows App Paths entry Wolfmark.exe points to another executable".into());
+    }
     let (app_path, _) = hklm
         .create_subkey_with_flags(APP_PATH_KEY, KEY_READ | KEY_WRITE)
         .map_err(|error| format!("creating App Paths registration failed: {error}"))?;
@@ -246,14 +296,38 @@ fn write_application_registration(hklm: &RegKey, executable: &Path) -> Result<()
         .map_err(|error| error.to_string())
 }
 
-fn configure_file_associations(registry: &RegKey, options: &InstallOptions) -> Result<(), String> {
+fn app_path_target(registry: &RegKey) -> Result<Option<String>, String> {
+    match registry
+        .open_subkey(APP_PATH_KEY)
+        .and_then(|key| key.get_value(""))
+    {
+        Ok(path) => Ok(Some(path)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn configure_file_associations(
+    registry: &RegKey,
+    options: &InstallOptions,
+    previous_directory: Option<&Path>,
+) -> Result<(), String> {
     let directory = &options.install_directory;
     if !options.file_associations {
+        if let Some(previous) = previous_directory.filter(|path| *path != directory) {
+            remove_file_associations(registry, previous)?;
+        }
         return remove_file_associations(registry, directory);
     }
     let executable = directory.join("Wolfmark.exe");
     let command = format!("\"{}\" \"%1\"", executable.display());
-    write_file_associations(registry, directory, &executable, &command)
+    write_file_associations(
+        registry,
+        directory,
+        &executable,
+        &command,
+        previous_directory,
+    )
 }
 
 fn write_file_associations(
@@ -261,7 +335,9 @@ fn write_file_associations(
     install_directory: &Path,
     executable: &Path,
     command: &str,
+    previous_directory: Option<&Path>,
 ) -> Result<(), String> {
+    let previous_executable = previous_directory.map(|path| path.join("Wolfmark.exe"));
     for key in [
         APPLICATION_KEY,
         MARKDOWN_PROGID,
@@ -276,13 +352,24 @@ fn write_file_associations(
                         .ok()
                         .is_some_and(|icon| {
                             icon.eq_ignore_ascii_case(&format!("{},0", executable.display()))
+                                || previous_executable.as_ref().is_some_and(|path| {
+                                    icon.eq_ignore_ascii_case(&format!("{},0", path.display()))
+                                })
                         })
                 } else {
                     match existing
                         .open_subkey(r"shell\open\command")
                         .and_then(|verb| verb.get_value::<String, _>(""))
                     {
-                        Ok(value) => value.eq_ignore_ascii_case(command),
+                        Ok(value) => {
+                            value.eq_ignore_ascii_case(command)
+                                || previous_executable.as_ref().is_some_and(|path| {
+                                    value.eq_ignore_ascii_case(&format!(
+                                        "\"{}\" \"%1\"",
+                                        path.display()
+                                    ))
+                                })
+                        }
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => existing
                             .get_value::<String, _>("WolfmarkInstallExecutable")
                             .ok()
@@ -610,7 +697,7 @@ mod tests {
     fn disabled_registration_does_not_add_document_handlers() {
         let registry = TestRegistry::new();
         let executable = PathBuf::from(r"C:\Program Files\Wolfmark\Wolfmark.exe");
-        write_application_registration(&registry.root, &executable).unwrap();
+        write_application_registration(&registry.root, &executable, None).unwrap();
         assert_eq!(
             registry
                 .root
@@ -633,6 +720,12 @@ mod tests {
                 "unexpected handler registration: {key}"
             );
         }
+        let foreign = Path::new(r"C:\Other\Wolfmark.exe");
+        assert!(write_application_registration(&registry.root, foreign, None).is_err());
+        assert_eq!(
+            app_path_target(&registry.root).unwrap().unwrap(),
+            executable.to_string_lossy()
+        );
     }
 
     #[test]
@@ -644,7 +737,7 @@ mod tests {
             desktop_shortcut: false,
         };
         let root = &registry.root;
-        configure_file_associations(root, &options).unwrap();
+        configure_file_associations(root, &options, None).unwrap();
         let application = root.open_subkey(APPLICATION_KEY).unwrap();
         for (extension, progid) in [
             (".md", "Wolfmark.MarkdownDocument"),
@@ -678,7 +771,7 @@ mod tests {
             expected
         );
         root.delete_subkey_all(&verb_path).unwrap();
-        configure_file_associations(root, &options).unwrap();
+        configure_file_associations(root, &options, None).unwrap();
         assert_eq!(
             root.open_subkey(&verb_path)
                 .unwrap()
@@ -686,9 +779,20 @@ mod tests {
                 .unwrap(),
             expected
         );
+        let previous_directory = options.install_directory.clone();
+        options.install_directory = PathBuf::from(r"D:\Moved apps\Wolfmark");
+        assert!(configure_file_associations(root, &options, None).is_err());
+        configure_file_associations(root, &options, Some(&previous_directory)).unwrap();
+        assert_eq!(
+            root.open_subkey(&verb_path)
+                .unwrap()
+                .get_value::<String, _>("")
+                .unwrap(),
+            r#""D:\Moved apps\Wolfmark\Wolfmark.exe" "%1""#
+        );
         options.file_associations = false;
-        configure_file_associations(root, &options).unwrap();
-        configure_file_associations(root, &options).unwrap();
+        configure_file_associations(root, &options, None).unwrap();
+        configure_file_associations(root, &options, None).unwrap();
         assert!(root.open_subkey(APPLICATION_KEY).is_err());
         assert!(root.open_subkey(CAPABILITIES_KEY).is_err());
     }
@@ -699,7 +803,7 @@ mod tests {
         let directory = PathBuf::from(r"C:\Program Files\Wolfmark");
         let executable = directory.join("Wolfmark.exe");
         let command = format!("\"{}\" \"%1\"", executable.display());
-        write_file_associations(&registry.root, &directory, &executable, &command).unwrap();
+        write_file_associations(&registry.root, &directory, &executable, &command, None).unwrap();
         let foreign = r#""C:\Other\Viewer.exe" "%1""#;
         let key = registry
             .root
@@ -724,7 +828,8 @@ mod tests {
             .set_value("Wolfmark", &r"Software\Other\Capabilities")
             .unwrap();
         assert!(
-            write_file_associations(&registry.root, &directory, &executable, &command).is_err()
+            write_file_associations(&registry.root, &directory, &executable, &command, None)
+                .is_err()
         );
         remove_file_associations(&registry.root, &directory).unwrap();
         assert_eq!(key.get_value::<String, _>("").unwrap(), foreign);
@@ -774,9 +879,10 @@ mod tests {
             &options.install_directory,
             &executable,
             &command,
+            None,
         )
         .unwrap();
-        write_application_registration(&registry.root, &executable).unwrap();
+        write_application_registration(&registry.root, &executable, None).unwrap();
         remove_file_associations(&registry.root, &options.install_directory).unwrap();
         assert!(registry.root.open_subkey(CAPABILITIES_KEY).is_err());
         assert!(registered.get_value::<String, _>("Wolfmark").is_err());
