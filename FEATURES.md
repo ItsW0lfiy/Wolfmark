@@ -275,7 +275,7 @@ These checkboxes describe the **Qt-based `main` branch**. Features implemented o
 - [ ] Installed Apps entry, Start Menu shortcut, and optional desktop shortcut; verify actual shipped behavior.
 - [ ] Silent setup/uninstall and safe upgrades.
 - [ ] Exact semantic version, commit, architecture, channel, build metadata, manifests, and SHA-256 verification.
-- [ ] **BUG / BLOCKER:** Eliminate file-handler claiming/registration behavior from current installer and cleanup old Wolfmark-owned registration.
+- [x] Installer can add Wolfmark as a Windows file-opening candidate. Default selection remains a separate Windows user action.
 - [ ] **VERIFY:** Execute complete lifecycle tests on clean Windows installations and older versions.
 - [ ] Preserve portable ZIP as a valid independent no-registration distribution.
 
