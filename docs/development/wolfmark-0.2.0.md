@@ -26,6 +26,13 @@ xmake clean                         # cargo clean (generated Cargo output only)
 Packaging retains the existing clean-worktree gate. Building an installer is
 separate from installing it, pushing, tagging, or publishing it.
 
+On Windows, `xmake test`, `cargo test-background`, and `cargo all` use a
+separate Windows desktop. The test windows stay off your active desktop and
+each run writes a log under `out/tests/background`. Direct `cargo test` still
+runs on the current desktop. For an isolated package or setup check, run
+`pwsh -File scripts/run_background_windows.ps1 -Action package` or use
+`-Action setup-check`.
+
 ## Document layout and exports
 
 Use **Document actions → Document Page View / Page setup** or **Print preview**

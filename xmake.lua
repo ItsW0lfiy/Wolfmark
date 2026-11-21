@@ -26,8 +26,11 @@ target_end()
 
 task("test")
     on_run(function ()
-        local scope = is_host("windows") and {"--workspace"} or {"--package", "wolfmark"}
-        os.execv("cargo", table.join({"test"}, scope, {"--locked", "--no-fail-fast", "--", "--test-threads=1"}))
+        if is_host("windows") then
+            os.execv("pwsh", {"-NoProfile", "-File", "scripts/run_background_windows.ps1", "-Action", "test"})
+            return
+        end
+        os.execv("cargo", {"test", "--package", "wolfmark", "--locked", "--no-fail-fast", "--", "--test-threads=1"})
     end)
     set_menu {usage = "xmake test", description = "Run Rust and serialized native Qt regressions"}
 task_end()

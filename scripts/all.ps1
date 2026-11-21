@@ -4,6 +4,11 @@ param([switch]$AllowDirty)
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+if ($IsWindows -and $env:WOLFMARK_PRIVATE_TEST_DESKTOP -ne '1') {
+    $backgroundArguments = if ($AllowDirty) { @('-AllowDirty') } else { @() }
+    & $pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run_background_windows.ps1') -Action all @backgroundArguments
+    exit $LASTEXITCODE
+}
 
 function Invoke-CargoStage([string]$Name, [string[]]$Arguments) {
     Write-Host "`n==> $Name"

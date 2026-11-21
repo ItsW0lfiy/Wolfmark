@@ -21,6 +21,7 @@ fn main() -> ExitCode {
     let (script, extra_arguments): (&str, &[&str]) = match action.as_str() {
         "setup" => ("setup.ps1", &[]),
         "all" => ("all.ps1", &[]),
+        "test-background" => ("run_background_windows.ps1", &["-Action", "test"]),
         "package" => ("package_windows.ps1", &[]),
         "clean" => ("clean.ps1", &[]),
         "deep-clean" => ("clean.ps1", &["-Deep"]),
