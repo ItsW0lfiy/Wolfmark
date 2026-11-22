@@ -33,6 +33,8 @@ struct NativeFrameStatus {
     bool maximize_box = false;
     bool popup = false;
     int corner_preference = 0;
+    bool client_fills_frame = false;
+    bool client_fills_work_area = false;
 };
 
 void installNativeFrame(QWidget* window);

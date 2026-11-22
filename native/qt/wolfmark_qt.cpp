@@ -3938,8 +3938,15 @@ public:
                             before.load_count == after.load_count &&
                             before.image_request_count == after.image_request_count &&
                             constructions == document_->constructionCount();
+                        const bool frame_geometry = status.client_fills_frame &&
+                            maximized_status.client_fills_frame &&
+                            maximized_status.client_fills_work_area &&
+                            restored_status.client_fills_frame;
+                        std::fprintf(stdout, "NATIVE_FRAME_GEOMETRY normal=%d maximized=%d work_area=%d restored=%d\n",
+                            status.client_fills_frame, maximized_status.client_fills_frame,
+                            maximized_status.client_fills_work_area, restored_status.client_fills_frame);
                         const bool ok = styles && captions && title && edges &&
-                            fullscreen_client && maximized && restored && corners && counters;
+                            fullscreen_client && maximized && restored && corners && counters && frame_geometry;
                         std::fprintf(stdout,
                             "NATIVE_WINDOW styles=%s thick_frame=%s popup=%s "
                             "caption_hit=%s max_hit=%s min_client=%s close_client=%s "
@@ -5907,9 +5914,9 @@ private:
                 const auto work_area = dialog.screen()->availableGeometry();
                 const auto status = wolfmark::qt::windows::nativeFrameStatus(&dialog);
                 std::fprintf(stdout,
-                    "SETTINGS_FRAME native_caption=%d resizable=%d fits_work_area=%d "
+                    "SETTINGS_FRAME native_caption=%d resizable=%d fills_frame=%d fits_work_area=%d "
                     "frame=%d,%d,%dx%d work_area=%d,%d,%dx%d scale=%.2f\n",
-                    status.caption, status.thick_frame, work_area.contains(frame),
+                    status.caption, status.thick_frame, status.client_fills_frame, work_area.contains(frame),
                     frame.x(), frame.y(), frame.width(), frame.height(),
                     work_area.x(), work_area.y(), work_area.width(), work_area.height(),
                     dialog.devicePixelRatioF());

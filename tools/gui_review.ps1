@@ -41,7 +41,9 @@ $env:QT_SCALE_FACTOR = '1.5'
 $env:WOLFMARK_SNAPSHOT_SETTINGS_PAGE = 'updates'
 Invoke-Smoke @('--smoke-settings-ui')
 Copy-Item -LiteralPath 'out/visual/dev7/settings-updates.png' -Destination (Join-Path $root 'settings-updates-scale-150.png')
+Invoke-Smoke @('--smoke-native-window', 'fixtures/layout-transitions.md')
 Remove-Item Env:QT_SCALE_FACTOR
+Invoke-Smoke @('--smoke-native-window', 'fixtures/layout-transitions.md')
 foreach ($tab in 'page', 'style', 'details', 'export') {
     $env:WOLFMARK_OUTPUT_TAB = $tab
     $env:WOLFMARK_OUTPUT_SNAPSHOT = Join-Path $root "page-view-$tab.png"

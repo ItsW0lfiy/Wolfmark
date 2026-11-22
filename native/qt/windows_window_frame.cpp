@@ -148,6 +148,19 @@ NativeFrameStatus nativeFrameStatus(QWidget* window) {
     status.minimize_box = (style & WS_MINIMIZEBOX) != 0;
     status.maximize_box = (style & WS_MAXIMIZEBOX) != 0;
     status.popup = (style & WS_POPUP) != 0;
+    const auto handle = reinterpret_cast<HWND>(window->winId());
+    RECT frame{}, client{};
+    if (GetWindowRect(handle, &frame) && GetClientRect(handle, &client)) {
+        POINT origin{};
+        if (ClientToScreen(handle, &origin)) {
+            OffsetRect(&client, origin.x, origin.y);
+            status.client_fills_frame = EqualRect(&frame, &client);
+            MONITORINFO monitor{sizeof(MONITORINFO)};
+            if (GetMonitorInfoW(MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST), &monitor)) {
+                status.client_fills_work_area = EqualRect(&monitor.rcWork, &client);
+            }
+        }
+    }
     constexpr auto corner_attribute = static_cast<DWMWINDOWATTRIBUTE>(33);
     DWORD corner_preference = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(reinterpret_cast<HWND>(window->winId()),
@@ -207,6 +220,12 @@ bool handleNativeFrameEvent(QWidget* window, QWidget* title_bar,
     }
     switch (native->message) {
     case WM_NCCALCSIZE:
+        // Keep the native resize style, but give Wolfmark the whole frame to
+        // paint. The maximized frame is already constrained to the work area.
+        if (native->wParam == TRUE) {
+            *result = 0;
+            return true;
+        }
         return false;
     case WM_GETMINMAXINFO:
         if (!fullscreen) {
