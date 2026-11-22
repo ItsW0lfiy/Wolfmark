@@ -33,6 +33,13 @@ runs on the current desktop. For an isolated package or setup check, run
 `pwsh -File scripts/run_background_windows.ps1 -Action package` or use
 `-Action setup-check`.
 
+For a GUI review, run `pwsh -File scripts/run_background_windows.ps1 -Action gui`.
+It captures Settings at 100% and 150% scale, Page View and Export, and the
+Reader, Source and Live Preview fixtures. Review `out/tests/gui-review` and
+`out/visual/dev7`, and check `SETTINGS_FRAME` in the background run log for
+the actual window bounds. Widget captures show the client area. Check the outer
+frame and per-monitor transitions on the active desktop for manual acceptance.
+
 ## Document layout and exports
 
 Use **Document actions → Document Page View / Page setup** or **Print preview**

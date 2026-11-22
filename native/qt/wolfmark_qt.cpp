@@ -3795,6 +3795,10 @@ public:
                     page = QStringLiteral("updates");
                 const auto path = QDir::current().absoluteFilePath(
                     QStringLiteral("out/visual/dev7/settings-%1.png").arg(page));
+                if (QFileInfo::exists(path) && !QFile::remove(path)) {
+                    QCoreApplication::exit(35);
+                    return;
+                }
                 showSettings(path);
                 const bool ok = QFileInfo::exists(path);
                 std::fprintf(stdout, "WOLFMARK_SMOKE settings_ui=%s path=%s\n",
@@ -5899,6 +5903,16 @@ private:
             }
             QDir().mkpath(QFileInfo(snapshot_path).absolutePath());
             QTimer::singleShot(120, &dialog, [&dialog, snapshot_path] {
+                const auto frame = dialog.frameGeometry();
+                const auto work_area = dialog.screen()->availableGeometry();
+                const auto status = wolfmark::qt::windows::nativeFrameStatus(&dialog);
+                std::fprintf(stdout,
+                    "SETTINGS_FRAME native_caption=%d resizable=%d fits_work_area=%d "
+                    "frame=%d,%d,%dx%d work_area=%d,%d,%dx%d scale=%.2f\n",
+                    status.caption, status.thick_frame, work_area.contains(frame),
+                    frame.x(), frame.y(), frame.width(), frame.height(),
+                    work_area.x(), work_area.y(), work_area.width(), work_area.height(),
+                    dialog.devicePixelRatioF());
                 dialog.grab().save(snapshot_path);
                 dialog.reject();
             });

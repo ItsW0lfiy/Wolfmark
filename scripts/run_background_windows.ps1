@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('test', 'all', 'package', 'setup-check')]
+    [ValidateSet('test', 'all', 'package', 'setup-check', 'gui')]
     [string]$Action,
     [switch]$AllowDirty
 )
@@ -93,6 +93,7 @@ $command = switch ($Action) {
     'all' { if ($AllowDirty) { '& ./scripts/all.ps1 -AllowDirty' } else { '& ./scripts/all.ps1' } }
     'package' { '& ./scripts/package_windows.ps1' }
     'setup-check' { '& ./scripts/test_windows_setup.ps1' }
+    'gui' { '& ./tools/gui_review.ps1' }
 }
 $logLiteral = "'" + $log.Replace("'", "''") + "'"
 $child = @"
