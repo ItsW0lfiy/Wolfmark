@@ -204,6 +204,12 @@ fn background_relayout_cannot_erase_restored_reading_position() {
 }
 
 #[test]
+fn background_editor_highlighting_does_not_jump_to_file_start() {
+    let output = run_smoke("--smoke-editor-scroll-activity", "generated/large-text.md");
+    assert!(output.contains("editor_scroll_activity=ok"), "{output}");
+}
+
+#[test]
 fn shell_startup_arguments_open_supported_documents_once() {
     let generated = GeneratedTestDirectory::recreate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

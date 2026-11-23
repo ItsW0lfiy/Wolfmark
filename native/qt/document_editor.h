@@ -58,7 +58,7 @@ private:
     void paintGutter(QPaintEvent* event);
     void requestAnalysis();
     void collectAnalysis();
-    void restoreViewportCursor(const QTextCursor& cursor);
+    void restoreViewportCursor(const QTextCursor& cursor, int previous_scroll);
     friend class EditorGutter;
     const WolfmarkApiTable* api_;
     MarkdownHighlighter* highlighter_;

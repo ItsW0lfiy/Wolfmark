@@ -521,7 +521,11 @@ public:
             if (navigationActive()) scheduleNavigationRetarget();
         });
         QObject::connect(verticalScrollBar(), &QScrollBar::sliderPressed, this,
-                         [this] { cancelScrollMotion(); });
+                         [this] { ++user_scroll_epoch_; cancelScrollMotion(); });
+        // Track clicks and keyboard scrollbar actions need to cancel pending
+        // semantic navigation just as dragging the thumb does.
+        QObject::connect(verticalScrollBar(), &QAbstractSlider::actionTriggered, this,
+                         [this](int) { ++user_scroll_epoch_; cancelScrollMotion(); });
 
         scroll_controller_.value_changed = [this](int) {
             if (navigation_first_change_us_ < 0 && navigation_request_elapsed_.isValid())
@@ -543,6 +547,7 @@ public:
     }
 
     void load(const QJsonObject& root) {
+        ++viewport_restore_epoch_;
         cancelScrollMotion();
         stopAutoscroll();
         QElapsedTimer timer;
@@ -1096,6 +1101,7 @@ public:
     }
 
     void navigateToAnchor(const QString& anchor, bool animate = true) {
+        ++viewport_restore_epoch_;
         scroll_controller_.cancel();
         navigation_settle_.stop();
         ++navigation_epoch_;
@@ -1446,6 +1452,7 @@ protected:
     }
 
     void mousePressEvent(QMouseEvent* event) override {
+        ++user_scroll_epoch_;
         cancelScrollMotion();
         if (event->button() == Qt::MiddleButton) {
             autoscroll_active_ = !autoscroll_active_;
@@ -1514,6 +1521,7 @@ protected:
     }
 
     void wheelEvent(QWheelEvent* event) override {
+        ++user_scroll_epoch_;
         if (event->modifiers().testFlag(Qt::ControlModifier)) {
             if (event->angleDelta().y() != 0) changeZoom(event->angleDelta().y() > 0 ? 10 : -10);
             event->accept();
@@ -1551,6 +1559,7 @@ protected:
     }
 
     void keyPressEvent(QKeyEvent* event) override {
+        ++user_scroll_epoch_;
         cancelScrollMotion();
         if (event->modifiers().testFlag(Qt::ControlModifier)) {
             const int key = event->key();
@@ -2368,6 +2377,7 @@ private:
         int count = 0;
         bool received = false;
         std::optional<ViewportAnchor> viewport_anchor;
+        const auto input_epoch = user_scroll_epoch_;
         constexpr int maximum_results_per_tick = 4;
         while (count < maximum_results_per_tick) {
             auto result = api_->poll_image(backend_);
@@ -2421,8 +2431,20 @@ private:
         }
         if (received) {
             document()->setLayoutEnabled(true);
-            if (navigation_anchor_.isEmpty() && viewport_anchor.has_value())
+            if (navigation_anchor_.isEmpty() && viewport_anchor.has_value()) {
                 restoreViewportAnchor(*viewport_anchor);
+                // QTextDocument can finish recalculating its scrollbar range
+                // in the next event-loop turn. Keep the same reading anchor
+                // through that deferred layout, unless the user has scrolled
+                // or a new explicit navigation has taken ownership.
+                const auto restore_epoch = ++viewport_restore_epoch_;
+                const auto anchor = *viewport_anchor;
+                QTimer::singleShot(0, this, [this, anchor, input_epoch, restore_epoch] {
+                    if (restore_epoch == viewport_restore_epoch_ &&
+                        input_epoch == user_scroll_epoch_ && !navigationActive())
+                        restoreViewportAnchor(anchor);
+                });
+            }
             invalidateDecorativeFrameBounds();
             if (!navigation_anchor_.isEmpty()) ++navigation_image_retarget_count_;
             scheduleNavigationRetarget();
@@ -2637,12 +2659,15 @@ private:
         const double speed = std::min(48.0, std::pow((std::abs(distance) - 12.0) / 22.0, 1.35) +
                                                 0.5);
         auto* bar = verticalScrollBar();
+        ++user_scroll_epoch_;
         bar->setValue(std::clamp(bar->value() + static_cast<int>(std::copysign(speed, distance)),
                                  bar->minimum(), bar->maximum()));
     }
 
     const WolfmarkApiTable* api_ = nullptr;
     void* backend_ = nullptr;
+    quint64 user_scroll_epoch_ = 0;
+    quint64 viewport_restore_epoch_ = 0;
     wolfmark::qt::SmoothScrollController scroll_controller_;
     ScrollFrameTrace scroll_trace_;
     std::vector<Command> commands_;
@@ -3628,6 +3653,40 @@ public:
                 qApp->exit(ok ? 0 : 18);
             });
             poll->start(25);
+            return;
+        }
+        if (mode == QStringLiteral("editor-scroll-activity")) {
+            QTimer::singleShot(250, this, [this] {
+                setDocumentMode(2);
+                auto* editor = active_->editor;
+                auto* bar = editor->verticalScrollBar();
+                const int target = bar->maximum() * 2 / 3;
+                bar->setValue(target);
+                // A background decoration pass must not scroll to the caret,
+                // which can still be at the very beginning of the document.
+                editor->insertPlainText(QStringLiteral("scroll activity "));
+                bar->setValue(target);
+                const int original_line = editor->viewportLine();
+                setDocumentMode(1);
+                auto* poll = new QTimer(this);
+                auto elapsed = std::make_shared<QElapsedTimer>();
+                elapsed->start();
+                QObject::connect(poll, &QTimer::timeout, this,
+                                 [this, editor, poll, elapsed, original_line, target] {
+                    if (!editor->analysisReady() && elapsed->elapsed() < 15000) return;
+                    poll->stop();
+                    const int final_line = editor->viewportLine();
+                    const bool ok = target > 100 && editor->analysisReady() &&
+                        original_line > 100 && final_line > 100 &&
+                        std::abs(final_line - original_line) < 60;
+                    std::fprintf(stdout,
+                        "WOLFMARK_SMOKE editor_scroll_activity=%s original_line=%d final_line=%d target_scroll=%d\n",
+                        ok ? "ok" : "failed", original_line, final_line, target);
+                    std::fflush(stdout);
+                    qApp->exit(ok ? 0 : 49);
+                });
+                poll->start(25);
+            });
             return;
         }
         if (mode == QStringLiteral("scroll-stability")) {
@@ -6687,6 +6746,8 @@ extern "C" int wolfmark_qt_run(int argc, const char* const* argv, const Wolfmark
             smoke_mode = QStringLiteral("images");
         } else if (argument == QStringLiteral("--smoke-scroll-stability")) {
             smoke_mode = QStringLiteral("scroll-stability");
+        } else if (argument == QStringLiteral("--smoke-editor-scroll-activity")) {
+            smoke_mode = QStringLiteral("editor-scroll-activity");
         } else if (argument == QStringLiteral("--smoke-editor-core")) {
             smoke_mode = QStringLiteral("editor-core");
         } else if (argument == QStringLiteral("--smoke-editor-sessions")) {

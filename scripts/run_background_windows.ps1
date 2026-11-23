@@ -18,6 +18,7 @@ $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
 Add-Type -TypeDefinition @"
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -58,7 +59,25 @@ public static class WolfmarkTestDesktop {
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
 
-    public static int Run(string name, string executable, string arguments, string directory) {
+    private static long ShowNewLog(string path, long position) {
+        try {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                       FileShare.ReadWrite | FileShare.Delete)) {
+                if (stream.Length < position) position = 0;
+                stream.Position = position;
+                using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, true)) {
+                    var output = reader.ReadToEnd();
+                    if (output.Length > 0) Console.Write(output);
+                    return stream.Position;
+                }
+            }
+        } catch (IOException) {
+            // The background PowerShell process may not have created its log yet.
+            return position;
+        }
+    }
+
+    public static int Run(string name, string executable, string arguments, string directory, string logPath) {
         const uint desktopAccess = 0x01ff;
         const uint createNoWindow = 0x08000000;
         IntPtr desktop = CreateDesktop(name, IntPtr.Zero, IntPtr.Zero, 0, desktopAccess, IntPtr.Zero);
@@ -72,8 +91,13 @@ public static class WolfmarkTestDesktop {
             CloseHandle(child.Thread);
             try {
                 uint code;
-                if (WaitForSingleObject(child.Process, 0xffffffff) != 0 ||
-                    !GetExitCodeProcess(child.Process, out code))
+                long logPosition = 0;
+                uint wait;
+                do {
+                    wait = WaitForSingleObject(child.Process, 500);
+                    logPosition = ShowNewLog(logPath, logPosition);
+                } while (wait == 0x00000102); // WAIT_TIMEOUT
+                if (wait != 0 || !GetExitCodeProcess(child.Process, out code))
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 return unchecked((int)code);
             } finally {
@@ -109,6 +133,5 @@ try {
 "@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
 Write-Host "Running $Action on a separate Windows desktop. Log: $log"
-$result = [WolfmarkTestDesktop]::Run($desktop, $pwsh, "`"$pwsh`" -NoProfile -NonInteractive -EncodedCommand $encoded", $projectRoot)
-if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log }
+$result = [WolfmarkTestDesktop]::Run($desktop, $pwsh, "`"$pwsh`" -NoProfile -NonInteractive -EncodedCommand $encoded", $projectRoot, $log)
 exit $result

@@ -376,6 +376,7 @@ DocumentEditor::SaveResult DocumentEditor::saveFile(const QString& path, const Q
 void DocumentEditor::setLivePreview(bool live) {
     const auto cursor = textCursor();
     const auto top = cursorForPosition(QPoint(0, 0));
+    const int previous_scroll = verticalScrollBar()->value();
     const bool formatted = live && markdown_;
     highlighter_->setLive(formatted);
     auto font = QFont(formatted ? QStringLiteral("Segoe UI") : QStringLiteral("Cascadia Mono"));
@@ -389,7 +390,7 @@ void DocumentEditor::setLivePreview(bool live) {
     setTabStopDistance(QFontMetrics(font).horizontalAdvance(QLatin1Char(' ')) * 4.0);
     updateGutter();
     setTextCursor(cursor);
-    restoreViewportCursor(top);
+    restoreViewportCursor(top, previous_scroll);
     setAccessibleName(live ? QStringLiteral("Wolfmark Live Preview editor") : QStringLiteral("Wolfmark source editor"));
     requestAnalysis();
 }
@@ -410,6 +411,7 @@ void DocumentEditor::setZoomPercent(int percent) {
     percent = std::clamp(percent, 60, 220);
     if (percent == zoom_percent_) return;
     const auto top = cursorForPosition(QPoint(0, 0));
+    const int previous_scroll = verticalScrollBar()->value();
     zoom_percent_ = percent;
     auto value = document()->defaultFont();
     value.setPointSizeF(12.0 * zoom_percent_ / 100.0);
@@ -417,7 +419,7 @@ void DocumentEditor::setZoomPercent(int percent) {
     document()->setDefaultFont(value);
     setTabStopDistance(QFontMetrics(value).horizontalAdvance(QLatin1Char(' ')) * 4.0);
     highlighter_->setScale(zoom_percent_);
-    restoreViewportCursor(top);
+    restoreViewportCursor(top, previous_scroll);
     updateGutter();
 }
 
@@ -509,8 +511,9 @@ void DocumentEditor::collectAnalysis() {
                 highlighter_->clear();
             } else {
                 const auto top = cursorForPosition(QPoint(0, 0));
+                const int previous_scroll = verticalScrollBar()->value();
                 decorated_blocks_ = highlighter_->apply(analysis_->result.value("spans").toArray());
-                restoreViewportCursor(top);
+                restoreViewportCursor(top, previous_scroll);
                 if (outlineChanged) {
                     QJsonArray headings;
                     for (const auto& value : analysis_->result.value("spans").toArray()) {
@@ -536,20 +539,30 @@ void DocumentEditor::collectAnalysis() {
 }
 
 void DocumentEditor::showEvent(QShowEvent* event) { QPlainTextEdit::showEvent(event); requestAnalysis(); }
-void DocumentEditor::restoreViewportCursor(const QTextCursor& cursor) {
+void DocumentEditor::restoreViewportCursor(const QTextCursor& cursor, int previous_scroll) {
     const auto block = cursor.block();
-    if (!block.isValid()) return;
+    if (!block.isValid()) {
+        verticalScrollBar()->setValue(previous_scroll);
+        return;
+    }
     // QPlainTextEdit scrolls in visual lines, unlike QTextEdit's pixel scrollbar.
     // Never add cursorRect pixel deltas to this scrollbar's line-based value.
     document()->documentLayout()->blockBoundingRect(block);
     const auto line = block.layout()->lineForTextPosition(cursor.positionInBlock());
-    verticalScrollBar()->setValue(block.firstLineNumber() + (line.isValid() ? line.lineNumber() : 0));
+    int line_number = block.firstLineNumber() + (line.isValid() ? line.lineNumber() : 0);
+    // A background rehighlight can temporarily invalidate the visual-line
+    // positions of blocks. Never treat a provisional line zero as an explicit
+    // request to jump away from a scrolled reading/editing location.
+    if (previous_scroll > 32 && line_number < std::min(8, previous_scroll / 4))
+        line_number = previous_scroll;
+    verticalScrollBar()->setValue(line_number);
 }
 void DocumentEditor::resizeEvent(QResizeEvent* event) {
     const auto top = cursorForPosition(QPoint(0, 0));
+    const int previous_scroll = verticalScrollBar()->value();
     QPlainTextEdit::resizeEvent(event);
     updateGutter();
-    restoreViewportCursor(top);
+    restoreViewportCursor(top, previous_scroll);
 }
 void DocumentEditor::updateGutter() {
     const int width = 20 + QFontMetrics(document()->defaultFont()).horizontalAdvance(QLatin1Char('9')) *
